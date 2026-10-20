@@ -71,6 +71,12 @@ def test_list_directory_follows_page_tokens():
     assert [e["path"] for e in dbx.list_directory("/Volumes/x/")] == ["/Volumes/x/a", "/Volumes/x/b"]
 
 
+def test_delete_file():
+    dbx, session = client(lambda *a: FakeResponse(204))
+    dbx.delete_file("/Volumes/x/probe.txt")
+    assert session.calls[0][:2] == ("DELETE", f"{HOST}/api/2.0/fs/files/Volumes/x/probe.txt")
+
+
 def test_download_file(tmp_path):
     dbx, _ = client(lambda *a: FakeResponse(content=b"parquet-bytes"))
     out = dbx.download_file("/Volumes/x/part.parquet", tmp_path / "sub" / "p.parquet")

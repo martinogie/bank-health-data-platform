@@ -107,6 +107,10 @@ class DatabricksFiles:
             if not token:
                 break
 
+    def delete_file(self, volume_path: str) -> None:
+        """Delete one file (used by tests to clean up their probe files)."""
+        self._request("DELETE", self._url("files", volume_path))
+
     def download_file(self, volume_path: str, local_path: Path) -> Path:
         local_path = Path(local_path)
         local_path.parent.mkdir(parents=True, exist_ok=True)

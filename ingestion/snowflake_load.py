@@ -30,6 +30,7 @@ RAW_SCHEMA = "RAW"
 EXPORT_TABLES = {
     "FDIC_FINANCIALS": "fdic_financials",
     "FDIC_INSTITUTIONS": "fdic_institutions",
+    "FDIC_FAILURES": "fdic_failures",
     "CFPB_COMPLAINTS": "cfpb_complaints",
     "ML_RISK_SCORES": "ml_risk_scores",
 }
