@@ -29,6 +29,22 @@ models:
       - name: fail_date
         tests: [not_null]
 
+  - name: stg_ml__risk_scores
+    description: Model distress probability per bank for its latest quarter.
+    columns:
+      - name: cert
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('stg_fdic__institutions'), field: cert}
+      - name: risk_band
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [High, Elevated, Watch, Low, Already in distress]
+
   - name: stg_cfpb__complaints
     description: CFPB complaints with the matched FDIC cert.
     columns:

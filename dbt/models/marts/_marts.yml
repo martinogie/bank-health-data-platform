@@ -97,6 +97,39 @@ models:
               arguments: {min_value: 0}
               config: {severity: warn}
 
+  - name: mart_early_warning
+    description: >
+      Latest distress probability, risk band and top-3 reasons per bank, with scorecard
+      figures and complaints. Portfolio model on public data, not a supervisory rating.
+    columns:
+      - name: cert
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_bank'), field: cert}
+      - name: bank_name
+        tests: [not_null]
+      - name: distress_probability
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0, max_value: 1}
+      - name: risk_percentile
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0, max_value: 1}
+      - name: risk_band
+        tests:
+          - accepted_values:
+              arguments:
+                values: [High, Elevated, Watch, Low, Already in distress]
+      - name: asset_size_tier
+        description: NULL only if the bank's latest quarter is missing from the scorecard.
+        tests:
+          - not_null:
+              config: {severity: warn}
+
   - name: mart_bank_scorecard
     description: Bank scorecard per quarter with QoQ changes and peer percentiles by asset-size tier.
     tests:

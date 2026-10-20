@@ -58,6 +58,18 @@ sources:
           - name: fail_date
             tests: [not_null]
 
+      - name: ml_risk_scores
+        identifier: ML_RISK_SCORES
+        description: Latest-quarter distress probabilities from the Databricks model (05_score).
+        tests:
+          - dbt_utils.recency:
+              arguments: {datepart: day, field: _loaded_at, interval: 15}
+        columns:
+          - name: cert
+            tests: [unique, not_null]
+          - name: distress_probability
+            tests: [not_null]
+
       - name: cfpb_complaints
         identifier: CFPB_COMPLAINTS
         description: CFPB consumer complaints (credit bureaus excluded), with the FDIC cert matched in Databricks silver.
