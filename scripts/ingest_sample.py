@@ -26,7 +26,10 @@ RAW_DIR = ROOT / "data" / "raw"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quarters", type=int, default=2, help="latest N FDIC quarters")
+    parser.add_argument("--all-history", action="store_true",
+                        help="every FDIC quarter from 2000 Q1 (the model's label history)")
     parser.add_argument("--cfpb-month", default=None, help="YYYY-MM of complaints (default: last full month)")
+    parser.add_argument("--no-cfpb", action="store_true", help="skip complaints")
     parser.add_argument("--no-upload", action="store_true", help="download only")
     args = parser.parse_args()
 
@@ -35,19 +38,22 @@ def main() -> None:
     today = date.today()
 
     latest = fdic.latest_financials_quarter()
-    quarters = fdic.quarter_ends(fdic.HISTORY_START, latest)[-args.quarters:]
+    quarters = fdic.quarter_ends(fdic.HISTORY_START, latest)
+    if not args.all_history:
+        quarters = quarters[-args.quarters:]
     paths = fdic.download_financials(quarters, RAW_DIR / "fdic")
     paths.append(fdic.download_institutions(RAW_DIR / "fdic", today))
     paths.append(fdic.download_failures(RAW_DIR / "fdic", today))
 
-    if args.cfpb_month:
-        start = date.fromisoformat(args.cfpb_month + "-01")
-    else:
-        start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
-    month_end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-    complaints = cfpb.download_window(start, month_end, RAW_DIR / "cfpb")
-    if complaints:
-        paths.append(complaints)
+    if not args.no_cfpb:
+        if args.cfpb_month:
+            start = date.fromisoformat(args.cfpb_month + "-01")
+        else:
+            start = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+        month_end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        complaints = cfpb.download_window(start, month_end, RAW_DIR / "cfpb")
+        if complaints:
+            paths.append(complaints)
 
     if args.no_upload:
         return
