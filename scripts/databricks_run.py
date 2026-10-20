@@ -37,16 +37,14 @@ class Databricks:
 def find_and_pull_repo(db: Databricks) -> str:
     repos = db.call("GET", "/api/2.0/repos").get("repos", [])
     mine = [r for r in repos if r.get("url", "").rstrip("/").removesuffix(".git").endswith(REPO_NAME)]
-    if not mine:
-        # On Free Edition the Repos API can return nothing even for a real Git folder,
-        # so fall back to the folder's path and leave pulling to the UI.
+    if mine:
+        repo = mine[0]
+    else:
+        # On Free Edition the Repos API list can be empty even for a real Git folder,
+        # but the folder can still be fetched by its id (the workspace resource_id).
         me = db.call("GET", "/api/2.0/preview/scim/v2/Me")["userName"]
-        path = f"/Users/{me}/{REPO_NAME}"
-        db.call("GET", "/api/2.0/workspace/get-status", params={"path": path})  # raises if missing
-        print(f"Using {path} (Repos API doesn't list it, so it was not auto-pulled; "
-              "pull it in the Databricks UI first)")
-        return path
-    repo = mine[0]
+        status = db.call("GET", "/api/2.0/workspace/get-status", params={"path": f"/Users/{me}/{REPO_NAME}"})
+        repo = db.call("GET", f"/api/2.0/repos/{status['resource_id']}")
     db.call("PATCH", f"/api/2.0/repos/{repo['id']}", json={"branch": "main"})  # pulls latest main
     head = db.call("GET", f"/api/2.0/repos/{repo['id']}").get("head_commit_id", "")[:7]
     print(f"Git folder {repo['path']} pulled to main @ {head}")
