@@ -15,6 +15,14 @@
 
 # COMMAND ----------
 
+# MAGIC %pip install --quiet "mlflow==2.22.5"
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 # MAGIC %run ./_common
 
 # COMMAND ----------

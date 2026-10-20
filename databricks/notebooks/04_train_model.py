@@ -17,6 +17,20 @@
 
 # COMMAND ----------
 
+# MAGIC %md
+# MAGIC Serverless ships MLflow 2.11, which can't upload models to Unity Catalog storage on Free
+# MAGIC Edition (access denied). 2.22.5 can; pinned so training and scoring use the same version.
+
+# COMMAND ----------
+
+# MAGIC %pip install --quiet "mlflow==2.22.5"
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 # MAGIC %run ./_common
 
 # COMMAND ----------
