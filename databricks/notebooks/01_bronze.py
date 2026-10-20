@@ -64,7 +64,8 @@ def ingest(subdir: str, fmt: str, table: str, **reader_options) -> dict:
         .toTable(target)
     )
     query.awaitTermination()
-    new_rows = sum(p.get("numInputRows", 0) for p in query.recentProgress)
+    # numInputRows can be None for a batch with nothing new, so treat missing as 0
+    new_rows = sum(p.get("numInputRows") or 0 for p in query.recentProgress)
     total = spark.table(target).count()
     files = spark.table(target).select("_source_file").distinct().count()
     print(f"{target}: +{new_rows} rows this run, {total} total from {files} files")
