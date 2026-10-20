@@ -97,6 +97,38 @@ def test_load_table_fails_when_export_empty():
         sl.load_table(FakeConn(), FakeDbx([], {}), "X", "/Volumes/e/t", writer=lambda *a, **k: None)
 
 
+def test_load_all_skips_missing_optional_export(monkeypatch):
+    calls = []
+
+    def fake_load_table(conn, dbx, table, export_dir):
+        calls.append(table)
+        if table == "ML_RISK_SCORES":
+            raise FileNotFoundError(export_dir)
+        return 1
+
+    monkeypatch.setattr(sl, "load_table", fake_load_table)
+    out = sl.load_all(FakeConn(), FakeDbx([], {}), {"FDIC_FINANCIALS": "a", "ML_RISK_SCORES": "b"})
+    assert out == {"FDIC_FINANCIALS": 1}
+    assert calls == ["FDIC_FINANCIALS", "ML_RISK_SCORES"]
+
+
+def test_load_all_fails_on_missing_required_export(monkeypatch):
+    def fake_load_table(conn, dbx, table, export_dir):
+        raise FileNotFoundError(export_dir)
+
+    monkeypatch.setattr(sl, "load_table", fake_load_table)
+    with pytest.raises(FileNotFoundError):
+        sl.load_all(FakeConn(), FakeDbx([], {}), {"FDIC_FINANCIALS": "a"})
+
+
+def test_resolve_key_path_falls_back_to_project_keys(tmp_path, monkeypatch):
+    (tmp_path / "keys").mkdir()
+    (tmp_path / "keys" / "k.p8").write_text("x")
+    monkeypatch.setattr(sl, "PROJECT_ROOT", tmp_path)
+    assert sl.resolve_key_path("/opt/airflow/keys/k.p8") == str(tmp_path / "keys" / "k.p8")
+    assert sl.resolve_key_path("/nowhere/other.p8") == "/nowhere/other.p8"
+
+
 def test_failed_write_does_not_swap(tmp_path):
     a = parquet_bytes(pd.DataFrame({"cert": [1]}), tmp_path, "a.parquet")
     dbx = FakeDbx([{"path": "/Volumes/e/t/p.parquet"}], {"/Volumes/e/t/p.parquet": a})

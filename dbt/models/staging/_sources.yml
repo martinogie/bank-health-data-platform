@@ -1,0 +1,76 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Tables loaded weekly by Airflow from Databricks silver exports (Parquet).
+      Each row carries _LOADED_AT (Snowflake load time) and _INGESTED_AT (Databricks bronze time).
+    database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+    schema: RAW
+    config:
+      loaded_at_field: _loaded_at
+      # `dbt source freshness`: pipeline runs weekly, so warn at 8 days, error at 15.
+      freshness:
+        warn_after: {count: 8, period: day}
+        error_after: {count: 15, period: day}
+
+    tables:
+      - name: fdic_financials
+        identifier: FDIC_FINANCIALS
+        description: FDIC call-report figures, one row per bank per quarter. Amounts in $ thousands; income items year-to-date.
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              arguments:
+                combination_of_columns: [cert, report_date]
+          # dbt build runs tests, not `source freshness`, so recency is also enforced as tests:
+          - dbt_utils.recency:
+              arguments: {datepart: day, field: _loaded_at, interval: 15}
+          - dbt_utils.recency:
+              # FDIC publishes a quarter ~2 months after quarter-end
+              arguments: {datepart: day, field: report_date, interval: 200}
+        columns:
+          - name: cert
+            tests: [not_null]
+          - name: report_date
+            tests: [not_null]
+
+      - name: fdic_institutions
+        identifier: FDIC_INSTITUTIONS
+        description: FDIC institutions (active and inactive), latest snapshot per bank.
+        tests:
+          - dbt_utils.recency:
+              arguments: {datepart: day, field: _loaded_at, interval: 15}
+        columns:
+          - name: cert
+            tests: [unique, not_null]
+          - name: bank_name
+            tests: [not_null]
+
+      - name: fdic_failures
+        identifier: FDIC_FAILURES
+        description: FDIC failed-bank list.
+        tests:
+          - dbt_utils.recency:
+              arguments: {datepart: day, field: _loaded_at, interval: 15}
+        columns:
+          - name: failure_id
+            tests: [unique, not_null]
+          - name: fail_date
+            tests: [not_null]
+
+      - name: cfpb_complaints
+        identifier: CFPB_COMPLAINTS
+        description: CFPB consumer complaints (credit bureaus excluded), with the FDIC cert matched in Databricks silver.
+        tests:
+          - dbt_utils.recency:
+              arguments: {datepart: day, field: _loaded_at, interval: 15}
+          - dbt_utils.recency:
+              # complaints are published with a short lag; newest should be within ~6 weeks
+              arguments: {datepart: day, field: date_received, interval: 45}
+        columns:
+          - name: complaint_id
+            tests: [unique, not_null]
+          - name: date_received
+            tests: [not_null]
+          - name: company
+            tests: [not_null]

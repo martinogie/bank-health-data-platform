@@ -34,6 +34,19 @@ EXPORT_TABLES = {
     "CFPB_COMPLAINTS": "cfpb_complaints",
     "ML_RISK_SCORES": "ml_risk_scores",
 }
+# Exports that may not exist yet (risk scores arrive with the model in step 4).
+OPTIONAL_TABLES = {"ML_RISK_SCORES"}
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def resolve_key_path(path: str) -> str:
+    """Use the configured key path; if it's the container path and we're on the PC,
+    fall back to the same file name in the project's keys/ folder."""
+    if Path(path).exists():
+        return path
+    local = PROJECT_ROOT / "keys" / PurePosixPath(path).name
+    return str(local) if local.exists() else path
 
 
 def connect_from_env():
@@ -48,7 +61,7 @@ def connect_from_env():
         database=os.environ["SNOWFLAKE_DATABASE"],
         schema=RAW_SCHEMA,
         authenticator="SNOWFLAKE_JWT",
-        private_key_file=os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"],
+        private_key_file=resolve_key_path(os.environ["SNOWFLAKE_PRIVATE_KEY_PATH"]),
     )
     passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
     if passphrase:
@@ -121,10 +134,43 @@ def load_table(
     return total
 
 
+def _is_missing(exc: Exception) -> bool:
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    return isinstance(exc, FileNotFoundError) or status == 404
+
+
 def load_all(conn, dbx: DatabricksFiles, tables: dict[str, str] | None = None) -> dict[str, int]:
-    """Load every export folder into its RAW table. Called by the Airflow DAG."""
+    """Load every export folder into its RAW table. Called by the Airflow DAG.
+
+    A missing export fails the load, except for OPTIONAL_TABLES, which are skipped.
+    """
     tables = tables or EXPORT_TABLES
-    return {
-        table: load_table(conn, dbx, table, f"{EXPORT_ROOT}/{folder}")
-        for table, folder in tables.items()
-    }
+    loaded = {}
+    for table, folder in tables.items():
+        try:
+            loaded[table] = load_table(conn, dbx, table, f"{EXPORT_ROOT}/{folder}")
+        except Exception as exc:
+            if table in OPTIONAL_TABLES and _is_missing(exc):
+                log.info("RAW.%s skipped: no export at %s/%s yet", table, EXPORT_ROOT, folder)
+                continue
+            raise
+    return loaded
+
+
+if __name__ == "__main__":
+    # Manual run from the project folder:  python -m ingestion.snowflake_load
+    import sys
+
+    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+    from _env import load_env
+
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    logging.getLogger("snowflake").setLevel(logging.WARNING)  # connector is very chatty at INFO
+    load_env()
+    conn = connect_from_env()
+    try:
+        counts = load_all(conn, DatabricksFiles.from_env())
+    finally:
+        conn.close()
+    for table, n in counts.items():
+        print(f"RAW.{table}: {n} rows")

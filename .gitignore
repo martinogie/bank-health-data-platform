@@ -22,3 +22,4 @@ data/raw/
 .pytest_cache/
 # local handover notes (contain account details) - keep off GitHub
 CLAUDE.md
+dbt/.user.yml

@@ -3,3 +3,4 @@ requests>=2.32
 pandas>=2.2
 pyarrow>=17
 pytest>=8
+snowflake-connector-python>=4.7

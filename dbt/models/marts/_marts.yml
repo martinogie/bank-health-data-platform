@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: dim_bank
+    description: One row per FDIC institution with failure history and latest size tier.
+    columns:
+      - name: cert
+        description: FDIC certificate number (bank id).
+        tests: [unique, not_null]
+      - name: bank_name
+        tests: [not_null]
+      - name: has_failed
+        tests: [not_null]
+      - name: latest_asset_size_tier
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['1: <$100M', '2: $100M-$1B', '3: $1B-$10B', '4: $10B-$100B', '5: >$100B']
+
+  - name: fct_bank_quarter
+    description: One row per bank per quarter with ratios and complaint counts.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cert, report_date]
+    columns:
+      - name: cert
+        tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_bank'), field: cert}
+      - name: report_date
+        tests: [not_null]
+      - name: asset_size_tier
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['1: <$100M', '2: $100M-$1B', '3: $1B-$10B', '4: $10B-$100B', '5: >$100B']
+      - name: report_quarter
+        tests:
+          - accepted_values:
+              arguments: {values: [1, 2, 3, 4], quote: false}
+      - name: total_assets_k
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0}
+      - name: noncurrent_loans_pct
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0, max_value: 100}
+      - name: tier1_leverage_pct
+        description: Tiny or brand-new banks can report extreme values, so out-of-range is a warning.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: -50, max_value: 100}
+              config: {severity: warn}
+      - name: cre_to_loans_pct
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0, max_value: 100}
+              config: {severity: warn}
+      - name: complaints
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0}
+          - not_null:
+              config: {where: "complaint_data_covered"}
+      - name: complaints_per_1b_deposits
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0}
+
+  - name: fct_complaints
+    description: One row per CFPB complaint with the matched FDIC bank.
+    columns:
+      - name: complaint_id
+        tests: [unique, not_null]
+      - name: cert
+        description: NULL when the company is not a matched FDIC bank.
+        tests:
+          - relationships:
+              arguments: {to: ref('dim_bank'), field: cert}
+      - name: match_method
+        tests:
+          - accepted_values:
+              arguments:
+                values: [bank_name, holding_company, manual_override, unmatched]
+      - name: date_received
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: "'2011-12-01'", max_value: "current_date()"}
+      - name: days_to_send_to_company
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0}
+              config: {severity: warn}
+
+  - name: mart_bank_scorecard
+    description: Bank scorecard per quarter with QoQ changes and peer percentiles by asset-size tier.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cert, report_date]
+    columns:
+      - name: roa_peer_pctile
+        tests: &pctile
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 0, max_value: 1}
+      - name: noncurrent_loans_peer_pctile
+        tests: *pctile
+      - name: tier1_leverage_peer_pctile
+        tests: *pctile
+      - name: efficiency_ratio_peer_pctile
+        tests: *pctile
+      - name: complaints_per_1b_deposits_peer_pctile
+        tests: *pctile
+      - name: peers_in_tier
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 1}

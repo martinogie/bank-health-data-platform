@@ -1,0 +1,52 @@
+version: 2
+
+models:
+  - name: stg_fdic__financials
+    description: FDIC call-report figures per bank per quarter ($ thousands; income year-to-date).
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cert, report_date]
+    columns:
+      - name: cert
+        tests: [not_null]
+      - name: report_date
+        tests: [not_null]
+
+  - name: stg_fdic__institutions
+    description: FDIC institutions, one row per bank (cert).
+    columns:
+      - name: cert
+        tests: [unique, not_null]
+      - name: bank_name
+        tests: [not_null]
+
+  - name: stg_fdic__failures
+    description: FDIC failed-bank list, one row per failure.
+    columns:
+      - name: failure_id
+        tests: [unique, not_null]
+      - name: fail_date
+        tests: [not_null]
+
+  - name: stg_cfpb__complaints
+    description: CFPB complaints with the matched FDIC cert.
+    columns:
+      - name: complaint_id
+        tests: [unique, not_null]
+      - name: date_received
+        tests: [not_null]
+      - name: match_method
+        description: How the company was matched to an FDIC bank in Databricks silver.
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [bank_name, holding_company, manual_override, unmatched]
+      - name: cert
+        description: NULL when unmatched; otherwise must be a known FDIC institution.
+        tests:
+          - relationships:
+              arguments:
+                to: ref('stg_fdic__institutions')
+                field: cert

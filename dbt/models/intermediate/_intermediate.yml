@@ -1,0 +1,21 @@
+version: 2
+
+models:
+  - name: int_bank_quarter_ratios
+    description: Derived ratios, growth, CRE concentration and QoQ changes per bank per quarter.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cert, report_date]
+
+  - name: int_complaints_by_bank_quarter
+    description: Complaint counts per matched FDIC bank per quarter-end.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [cert, report_date]
+    columns:
+      - name: complaints
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments: {min_value: 1}
