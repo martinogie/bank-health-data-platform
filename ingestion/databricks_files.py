@@ -20,7 +20,10 @@ import requests
 
 log = logging.getLogger(__name__)
 
-RAW_VOLUME = "/Volumes/bank_health/bronze/raw_files"
+# Unity Catalog catalog holding the project. "bank_health" by default; set
+# DATABRICKS_CATALOG=workspace in .env if Free Edition won't allow a new catalog.
+CATALOG = os.environ.get("DATABRICKS_CATALOG") or "bank_health"
+RAW_VOLUME = f"/Volumes/{CATALOG}/bronze/raw_files"
 
 
 class DatabricksFiles:

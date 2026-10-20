@@ -19,11 +19,11 @@ from typing import Callable
 
 import pandas as pd
 
-from ingestion.databricks_files import DatabricksFiles
+from ingestion.databricks_files import CATALOG, DatabricksFiles
 
 log = logging.getLogger(__name__)
 
-EXPORT_ROOT = "/Volumes/bank_health/gold/exports"
+EXPORT_ROOT = f"/Volumes/{CATALOG}/gold/exports"
 RAW_SCHEMA = "RAW"
 
 # Snowflake RAW table  ->  export folder written by the Databricks notebooks
