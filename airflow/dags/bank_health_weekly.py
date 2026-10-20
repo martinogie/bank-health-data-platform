@@ -9,14 +9,16 @@ Every Monday 06:00 America/Chicago. Every task is safe to re-run (clear it, or t
 | `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded | complete months already on disk are reused |
 | `upload_raw` | fresh files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
 | `save_watermarks` | remember how far we got (after the upload succeeded) | writes the same values again |
+| `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true | pure decision |
 | `sync_databricks_job` | pull the Git folder, create/update job `bank_health_pipeline` | both idempotent |
-| `run_databricks_job` | bronze -> silver -> gold -> train (only if `retrain_model`) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
+| `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
 | `dbt_build` | Cosmos: one task per dbt model with its tests, plus source freshness | dbt rebuilds models |
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
 
-Trigger with `{"retrain_model": true}` to retrain and re-register the model.
+The model retrains automatically when a new FDIC quarter arrives; trigger with
+`{"retrain_model": true}` to force a retrain.
 """
 from __future__ import annotations
 
@@ -75,7 +77,22 @@ def bank_health_weekly():
         fresh.append(fdic.download_institutions(out, today))
         fresh.append(fdic.download_failures(out, today))
         return {"fresh": [str(p) for p in fresh], "cached": [str(p) for p in cached],
-                "watermark": latest.isoformat()}
+                "watermark": latest.isoformat(), "previous": last.isoformat() if last else None}
+
+    @task(doc_md="Retrain only when a new FDIC quarter has arrived (about quarterly) or when the run is "
+                 "triggered with retrain_model=true; other weeks just re-score with @champion. "
+                 "Text values like 'False'/'false'/'0' count as false.")
+    def decide_retrain(fdic_result: dict) -> str:
+        from airflow.sdk import get_current_context
+
+        from ingestion.pipeline_flags import should_retrain
+
+        requested = get_current_context()["params"].get("retrain_model", False)
+        previous = _as_date(fdic_result["previous"])
+        latest = _as_date(fdic_result["watermark"])
+        retrain = should_retrain(requested, previous, latest)
+        print(f"retrain_model param={requested!r}, previous quarter={previous}, latest={latest} -> retrain={retrain}")
+        return "true" if retrain else "false"
 
     @task(doc_md="CFPB complaints since the watermark (bureaus excluded) -> data/raw/cfpb. "
                  "Complete months already on disk are reused.")
@@ -116,12 +133,12 @@ def bank_health_weekly():
 
     run_databricks_job = DatabricksRunNowOperator(
         task_id="run_databricks_job",
-        doc_md="Run job bank_health_pipeline (bronze -> silver -> gold -> train if retrain_model -> score) "
-               "on serverless and wait. One retry only, to protect the Free Edition daily quota.",
+        doc_md="Run job bank_health_pipeline (bronze -> silver -> gold -> train if decide_retrain says so -> "
+               "score) on serverless and wait. One retry only, to protect the Free Edition daily quota.",
         databricks_conn_id="databricks_default",
         job_name=JOB_NAME,
         job_parameters={"catalog": CATALOG,
-                        "retrain": "{{ 'true' if params.retrain_model else 'false' }}"},
+                        "retrain": "{{ ti.xcom_pull(task_ids='decide_retrain') }}"},
         wait_for_termination=True,
         polling_period_seconds=60,
         retries=1,
@@ -196,8 +213,9 @@ def bank_health_weekly():
     cfpb_result = download_cfpb()
     uploads = upload_raw(fdic_result, cfpb_result)
     watermarks = save_watermarks(fdic_result, cfpb_result, uploads)
+    retrain = decide_retrain(fdic_result)
     job = sync_databricks_job()
-    [watermarks, job] >> run_databricks_job
+    [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
     run_databricks_job >> loaded >> dbt_build >> dbt_docs_generate >> verify_pipeline(watermarks)
 

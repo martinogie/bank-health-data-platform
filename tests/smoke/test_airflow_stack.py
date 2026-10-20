@@ -82,7 +82,7 @@ def test_dag_schedule_and_settings(dag_facts):
     assert dag["has_doc_md"]
 
 
-CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "sync_databricks_job",
+CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "decide_retrain", "sync_databricks_job",
               "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline"}
 
 
@@ -98,7 +98,8 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert tasks["upload_raw"]["upstream"] == ["download_cfpb", "download_fdic"]
     # watermarks only move after the upload succeeded
     assert "upload_raw" in tasks["save_watermarks"]["upstream"]
-    assert {"save_watermarks", "sync_databricks_job"} <= set(tasks["run_databricks_job"]["upstream"])
+    assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(tasks["run_databricks_job"]["upstream"])
+    assert tasks["decide_retrain"]["upstream"] == ["download_fdic"]
     assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
 
 
