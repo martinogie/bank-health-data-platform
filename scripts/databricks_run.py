@@ -38,7 +38,14 @@ def find_and_pull_repo(db: Databricks) -> str:
     repos = db.call("GET", "/api/2.0/repos").get("repos", [])
     mine = [r for r in repos if r.get("url", "").rstrip("/").removesuffix(".git").endswith(REPO_NAME)]
     if not mine:
-        raise SystemExit("Git folder for this repo not found in Databricks (Workspace -> Create -> Git folder).")
+        # On Free Edition the Repos API can return nothing even for a real Git folder,
+        # so fall back to the folder's path and leave pulling to the UI.
+        me = db.call("GET", "/api/2.0/preview/scim/v2/Me")["userName"]
+        path = f"/Users/{me}/{REPO_NAME}"
+        db.call("GET", "/api/2.0/workspace/get-status", params={"path": path})  # raises if missing
+        print(f"Using {path} (Repos API doesn't list it, so it was not auto-pulled; "
+              "pull it in the Databricks UI first)")
+        return path
     repo = mine[0]
     db.call("PATCH", f"/api/2.0/repos/{repo['id']}", json={"branch": "main"})  # pulls latest main
     head = db.call("GET", f"/api/2.0/repos/{repo['id']}").get("head_commit_id", "")[:7]

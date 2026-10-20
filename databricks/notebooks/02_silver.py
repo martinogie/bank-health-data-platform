@@ -138,8 +138,11 @@ inst = spark.table(f"{SILVER}.fdic_institutions")
 T = "silver.fdic_institutions"
 dq_not_null(inst, T, ["cert", "bank_name"])
 dq_unique(inst, T, ["cert"])
-dq_check(T, "every financials cert is a known institution",
-         fin.select("cert").distinct().join(inst, "cert", "left_anti").count())
+# A few call-report filers are not in the institutions dataset at all (FDIC's API returns
+# nothing for them; most report zero deposits, e.g. uninsured trust companies). They stay in
+# silver as reported and are left out of gold, so this is a warning, not an error.
+dq_check(T, "financials certs missing from institutions (excluded from gold)",
+         fin.select("cert").distinct().join(inst, "cert", "left_anti").count(), level="warn")
 
 # COMMAND ----------
 

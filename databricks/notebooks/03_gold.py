@@ -119,9 +119,11 @@ matched_certs = company_map.filter("cert is not null").select("cert").distinct()
 
 covered = (quarter_start >= F.lit(cov["lo"])) & (F.col("report_date") <= F.lit(cov["hi"])) if cov["lo"] else F.lit(False)
 
+# Inner join: gold covers institutions in FDIC's institutions dataset. The few call-report
+# filers missing from it (flagged in 02_silver) are left out and counted below.
 gold = (
     bq.join(inst.select("cert", "bank_name", "city", "state_code", "bank_class", "primary_regulator",
-                        "holding_company", "specialization", "is_active"), "cert", "left")
+                        "holding_company", "specialization", "is_active"), "cert", "inner")
     .join(first_failure, "cert", "left")
     .join(matched_certs, "cert", "left")
     .join(complaints_q, ["cert", "report_date"], "left")
@@ -144,7 +146,9 @@ print(f"{GOLD}.bank_quarter: {n_gold} rows; complaint data covers {cov['lo']} ..
 
 T = "gold.bank_quarter"
 dq_unique(gold, T, ["cert", "report_date"])
-dq_check(T, "one gold row per silver financials row", abs(n_gold - fin.count()))
+known = fin.join(inst.select("cert"), "cert", "inner").count()
+dq_check(T, "one gold row per silver financials row of a known institution", abs(n_gold - known))
+dq_check(T, "financials rows left out (not in institutions dataset)", fin.count() - known, level="warn")
 dq_not_null(gold, T, ["bank_name", "asset_size_tier"])
 dq_range(gold, T, "complaints", low=0, level="error")
 counted = gold.agg(F.sum("complaints")).first()[0] or 0
