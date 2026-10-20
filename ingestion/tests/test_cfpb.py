@@ -90,6 +90,43 @@ def test_download_complaints_skips_empty_windows(tmp_path):
     assert result["cached"] == []
 
 
+def test_large_window_is_split_into_parts(tmp_path):
+    # Jan 2025 had 123,553 complaints, too many for one CSV export.
+    def handler(method, url, kw):
+        params = dict(kw["params"])
+        first_half = params["date_received_max"] <= "2025-01-16"
+        if params.get("format") == "csv":
+            return FakeResponse(content=csv_bytes(2))
+        whole = params["date_received_min"] == "2025-01-01" and params["date_received_max"] == "2025-01-31"
+        return FakeResponse(payload={"hits": {"total": {"value": 123_553 if whole else 2}}})
+
+    paths = cfpb.download_window_parts(date(2025, 1, 1), date(2025, 1, 31), tmp_path, FakeSession(handler))
+    assert [p.name for p in paths] == ["complaints_2025-01-01_2025-01-16.csv.gz",
+                                       "complaints_2025-01-17_2025-01-31.csv.gz"]
+
+
+def test_export_refused_with_400_is_split_and_retried(tmp_path):
+    def handler(method, url, kw):
+        params = dict(kw["params"])
+        whole = params["date_received_min"] == "2025-01-01" and params["date_received_max"] == "2025-01-31"
+        if params.get("format") == "csv":
+            return FakeResponse(400, content=b"size") if whole else FakeResponse(content=csv_bytes(1))
+        return FakeResponse(payload={"hits": {"total": {"value": 1}}})
+
+    paths = cfpb.download_window_parts(date(2025, 1, 1), date(2025, 1, 31), tmp_path, FakeSession(handler))
+    assert len(paths) == 2 and all(p.exists() for p in paths)
+
+
+def test_existing_parts_requires_full_day_by_day_coverage(tmp_path):
+    folder = tmp_path / "complaints"
+    folder.mkdir()
+    for name in ("complaints_2025-01-01_2025-01-16.csv.gz", "complaints_2025-01-17_2025-01-31.csv.gz"):
+        (folder / name).write_bytes(b"x")
+    assert len(cfpb.existing_parts(tmp_path, date(2025, 1, 1), date(2025, 1, 31))) == 2
+    (folder / "complaints_2025-02-01_2025-02-10.csv.gz").write_bytes(b"x")   # Feb 11-28 missing
+    assert cfpb.existing_parts(tmp_path, date(2025, 2, 1), date(2025, 2, 28)) is None
+
+
 def test_download_complaints_reuses_complete_months_on_disk(tmp_path):
     # A complete month (ended > 30 days ago) already on disk is reused, not downloaded.
     old = cfpb.window_path(tmp_path, date(2026, 8, 1), date(2026, 8, 31))

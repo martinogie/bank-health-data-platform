@@ -35,6 +35,9 @@ HISTORY_YEARS = 3
 LOOKBACK_DAYS = 30
 # If the CSV has fewer rows than the API says exist, the export was truncated.
 MIN_COMPLETENESS = 0.98
+# The CSV export rejects very large requests (HTTP 400 "size"; seen at 123,553 rows,
+# fine at 90,569). Windows above this are split in half until they fit.
+MAX_ROWS_PER_REQUEST = 75_000
 
 
 def history_start(today: date) -> date:
@@ -112,12 +115,70 @@ def count_csv_rows(path: Path) -> int:
         return max(sum(1 for _ in csv.reader(fh)) - 1, 0)
 
 
-def download_window(
+def _halves(start: date, end: date) -> tuple[tuple[date, date], tuple[date, date]]:
+    mid = start + timedelta(days=(end - start).days // 2)
+    return (start, mid), (mid + timedelta(days=1), end)
+
+
+def download_window_parts(
     start: date, end: date, out_dir: Path, session: requests.Session | None = None
+) -> list[Path]:
+    """Download a window, splitting it into smaller date ranges if it is too large for
+    one CSV export. Returns the files written (empty if there are no complaints)."""
+    session = session or requests.Session()
+    expected = count_complaints(session, start, end)
+    if expected == 0:
+        log.info("CFPB %s..%s: no complaints", start, end)
+        return []
+    if expected > MAX_ROWS_PER_REQUEST and start < end:
+        log.info("CFPB %s..%s: %s rows is too large for one export, splitting", start, end, expected)
+        return [p for a, b in _halves(start, end) for p in download_window_parts(a, b, out_dir, session)]
+    try:
+        path = download_window(start, end, out_dir, session, expected=expected)
+    except requests.HTTPError as exc:
+        status = getattr(exc.response, "status_code", None)
+        if status == 400 and start < end:   # export refused as too large: split and retry
+            log.info("CFPB %s..%s: export refused (400), splitting", start, end)
+            return [p for a, b in _halves(start, end) for p in download_window_parts(a, b, out_dir, session)]
+        raise
+    return [path] if path else []
+
+
+def existing_parts(out_dir: Path, start: date, end: date) -> list[Path] | None:
+    """Files on disk that together cover exactly [start, end] (one whole-window file,
+    or split parts that follow each other day by day). None if coverage is incomplete."""
+    folder = Path(out_dir) / "complaints"
+    if not folder.exists():
+        return None
+    parts = []
+    for p in folder.glob("complaints_*_*.csv.gz"):
+        try:
+            a, b = (date.fromisoformat(x) for x in p.name[len("complaints_"):-len(".csv.gz")].split("_"))
+        except ValueError:
+            continue
+        if start <= a and b <= end:
+            parts.append((a, b, p))
+    parts.sort()
+    # prefer one file for the whole window if present
+    whole = [p for a, b, p in parts if a == start and b == end]
+    if whole:
+        return whole
+    expected_next, chain = start, []
+    for a, b, p in parts:
+        if a == expected_next:
+            chain.append(p)
+            expected_next = b + timedelta(days=1)
+    return chain if chain and expected_next == end + timedelta(days=1) else None
+
+
+def download_window(
+    start: date, end: date, out_dir: Path, session: requests.Session | None = None,
+    expected: int | None = None,
 ) -> Path | None:
     """Download one window to a gzipped CSV. Returns None if the window is empty."""
     session = session or requests.Session()
-    expected = count_complaints(session, start, end)
+    if expected is None:
+        expected = count_complaints(session, start, end)
     if expected == 0:
         log.info("CFPB %s..%s: no complaints", start, end)
         return None
@@ -160,13 +221,11 @@ def download_complaints(
     complete_before = today - timedelta(days=LOOKBACK_DAYS)
     fresh, cached = [], []
     for start, end in windows_to_download(watermark, today):
-        existing = window_path(out_dir, start, end)
-        if end < complete_before and existing.exists():
-            cached.append(existing)
+        existing = existing_parts(out_dir, start, end) if end < complete_before else None
+        if existing:
+            cached.extend(existing)
             continue
-        path = download_window(start, end, out_dir, session)
-        if path:
-            fresh.append(path)
+        fresh.extend(download_window_parts(start, end, out_dir, session))
     log.info("CFPB: %s windows downloaded, %s reused from disk", len(fresh), len(cached))
     return {"fresh": fresh, "cached": cached}
 
