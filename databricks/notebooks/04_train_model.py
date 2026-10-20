@@ -141,9 +141,10 @@ def log_model_kwargs():
 
 # COMMAND ----------
 
+# Set the registry first: otherwise MLflow looks it up in a Spark config that serverless blocks.
+mlflow.set_registry_uri("databricks-uc")
 user = spark.sql("select current_user()").first()[0]
 mlflow.set_experiment(f"/Users/{user}/bank_health_distress_model")
-mlflow.set_registry_uri("databricks-uc")
 
 X_sel, y_sel, _ = period("selection_train")
 X_val, y_val, _ = period("validation")
