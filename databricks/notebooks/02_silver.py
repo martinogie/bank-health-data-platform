@@ -152,7 +152,10 @@ dq_check(T, "financials certs missing from institutions (excluded from gold)",
 
 fail_bronze = spark.table(f"{BRONZE}.fdic_failures")
 latest_file = fail_bronze.agg(F.max("_source_file")).first()[0]
-fail = fail_bronze.filter(F.col("_source_file") == latest_file).select(
+# The same file can be ingested more than once (re-uploaded under the same name), so also
+# keep only the newest load of each failure record.
+fail = latest_per_key(fail_bronze.filter(F.col("_source_file") == latest_file),
+                      ["id"], ["_ingested_at", "_file_modified_at"]).select(
     F.col("id").cast("int").alias("failure_id"),
     F.col("cert").cast("int").alias("cert"),
     clean_str("name").alias("bank_name"),
