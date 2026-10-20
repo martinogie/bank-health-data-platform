@@ -1,0 +1,63 @@
+{
+  "name": "Bank Health Navy",
+  "dataColors": ["#1F3B63", "#4A6FA5", "#8BA6C9", "#C9D6E8", "#1E8E5A", "#C0392B", "#D4A017", "#6C7A89"],
+  "background": "#FFFFFF",
+  "foreground": "#0B1F3A",
+  "tableAccent": "#1F3B63",
+  "good": "#1E8E5A",
+  "neutral": "#6C7A89",
+  "bad": "#C0392B",
+  "maximum": "#1F3B63",
+  "center": "#8BA6C9",
+  "minimum": "#EEF2F7",
+  "textClasses": {
+    "callout": { "fontFace": "Segoe UI Semibold", "fontSize": 26, "color": "#0B1F3A" },
+    "title":   { "fontFace": "Segoe UI Semibold", "fontSize": 12, "color": "#0B1F3A" },
+    "header":  { "fontFace": "Segoe UI Semibold", "fontSize": 11, "color": "#0B1F3A" },
+    "label":   { "fontFace": "Segoe UI", "fontSize": 10, "color": "#33415C" }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "background": [{ "show": true, "color": { "solid": { "color": "#FFFFFF" } }, "transparency": 0 }],
+        "border": [{ "show": true, "color": { "solid": { "color": "#E3E8EF" } }, "radius": 12 }],
+        "dropShadow": [{ "show": true, "preset": "BottomRight", "transparency": 88 }],
+        "title": [{ "show": true, "fontColor": { "solid": { "color": "#0B1F3A" } }, "fontSize": 12, "fontFamily": "Segoe UI Semibold" }]
+      }
+    },
+    "page": {
+      "*": {
+        "background": [{ "color": { "solid": { "color": "#F5F7FA" } }, "transparency": 0 }],
+        "outspace": [{ "color": { "solid": { "color": "#F5F7FA" } }, "transparency": 0 }]
+      }
+    },
+    "clusteredBarChart": {
+      "*": {
+        "labels": [{ "show": true, "color": { "solid": { "color": "#0B1F3A" } } }],
+        "dataPoint": [{ "defaultColor": { "solid": { "color": "#1F3B63" } } }]
+      }
+    },
+    "clusteredColumnChart": {
+      "*": {
+        "labels": [{ "show": true, "color": { "solid": { "color": "#0B1F3A" } } }],
+        "dataPoint": [{ "defaultColor": { "solid": { "color": "#1F3B63" } } }]
+      }
+    },
+    "lineChart": {
+      "*": {
+        "dataPoint": [{ "defaultColor": { "solid": { "color": "#1F3B63" } } }]
+      }
+    },
+    "tableEx": {
+      "*": {
+        "columnHeaders": [{ "fontColor": { "solid": { "color": "#FFFFFF" } }, "backColor": { "solid": { "color": "#1F3B63" } } }],
+        "values": [{ "fontColorPrimary": { "solid": { "color": "#0B1F3A" } }, "backColorSecondary": { "solid": { "color": "#F5F7FA" } } }]
+      }
+    },
+    "slicer": {
+      "*": {
+        "border": [{ "show": true, "color": { "solid": { "color": "#E3E8EF" } }, "radius": 8 }]
+      }
+    }
+  }
+}

@@ -1,0 +1,263 @@
+// =============================================================================
+// Bank Health dashboard: DAX (paste each block into Power BI Desktop)
+//
+// Tables (rename in Power Query after import; columns keep Snowflake's UPPER-CASE names):
+//   Bank           <- MARTS.DIM_BANK              one row per FDIC institution (CERT)
+//   Scorecard      <- MARTS.MART_BANK_SCORECARD   one row per bank per quarter
+//   Early Warning  <- MARTS.MART_EARLY_WARNING    one row per bank, latest quarter
+//   Complaints     <- MARTS.FCT_COMPLAINTS        one row per CFPB complaint
+//   Quarter        <- calculated table below      one row per quarter-end
+//
+// FDIC amounts (*_K columns) are in $ thousands. Ratios (*_PCT) are percentages.
+// "Base" measures follow the filter context (use them in trends over Quarter).
+// "KPI" measures are pinned to [Report Quarter] (use them in cards), with a
+// previous-quarter (PQ) partner, a change, an arrow text and a colour.
+// =============================================================================
+
+
+// ---------------------------------------------------------------- calculated table
+// Modeling > New table
+Quarter =
+ADDCOLUMNS (
+    SELECTCOLUMNS ( GENERATESERIES ( 1, 108, 1 ), "n", [Value] ),   // 2000 Q1 .. 2026 Q4
+    "Quarter End", EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ),
+    "Year", YEAR ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ),
+    "Quarter Label",
+        YEAR ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ) & " Q"
+            & ROUNDUP ( MONTH ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ) / 3, 0 )
+)
+// then: Quarter[Quarter Label] > Sort by column > Quarter End;  mark Quarter End as date
+
+
+// ---------------------------------------------------------------- calculated column
+// In 'Early Warning' (sort risk_band in this order: Column tools > Sort by column)
+Band Order =
+SWITCH ( 'Early Warning'[RISK_BAND],
+    "High", 1, "Elevated", 2, "Watch", 3, "Low", 4, "Already in distress", 5, 9 )
+
+
+// ================================================================ base measures
+Bank Quarters = COUNTROWS ( Scorecard )
+
+Total Assets $B = DIVIDE ( SUM ( Scorecard[TOTAL_ASSETS_K] ), 1e6 )
+
+Total Deposits $B = DIVIDE ( SUM ( Scorecard[TOTAL_DEPOSITS_K] ), 1e6 )
+
+Median Tier 1 Leverage % = MEDIAN ( Scorecard[TIER1_LEVERAGE_PCT] )
+
+Median Noncurrent Loans % = MEDIAN ( Scorecard[NONCURRENT_LOANS_PCT] )
+
+// ROA weighted by size, so it reflects the industry rather than the typical small bank
+Industry ROA % =
+DIVIDE (
+    SUMX ( Scorecard, Scorecard[ROA_PCT] * Scorecard[TOTAL_ASSETS_K] ),
+    SUMX ( FILTER ( Scorecard, NOT ISBLANK ( Scorecard[ROA_PCT] ) ), Scorecard[TOTAL_ASSETS_K] )
+)
+
+Share of Banks with NCL > 3% =
+DIVIDE ( COUNTROWS ( FILTER ( Scorecard, Scorecard[NONCURRENT_LOANS_PCT] > 3 ) ), [Bank Quarters] )
+
+// Complaint figures exist only for quarters fully covered by CFPB data (from 2023 Q4)
+Complaints (covered) =
+CALCULATE ( SUM ( Scorecard[COMPLAINTS] ), Scorecard[COMPLAINT_DATA_COVERED] = TRUE () )
+
+Complaints per $1B Deposits =
+DIVIDE (
+    [Complaints (covered)],
+    CALCULATE ( SUM ( Scorecard[TOTAL_DEPOSITS_K] ), Scorecard[COMPLAINT_DATA_COVERED] = TRUE () ) / 1e6
+)
+
+Complaint Count = COUNTROWS ( Complaints )
+
+Monetary Relief % = DIVIDE ( CALCULATE ( [Complaint Count], Complaints[IS_MONETARY_RELIEF] = TRUE () ), [Complaint Count] )
+
+Untimely Response % = DIVIDE ( CALCULATE ( [Complaint Count], Complaints[TIMELY_RESPONSE] = FALSE () ), [Complaint Count] )
+
+
+// ================================================================ report quarter
+// The quarter the KPI cards show: the slicer's latest quarter, capped at the latest
+// quarter that has FDIC data (complaint months can run ahead of FDIC quarters).
+Report Quarter =
+VAR selected = MAX ( Quarter[Quarter End] )
+VAR latest = CALCULATE ( MAX ( Scorecard[REPORT_DATE] ), REMOVEFILTERS ( Quarter ) )
+RETURN MIN ( selected, latest )
+
+Report Quarter Label =
+VAR q = [Report Quarter]
+RETURN YEAR ( q ) & " Q" & ROUNDUP ( MONTH ( q ) / 3, 0 )
+
+Previous Quarter = EOMONTH ( [Report Quarter], -3 )
+
+
+// ================================================================ KPI measures
+// Pattern: evaluate a base measure at [Report Quarter] and at [Previous Quarter].
+
+Banks Reporting =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Bank Quarters], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+Banks Reporting PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Bank Quarters], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+Banks Reporting Δ = [Banks Reporting] - [Banks Reporting PQ]
+
+KPI Total Assets $B =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Total Assets $B], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Total Assets $B PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Total Assets $B], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Total Assets Δ% = DIVIDE ( [KPI Total Assets $B] - [KPI Total Assets $B PQ], [KPI Total Assets $B PQ] )
+
+KPI Tier 1 % =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Median Tier 1 Leverage %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Tier 1 % PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Median Tier 1 Leverage %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Tier 1 Δ pp = [KPI Tier 1 %] - [KPI Tier 1 % PQ]
+
+KPI NCL % =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Median Noncurrent Loans %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI NCL % PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Median Noncurrent Loans %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI NCL Δ pp = [KPI NCL %] - [KPI NCL % PQ]
+
+KPI ROA % =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Industry ROA %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI ROA % PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Industry ROA %], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI ROA Δ pp = [KPI ROA %] - [KPI ROA % PQ]
+
+KPI Complaints per $1B =
+VAR q = [Report Quarter]
+RETURN CALCULATE ( [Complaints per $1B Deposits], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Complaints per $1B PQ =
+VAR q = [Previous Quarter]
+RETURN CALCULATE ( [Complaints per $1B Deposits], REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+
+KPI Complaints per $1B Δ = [KPI Complaints per $1B] - [KPI Complaints per $1B PQ]
+
+
+// ---------------------------------------------------------------- arrows and colours
+// Card: Reference label = arrow measure; its font colour = Format > fx > Field value = colour measure.
+// Green/red depends on whether "up" is good (Tier 1, ROA, assets) or bad (NCL, complaints).
+
+Arrow Assets =
+VAR d = [KPI Total Assets Δ%]
+RETURN IF ( ISBLANK ( d ), "",
+    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.0%" ) & " vs prior quarter" )
+Color Assets = IF ( [KPI Total Assets Δ%] >= 0, "#1E8E5A", "#C0392B" )
+
+Arrow Tier 1 =
+VAR d = [KPI Tier 1 Δ pp]
+RETURN IF ( ISBLANK ( d ), "",
+    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
+Color Tier 1 = IF ( [KPI Tier 1 Δ pp] >= 0, "#1E8E5A", "#C0392B" )
+
+Arrow NCL =
+VAR d = [KPI NCL Δ pp]
+RETURN IF ( ISBLANK ( d ), "",
+    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
+Color NCL = IF ( [KPI NCL Δ pp] > 0, "#C0392B", "#1E8E5A" )          // rising bad loans = red
+
+Arrow ROA =
+VAR d = [KPI ROA Δ pp]
+RETURN IF ( ISBLANK ( d ), "",
+    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
+Color ROA = IF ( [KPI ROA Δ pp] >= 0, "#1E8E5A", "#C0392B" )
+
+Arrow Complaints =
+VAR d = [KPI Complaints per $1B Δ]
+RETURN IF ( ISBLANK ( d ), "",
+    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " vs prior quarter" )
+Color Complaints = IF ( [KPI Complaints per $1B Δ] > 0, "#C0392B", "#1E8E5A" )   // more complaints = red
+
+
+// ================================================================ early warning
+// 'Early Warning' holds the latest quarter's scores only (model v4, scored 2026-06-30).
+
+Banks Scored = COUNTROWS ( 'Early Warning' )
+
+Banks High Risk = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "High" )
+
+Banks Elevated Risk = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Elevated" )
+
+Banks Watch = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Watch" )
+
+Banks Already in Distress = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Already in distress" )
+
+Assets High + Elevated $B =
+DIVIDE (
+    CALCULATE ( SUM ( 'Early Warning'[TOTAL_ASSETS_K] ),
+        'Early Warning'[RISK_BAND] IN { "High", "Elevated" } ),
+    1e6 )
+
+Median Distress Probability =
+CALCULATE ( MEDIAN ( 'Early Warning'[DISTRESS_PROBABILITY] ),
+    'Early Warning'[ALREADY_IN_DISTRESS] = FALSE () )
+
+Scores As Of = "Scores as of " & FORMAT ( MAX ( 'Early Warning'[REPORT_DATE] ), "d mmm yyyy" )
+    & " · model v" & MAX ( 'Early Warning'[MODEL_VERSION] )
+
+
+// ================================================================ bank detail
+// Drill-through page filtered to one bank: put Bank[CERT] in the drill-through well
+// (bank names are not unique, e.g. several "First Financial Bank"), and include
+// Bank[CERT] in the source tables so right-click > Drill through is offered.
+
+Selected Bank =
+VAR b = SELECTEDVALUE ( Bank[BANK_NAME] )
+RETURN IF ( ISBLANK ( b ), "Select a bank", b & " · " & SELECTEDVALUE ( Bank[CITY] ) & ", " & SELECTEDVALUE ( Bank[STATE_CODE] ) )
+
+Bank Holding Company = COALESCE ( SELECTEDVALUE ( Bank[HOLDING_COMPANY] ), "No holding company" )
+
+Bank Risk Band = SELECTEDVALUE ( 'Early Warning'[RISK_BAND], "Not scored" )
+
+Bank Distress Probability = SELECTEDVALUE ( 'Early Warning'[DISTRESS_PROBABILITY] )
+
+Bank Reason 1 = SELECTEDVALUE ( 'Early Warning'[REASON_1], "—" )
+Bank Reason 2 = SELECTEDVALUE ( 'Early Warning'[REASON_2], "—" )
+Bank Reason 3 = SELECTEDVALUE ( 'Early Warning'[REASON_3], "—" )
+
+// Peer medians: same asset-size tier, same quarter, all banks (removes the one-bank filter).
+// Use next to the bank's own values in line charts over Quarter.
+Peer Median NCL % =
+VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
+RETURN CALCULATE ( MEDIAN ( Scorecard[NONCURRENT_LOANS_PCT] ),
+    REMOVEFILTERS ( Bank ), REMOVEFILTERS ( Scorecard[CERT] ), Scorecard[ASSET_SIZE_TIER] = tier )
+
+Peer Median Tier 1 % =
+VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
+RETURN CALCULATE ( MEDIAN ( Scorecard[TIER1_LEVERAGE_PCT] ),
+    REMOVEFILTERS ( Bank ), REMOVEFILTERS ( Scorecard[CERT] ), Scorecard[ASSET_SIZE_TIER] = tier )
+
+Peer Median ROA % =
+VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
+RETURN CALCULATE ( MEDIAN ( Scorecard[ROA_PCT] ),
+    REMOVEFILTERS ( Bank ), REMOVEFILTERS ( Scorecard[CERT] ), Scorecard[ASSET_SIZE_TIER] = tier )
+
+Bank NCL % = SELECTEDVALUE ( Scorecard[NONCURRENT_LOANS_PCT] )
+Bank Tier 1 % = SELECTEDVALUE ( Scorecard[TIER1_LEVERAGE_PCT] )
+Bank ROA % = SELECTEDVALUE ( Scorecard[ROA_PCT] )
+
+Bank Complaint Peer Percentile =
+VAR q = [Report Quarter]
+VAR p = CALCULATE ( SELECTEDVALUE ( Scorecard[COMPLAINTS_PER_1B_DEPOSITS_PEER_PCTILE] ),
+    REMOVEFILTERS ( Quarter ), Scorecard[REPORT_DATE] = q )
+RETURN IF ( ISBLANK ( p ), "No complaint data",
+    "Higher complaint rate than " & FORMAT ( p, "0%" ) & " of size peers" )
