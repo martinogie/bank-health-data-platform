@@ -1,0 +1,5 @@
+# Local development / unit tests (the Airflow image has its own airflow/requirements.txt)
+requests>=2.32
+pandas>=2.2
+pyarrow>=17
+pytest>=8

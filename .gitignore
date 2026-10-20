@@ -1,0 +1,24 @@
+# secrets — never commit
+.env
+*.p8
+*.pem
+keys/
+# python / tools
+__pycache__/
+*.pyc
+.venv/
+venv/
+# airflow
+logs/
+airflow/logs/
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+# data files pulled locally
+data/raw/
+*.parquet
+.DS_Store
+.pytest_cache/
+# local handover notes (contain account details) - keep off GitHub
+CLAUDE.md

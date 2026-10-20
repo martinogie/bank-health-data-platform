@@ -1,0 +1,135 @@
+# Slim Airflow 3 stack for one PC: LocalExecutor (no Redis/Celery), ~3-4 GB RAM.
+# Based on the official apache/airflow 3.3.2 docker-compose.yaml.
+#
+# Run from the airflow/ folder:
+#   docker compose build
+#   docker compose up airflow-init        (first time only: creates DB + admin user)
+#   docker compose up -d
+# UI: http://localhost:8080
+#
+# All settings and secrets come from ../.env (git-ignored).
+
+x-airflow-common:
+  &airflow-common
+  build: .
+  image: bank-health-airflow:3.3.2
+  env_file:
+    - ../.env
+  environment:
+    &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__CORE__PARALLELISM: 4
+    # Low-memory settings for a PC where Docker gets ~4 GB
+    AIRFLOW__API__WORKERS: 1
+    AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: 1
+    AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Chicago
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: 'http://airflow-apiserver:8080/execution/'
+    AIRFLOW__API_AUTH__JWT_ISSUER: airflow
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: 'true'
+    # AIRFLOW__CORE__FERNET_KEY, AIRFLOW__API_AUTH__JWT_SECRET and the admin
+    # password are deliberately NOT here: they come from ../.env.
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ../ingestion:/opt/airflow/ingestion
+    - ../dbt:/opt/airflow/dbt
+    - ../data:/opt/airflow/data
+    - ../keys:/opt/airflow/keys:ro
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on:
+    &airflow-common-depends-on
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    # Airflow's own metadata database (run history, variables). Not project data.
+    image: postgres:16
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow   # local-only container, not reachable from outside
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+    restart: always
+
+  airflow-apiserver:
+    # Web UI + REST API
+    <<: *airflow-common
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    # Decides what runs when; with LocalExecutor it also runs the tasks.
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-dag-processor:
+    # Parses the DAG files in dags/
+    <<: *airflow-common
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-init:
+    # One-off: migrate the metadata DB and create the admin user from .env.
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        mkdir -p /opt/airflow/logs /opt/airflow/data/raw
+        if [[ -z "$${AIRFLOW__CORE__FERNET_KEY:-}" || -z "$${AIRFLOW__API_AUTH__JWT_SECRET:-}" || -z "$${_AIRFLOW_WWW_USER_PASSWORD:-}" ]]; then
+          echo "Missing AIRFLOW__CORE__FERNET_KEY, AIRFLOW__API_AUTH__JWT_SECRET or _AIRFLOW_WWW_USER_PASSWORD in .env"
+          exit 1
+        fi
+        exec /opt/airflow/include/entrypoint.sh airflow version
+    environment:
+      <<: *airflow-common-env
+      _AIRFLOW_DB_MIGRATE: 'true'
+      _AIRFLOW_WWW_USER_CREATE: 'true'
+    user: "0:0"
+
+volumes:
+  postgres-db-volume:

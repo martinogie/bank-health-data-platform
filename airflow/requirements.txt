@@ -1,0 +1,11 @@
+# Extra packages for the Airflow image. Versions not pinned here are pinned by the
+# official Airflow constraints file in the Dockerfile, so everything stays compatible.
+apache-airflow-providers-databricks
+apache-airflow-providers-snowflake
+# Plain connector: its [pandas] extra demands pandas<3, which clashes with Airflow's
+# pinned pandas 3.x. write_pandas only needs pandas + pyarrow, both listed here.
+snowflake-connector-python
+astronomer-cosmos==1.15.1
+pandas
+pyarrow
+requests
