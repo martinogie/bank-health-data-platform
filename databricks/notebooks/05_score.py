@@ -15,7 +15,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install --quiet "mlflow==2.22.5"
+# MAGIC %pip install --quiet "mlflow==2.22.5" "scikit-learn==1.5.2"
 
 # COMMAND ----------
 

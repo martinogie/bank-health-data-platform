@@ -18,12 +18,16 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC Serverless ships MLflow 2.11, which can't upload models to Unity Catalog storage on Free
-# MAGIC Edition (access denied). 2.22.5 can; pinned so training and scoring use the same version.
+# MAGIC Pinned versions, identical in 05_score:
+# MAGIC - MLflow 2.22.5: serverless ships 2.11, which can't upload models to Unity Catalog storage
+# MAGIC   on Free Edition (access denied).
+# MAGIC - scikit-learn 1.5.2: a pickled model only loads with the scikit-learn it was saved with,
+# MAGIC   and one-off runs and scheduled jobs can get different serverless environments
+# MAGIC   (Python 3.11 vs 3.12). Pinning keeps training and scoring in step.
 
 # COMMAND ----------
 
-# MAGIC %pip install --quiet "mlflow==2.22.5"
+# MAGIC %pip install --quiet "mlflow==2.22.5" "scikit-learn==1.5.2"
 
 # COMMAND ----------
 
@@ -269,6 +273,8 @@ with mlflow.start_run(run_id=results[champion]["run_id"], nested=True):
     mlflow.log_table(importance, "feature_importance.json")
     mlflow.log_table(by_year, "test_metrics_by_year.json")
     mlflow.log_dict({"features": FEATURES}, "features.json")
+    import sklearn, sys
+    mlflow.log_params({"sklearn_version": sklearn.__version__, "python_version": sys.version.split()[0]})
     example = X_tr.head(200)
     signature = infer_signature(example, model.predict_proba(example))
     info = mlflow.sklearn.log_model(
