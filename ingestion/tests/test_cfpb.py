@@ -85,5 +85,29 @@ def test_download_complaints_skips_empty_windows(tmp_path):
             return FakeResponse(content=csv_bytes(2))
         return FakeResponse(payload={"hits": {"total": {"value": 0 if empty else 2}}})
 
-    paths = cfpb.download_complaints(date(2026, 10, 11), date(2026, 10, 19), tmp_path, FakeSession(handler))
-    assert [p.name for p in paths] == ["complaints_2026-10-01_2026-10-18.csv.gz"]
+    result = cfpb.download_complaints(date(2026, 10, 11), date(2026, 10, 19), tmp_path, FakeSession(handler))
+    assert [p.name for p in result["fresh"]] == ["complaints_2026-10-01_2026-10-18.csv.gz"]
+    assert result["cached"] == []
+
+
+def test_download_complaints_reuses_complete_months_on_disk(tmp_path):
+    # A complete month (ended > 30 days ago) already on disk is reused, not downloaded.
+    old = cfpb.window_path(tmp_path, date(2026, 8, 1), date(2026, 8, 31))
+    old.parent.mkdir(parents=True)
+    old.write_bytes(b"cached")
+    requested = []
+
+    def handler(method, url, kw):
+        params = dict(kw["params"])
+        requested.append(params["date_received_min"])
+        if params.get("format") == "csv":
+            return FakeResponse(content=csv_bytes(1))
+        return FakeResponse(payload={"hits": {"total": {"value": 1}}})
+
+    # watermark Aug 31 -> look-back starts Aug 1, so the first window is exactly Aug 1-31
+    result = cfpb.download_complaints(date(2026, 8, 31), date(2026, 10, 19), tmp_path, FakeSession(handler))
+    assert result["cached"] == [old]
+    assert old.read_bytes() == b"cached"                  # untouched
+    assert "2026-08-01" not in requested
+    assert [p.name for p in result["fresh"]] == [
+        "complaints_2026-09-01_2026-09-30.csv.gz", "complaints_2026-10-01_2026-10-18.csv.gz"]

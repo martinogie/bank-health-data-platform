@@ -122,7 +122,7 @@ def download_window(
         log.info("CFPB %s..%s: no complaints", start, end)
         return None
 
-    path = Path(out_dir) / "complaints" / f"complaints_{start.isoformat()}_{end.isoformat()}.csv.gz"
+    path = window_path(out_dir, start, end)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
 
@@ -143,17 +143,32 @@ def download_window(
     return path
 
 
+def window_path(out_dir: Path, start: date, end: date) -> Path:
+    return Path(out_dir) / "complaints" / f"complaints_{start.isoformat()}_{end.isoformat()}.csv.gz"
+
+
 def download_complaints(
     watermark: date | None, today: date, out_dir: Path, session: requests.Session | None = None
-) -> list[Path]:
-    """Download every window this run needs. Called by the Airflow DAG."""
+) -> dict[str, list[Path]]:
+    """Download every window this run needs. Called by the Airflow DAG.
+
+    Windows that ended more than LOOKBACK_DAYS ago are complete, so if their file is
+    already on disk it is reused instead of downloaded again (cheap, safe retries).
+    Returns {"fresh": files written this run, "cached": complete files reused}.
+    """
     session = session or requests.Session()
-    paths = []
+    complete_before = today - timedelta(days=LOOKBACK_DAYS)
+    fresh, cached = [], []
     for start, end in windows_to_download(watermark, today):
+        existing = window_path(out_dir, start, end)
+        if end < complete_before and existing.exists():
+            cached.append(existing)
+            continue
         path = download_window(start, end, out_dir, session)
         if path:
-            paths.append(path)
-    return paths
+            fresh.append(path)
+    log.info("CFPB: %s windows downloaded, %s reused from disk", len(fresh), len(cached))
+    return {"fresh": fresh, "cached": cached}
 
 
 def read_csv_header(path: Path) -> list[str]:

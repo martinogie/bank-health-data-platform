@@ -51,6 +51,20 @@ def test_incremental_run_after_gap_fills_missing_quarters():
     assert qs == [date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]
 
 
+def test_split_cached_quarters_reuses_old_files_but_refreshes_latest(tmp_path):
+    latest = date(2026, 6, 30)
+    for q in (date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)):
+        p = fdic.financials_path(tmp_path, q)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+    quarters = [date(2025, 9, 30), date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]
+    to_fetch, cached = fdic.split_cached_quarters(quarters, tmp_path, latest)
+    # 2025-09-30 has no file -> fetch; 2025-12-31 on disk and old -> reuse;
+    # the last 2 quarters are always re-downloaded even though files exist
+    assert to_fetch == [date(2025, 9, 30), date(2026, 3, 31), date(2026, 6, 30)]
+    assert cached == [fdic.financials_path(tmp_path, date(2025, 12, 31))]
+
+
 # ---------------------------------------------------------------- pagination
 def test_fetch_all_follows_offsets(monkeypatch):
     monkeypatch.setattr(fdic, "PAGE_SIZE", 2)

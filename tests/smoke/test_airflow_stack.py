@@ -82,14 +82,31 @@ def test_dag_schedule_and_settings(dag_facts):
     assert dag["has_doc_md"]
 
 
+CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "sync_databricks_job",
+              "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline"}
+
+
 def test_dag_tasks_retries_docs_and_order(dag_facts):
     tasks = dag_facts["bank_health_weekly"]["tasks"]
-    assert set(tasks) == {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks"}
-    for task_id, t in tasks.items():
-        assert t["retries"] == 2, task_id
-        assert t["has_doc_md"], f"{task_id} has no task docs"
+    assert CORE_TASKS <= set(tasks)
+    for task_id in CORE_TASKS:
+        expected = 1 if task_id == "run_databricks_job" else 2   # 1 retry protects the Databricks quota
+        assert tasks[task_id]["retries"] == expected, task_id
+        assert tasks[task_id]["has_doc_md"], f"{task_id} has no task docs"
     assert tasks["download_fdic"]["upstream"] == []
     assert tasks["download_cfpb"]["upstream"] == []
     assert tasks["upload_raw"]["upstream"] == ["download_cfpb", "download_fdic"]
     # watermarks only move after the upload succeeded
     assert "upload_raw" in tasks["save_watermarks"]["upstream"]
+    assert {"save_watermarks", "sync_databricks_job"} <= set(tasks["run_databricks_job"]["upstream"])
+    assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
+
+
+def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
+    tasks = dag_facts["bank_health_weekly"]["tasks"]
+    dbt_tasks = [t for t in tasks if t.startswith("dbt_build.")]
+    for model in ("stg_fdic__financials", "fct_bank_quarter", "mart_early_warning"):
+        assert any(model in t for t in dbt_tasks), f"no Cosmos task for {model}"
+    assert all(tasks[t]["retries"] == 1 for t in dbt_tasks)
+    assert any(t.endswith("load_snowflake") for t in
+               (u for t in dbt_tasks for u in tasks[t]["upstream"])), "dbt group must run after load_snowflake"

@@ -71,6 +71,23 @@ PERIODS = {
 
 # COMMAND ----------
 
+# The weekly job passes retrain=false: keep scoring with the current @champion and skip
+# training (saves compute; the model only changes when retrained on purpose).
+dbutils.widgets.text("retrain", "true", "Retrain model (true/false)")
+RETRAIN = dbutils.widgets.get("retrain").strip().lower() == "true"
+mlflow.set_registry_uri("databricks-uc")
+if not RETRAIN:
+    try:
+        current = MlflowClient().get_model_version_by_alias(MODEL_NAME, "champion").version
+    except Exception:
+        current = None
+    if current is not None:
+        print(f"retrain=false: keeping {MODEL_NAME} v{current} (@champion); training skipped")
+        dbutils.notebook.exit(json.dumps({"skipped": True, "champion_version": int(current)}))
+    print("retrain=false but no @champion exists yet, so training anyway")
+
+# COMMAND ----------
+
 # MAGIC %md ## Build features and labels
 
 # COMMAND ----------

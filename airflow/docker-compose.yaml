@@ -22,6 +22,9 @@ x-airflow-common:
     # Low-memory settings for a PC where Docker gets ~4 GB
     AIRFLOW__API__WORKERS: 1
     AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: 1
+    # Cosmos runs `dbt ls` while parsing the DAG (cached afterwards); allow time for it
+    AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 180
+    AIRFLOW__DAG_PROCESSOR__DAG_FILE_PROCESSOR_TIMEOUT: 240
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'

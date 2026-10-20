@@ -183,6 +183,29 @@ def write_jsonl_gz(records: Iterable[dict], path: Path) -> int:
 # --------------------------------------------------------------------------- #
 # Public download functions (called by the Airflow DAG)
 # --------------------------------------------------------------------------- #
+def financials_path(out_dir: Path, q: date) -> Path:
+    return Path(out_dir) / "financials" / f"financials_{to_repdte(q)}.jsonl.gz"
+
+
+def split_cached_quarters(
+    quarters: list[date], out_dir: Path, latest_available: date
+) -> tuple[list[date], list[Path]]:
+    """Separate quarters that must be downloaded from ones already complete on disk.
+
+    The newest REFRESH_QUARTERS are always re-downloaded (amendments); older quarters
+    are reused if their file exists. Makes a retried or repeated run cheap and safe.
+    """
+    refresh_from = quarter_ends(HISTORY_START, latest_available)[-REFRESH_QUARTERS:][0]
+    to_fetch, cached = [], []
+    for q in quarters:
+        path = financials_path(out_dir, q)
+        if q < refresh_from and path.exists():
+            cached.append(path)
+        else:
+            to_fetch.append(q)
+    return to_fetch, cached
+
+
 def download_financials(
     quarters: Iterable[date], out_dir: Path, session: requests.Session | None = None
 ) -> list[Path]:
@@ -191,7 +214,7 @@ def download_financials(
     paths = []
     for q in quarters:
         repdte = to_repdte(q)
-        path = Path(out_dir) / "financials" / f"financials_{repdte}.jsonl.gz"
+        path = financials_path(out_dir, q)
         n = write_jsonl_gz(
             fetch_all(session, "financials", FINANCIAL_FIELDS, filters=f"REPDTE:{repdte}"), path
         )

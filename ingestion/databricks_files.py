@@ -94,6 +94,35 @@ class DatabricksFiles:
             uploaded.append(target)
         return uploaded
 
+    def upload_if_missing(
+        self, local_paths: Iterable[Path], local_root: Path, volume_root: str = RAW_VOLUME
+    ) -> list[str]:
+        """Upload only files the Volume doesn't have yet (or has with a different size).
+
+        Used for complete files reused from disk, so a re-run doesn't push (and bronze
+        doesn't re-ingest) hundreds of unchanged files, while a fresh Volume still fills up.
+        """
+        remote_sizes: dict[str, int] = {}
+        listed: set[str] = set()
+        uploaded = []
+        for p in local_paths:
+            rel = Path(p).resolve().relative_to(Path(local_root).resolve())
+            target = str(PurePosixPath(volume_root, *rel.parts))
+            folder = str(PurePosixPath(target).parent)
+            if folder not in listed:
+                listed.add(folder)
+                try:
+                    for e in self.list_directory(folder):
+                        if not e.get("is_directory"):
+                            remote_sizes[e["path"]] = e.get("file_size")
+                except requests.HTTPError as exc:
+                    if getattr(exc.response, "status_code", None) != 404:
+                        raise
+            if remote_sizes.get(target) != Path(p).stat().st_size:
+                self.upload_file(Path(p), target)
+                uploaded.append(target)
+        return uploaded
+
     # ---------------------------------------------------------------- download
     def list_directory(self, volume_dir: str) -> Iterator[dict]:
         """Yield entries ({path, is_directory, file_size, ...}) of a Volume folder."""
