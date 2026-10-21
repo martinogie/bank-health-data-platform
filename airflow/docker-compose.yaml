@@ -25,6 +25,8 @@ x-airflow-common:
     # Cosmos runs `dbt ls` while parsing the DAG (cached afterwards); allow time for it
     AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: 180
     AIRFLOW__DAG_PROCESSOR__DAG_FILE_PROCESSOR_TIMEOUT: 240
+    # One DAG file that rarely changes: re-parse every 2 min instead of every 30 s (saves CPU)
+    AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: 120
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
@@ -91,7 +93,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type SchedulerJob --hostname "$${HOSTNAME}"']
       interval: 30s
-      timeout: 10s
+      timeout: 30s   # `airflow jobs check` starts a full Airflow process; slow on a busy 4-core PC
       retries: 5
       start_period: 30s
     restart: always
@@ -107,7 +109,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", 'airflow jobs check --job-type DagProcessorJob --hostname "$${HOSTNAME}"']
       interval: 30s
-      timeout: 10s
+      timeout: 30s
       retries: 5
       start_period: 30s
     restart: always
