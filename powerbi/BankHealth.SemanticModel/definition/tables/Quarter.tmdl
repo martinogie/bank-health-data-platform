@@ -1,0 +1,45 @@
+table Quarter
+	lineageTag: 07250b07-da5e-4c13-9c28-2f5945f02281
+
+	column 'Quarter End'
+		dataType: dateTime
+		formatString: mmm yyyy
+		lineageTag: 557b92fa-197d-4ead-913f-820fde5512c3
+		summarizeBy: none
+		sourceColumn: [Quarter End]
+
+	column Year
+		dataType: int64
+		formatString: 0
+		lineageTag: 2863ffee-7f2e-4021-8e6e-2740b1e8e024
+		summarizeBy: none
+		sourceColumn: [Year]
+
+	column 'Quarter Label'
+		dataType: string
+		lineageTag: 0dbec48d-ff11-4de6-9448-69b248a4fce1
+		summarizeBy: none
+		sourceColumn: [Quarter Label]
+		sortByColumn: 'Quarter End'
+
+	column n
+		dataType: int64
+		isHidden
+		lineageTag: 207b7993-d4d1-491a-ba4b-860954a7d889
+		summarizeBy: none
+		sourceColumn: [n]
+
+	partition Quarter = calculated
+		mode: import
+		source =
+				ADDCOLUMNS (
+				    SELECTCOLUMNS ( GENERATESERIES ( 1, 108, 1 ), "n", [Value] ),
+				    "Quarter End", EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ),
+				    "Year", YEAR ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ),
+				    "Quarter Label",
+				        YEAR ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ) & " Q"
+				            & ROUNDUP ( MONTH ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ) / 3, 0 )
+				)
+
+	annotation PBI_Id = 372d080ca6ec4da08a0ffeb9e61832e7
+

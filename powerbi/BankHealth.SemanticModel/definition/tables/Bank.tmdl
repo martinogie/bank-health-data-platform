@@ -1,0 +1,134 @@
+table Bank
+	lineageTag: 5bc85db3-3645-4d55-b900-09296f10562a
+
+	measure 'Selected Bank' =
+			VAR b = SELECTEDVALUE ( Bank[BANK_NAME] )
+			RETURN IF ( ISBLANK ( b ), "Right-click a bank on Early warning → Drill through → Bank detail",
+			    b & " · " & SELECTEDVALUE ( Bank[CITY] ) & ", " & SELECTEDVALUE ( Bank[STATE_CODE] ) & " · CERT " & SELECTEDVALUE ( Bank[CERT] ) )
+		lineageTag: f03ef93f-edb1-4225-8c42-138d0785b1c0
+
+	measure 'Bank Holding Company' =
+			VAR h = SELECTEDVALUE ( Bank[HOLDING_COMPANY] )
+			RETURN IF ( ISBLANK ( h ), "No holding company on file", "Holding company: " & h )
+		lineageTag: c0138366-c438-4a53-8131-6fa9f68c66ae
+
+	column CERT
+		dataType: double
+		formatString: 0
+		lineageTag: 80922357-e003-4c83-a8cc-ebd325a2a9db
+		summarizeBy: none
+		sourceColumn: CERT
+
+		annotation SummarizationSetBy = User
+
+	column BANK_NAME
+		dataType: string
+		lineageTag: d81cfa58-3319-441e-b63c-bc7ce8b01368
+		summarizeBy: none
+		sourceColumn: BANK_NAME
+
+		annotation SummarizationSetBy = User
+
+	column CITY
+		dataType: string
+		lineageTag: 59e4b82f-effe-4338-b56f-818bf6121dd9
+		summarizeBy: none
+		sourceColumn: CITY
+
+		annotation SummarizationSetBy = User
+
+	column STATE_CODE
+		dataType: string
+		lineageTag: b13ac0f2-dcf6-4202-83e8-a50b68057306
+		summarizeBy: none
+		sourceColumn: STATE_CODE
+
+		annotation SummarizationSetBy = User
+
+	column STATE_NAME
+		dataType: string
+		lineageTag: c10c64e8-a1d8-4eef-8dcc-5a0fab972ac3
+		summarizeBy: none
+		sourceColumn: STATE_NAME
+
+		annotation SummarizationSetBy = User
+
+	column BANK_CLASS
+		dataType: string
+		lineageTag: d53851d7-e9d5-4953-b888-b1d9aebd7404
+		summarizeBy: none
+		sourceColumn: BANK_CLASS
+
+		annotation SummarizationSetBy = User
+
+	column PRIMARY_REGULATOR
+		dataType: string
+		lineageTag: 3a268c87-0ac6-4e4b-bed0-1e5176a5036c
+		summarizeBy: none
+		sourceColumn: PRIMARY_REGULATOR
+
+		annotation SummarizationSetBy = User
+
+	column HOLDING_COMPANY
+		dataType: string
+		lineageTag: cc3f60d3-b880-4dac-a60d-597b356dd523
+		summarizeBy: none
+		sourceColumn: HOLDING_COMPANY
+
+		annotation SummarizationSetBy = User
+
+	column IS_ACTIVE
+		dataType: boolean
+		lineageTag: fc801306-f3aa-47c7-acda-d16c1b2487c4
+		summarizeBy: none
+		sourceColumn: IS_ACTIVE
+
+		annotation SummarizationSetBy = User
+
+	column HAS_FAILED
+		dataType: boolean
+		lineageTag: 8349b54d-1740-4c34-b423-3c7309418d35
+		summarizeBy: none
+		sourceColumn: HAS_FAILED
+
+		annotation SummarizationSetBy = User
+
+	column LATEST_TOTAL_ASSETS_K
+		dataType: double
+		formatString: #,0
+		lineageTag: 6a396655-57f5-4bb7-b123-46e19cb8c8f8
+		summarizeBy: sum
+		sourceColumn: LATEST_TOTAL_ASSETS_K
+
+		annotation SummarizationSetBy = User
+
+	column LATEST_ASSET_SIZE_TIER
+		dataType: string
+		lineageTag: 1e69d960-6559-4f8e-8ff6-61389221c172
+		summarizeBy: none
+		sourceColumn: LATEST_ASSET_SIZE_TIER
+
+		annotation SummarizationSetBy = User
+
+	column HAS_CFPB_COMPLAINTS
+		dataType: boolean
+		lineageTag: 84780aed-376d-45ca-ae0f-7a41222a8733
+		summarizeBy: none
+		sourceColumn: HAS_CFPB_COMPLAINTS
+
+		annotation SummarizationSetBy = User
+
+	partition Bank = m
+		mode: import
+		source =
+				let
+				    Source = Snowflake.Databases(SnowflakeServer, "BANK_WH", [Role = "BANK_REPORTER_ROLE", Implementation = "2.0"]),
+				    BANK_HEALTH_Database = Source{[Name = "BANK_HEALTH", Kind = "Database"]}[Data],
+				    MARTS_Schema = BANK_HEALTH_Database{[Name = "MARTS", Kind = "Schema"]}[Data],
+				    Data = MARTS_Schema{[Name = "DIM_BANK", Kind = "Table"]}[Data],
+				    Kept = Table.SelectColumns(Data, {"CERT", "BANK_NAME", "CITY", "STATE_CODE", "STATE_NAME", "BANK_CLASS", "PRIMARY_REGULATOR", "HOLDING_COMPANY", "IS_ACTIVE", "HAS_FAILED", "LATEST_TOTAL_ASSETS_K", "LATEST_ASSET_SIZE_TIER", "HAS_CFPB_COMPLAINTS"})
+				in
+				    Kept
+
+	annotation PBI_ResultType = Table
+

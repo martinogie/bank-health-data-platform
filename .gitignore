@@ -23,3 +23,6 @@ data/raw/
 # local handover notes (contain account details) - keep off GitHub
 CLAUDE.md
 dbt/.user.yml
+# Power BI project: local caches and per-user settings
+**/.pbi/localSettings.json
+**/.pbi/cache.abf

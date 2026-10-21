@@ -1,0 +1,5 @@
+expression SnowflakeServer = "<your-account>.snowflakecomputing.com" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]
+	lineageTag: 29846983-17c8-527b-a2ed-33e918610037
+
+	annotation PBI_ResultType = Text
+

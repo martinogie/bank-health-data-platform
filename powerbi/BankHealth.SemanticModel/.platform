@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "SemanticModel",
+    "displayName": "BankHealth"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "47fac65f-27d8-41e3-9863-78cbb95827ee"
+  }
+}

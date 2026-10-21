@@ -1,0 +1,278 @@
+table 'Early Warning'
+	lineageTag: e09982f0-37d3-48f9-9916-43df6910a1ef
+
+	measure 'Banks Scored' = COUNTROWS ( 'Early Warning' )
+		formatString: #,0
+		lineageTag: bebe005f-0026-4286-811d-133495023418
+
+	measure 'Banks High Risk' = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "High" )
+		formatString: #,0
+		lineageTag: 4288d82a-bb3f-46fe-acee-5aace048279d
+
+	measure 'Banks Elevated Risk' = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Elevated" )
+		formatString: #,0
+		lineageTag: 72ce0569-a2df-4d22-a05d-118ad78d0c17
+
+	measure 'Banks Watch' = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Watch" )
+		formatString: #,0
+		lineageTag: 2097e196-61e5-4eee-b0a6-244f3980e8de
+
+	measure 'Banks Already in Distress' = CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = "Already in distress" )
+		formatString: #,0
+		lineageTag: 9b910b78-1fb2-4c82-9f5f-18c9c63fcc47
+
+	measure 'Assets High + Elevated $B' =
+			DIVIDE (
+			    CALCULATE ( SUM ( 'Early Warning'[TOTAL_ASSETS_K] ), 'Early Warning'[RISK_BAND] IN { "High", "Elevated" } ),
+			    1e6
+			)
+		formatString: \$#,0B
+		lineageTag: 87ad2874-51f3-46ef-a940-c98eeba1cd81
+
+	measure 'Avg Distress Probability' = AVERAGE ( 'Early Warning'[DISTRESS_PROBABILITY] )
+		formatString: 0.0%
+		lineageTag: 9ab3b9ba-84ed-430f-be80-bbcd074d752f
+
+	measure 'Avg Complaints per $1B' = AVERAGE ( 'Early Warning'[COMPLAINTS_PER_1B_DEPOSITS] )
+		formatString: 0.0
+		lineageTag: 3cf4b581-1c61-4402-97e3-1de6de063a73
+
+	measure 'Scores As Of' = "Scores as of " & FORMAT ( MAX ( 'Early Warning'[REPORT_DATE] ), "d mmm yyyy" ) & " · model v" & MAX ( 'Early Warning'[MODEL_VERSION] ) & " · " & FORMAT ( [Banks Scored], "#,0" ) & " banks scored"
+		lineageTag: 8511ad27-55b4-401a-a7ae-0b31208eb218
+
+	measure 'Bank Risk Band' = "Risk band: " & SELECTEDVALUE ( 'Early Warning'[RISK_BAND], "Not scored" )
+		lineageTag: 3bfa60ea-dae9-4504-9d94-fac9192238d7
+
+	measure 'Bank Distress Probability' = SELECTEDVALUE ( 'Early Warning'[DISTRESS_PROBABILITY] )
+		formatString: 0.0%
+		lineageTag: c182da71-79dd-4992-be54-4b8e162fbdfb
+
+	measure 'Bank Reason 1' = "1. " & COALESCE ( [Main Reason], "—" )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000201
+
+	measure 'Bank Reason 2' = "2. " & COALESCE ( [Second Reason], "—" )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000202
+
+	measure 'Bank Reason 3' = "3. " & COALESCE ( [Third Reason], "—" )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000203
+
+	measure 'Main Reason' =
+			VAR r = SELECTEDVALUE ( 'Early Warning'[REASON_1] )
+			RETURN SUBSTITUTE ( SUBSTITUTE ( SUBSTITUTE ( r, "30_89", "30-89 days" ), "_pct", " %" ), "_", " " )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000101
+
+	measure 'Second Reason' =
+			VAR r = SELECTEDVALUE ( 'Early Warning'[REASON_2] )
+			RETURN SUBSTITUTE ( SUBSTITUTE ( SUBSTITUTE ( r, "30_89", "30-89 days" ), "_pct", " %" ), "_", " " )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000102
+
+	measure 'Third Reason' =
+			VAR r = SELECTEDVALUE ( 'Early Warning'[REASON_3] )
+			RETURN SUBSTITUTE ( SUBSTITUTE ( SUBSTITUTE ( r, "30_89", "30-89 days" ), "_pct", " %" ), "_", " " )
+		lineageTag: 7d0c5e2a-0000-4000-8000-000000000103
+
+	column CERT
+		dataType: double
+		formatString: 0
+		lineageTag: 1512e203-9a79-4e9f-b793-1ae8ef283aa0
+		summarizeBy: none
+		sourceColumn: CERT
+
+		annotation SummarizationSetBy = User
+
+	column BANK_NAME
+		dataType: string
+		lineageTag: 614ea891-2735-49bf-9db5-672665b3488b
+		summarizeBy: none
+		sourceColumn: BANK_NAME
+
+		annotation SummarizationSetBy = User
+
+	column CITY
+		dataType: string
+		lineageTag: 9d006dd4-c3cd-4273-a95b-1472587baad9
+		summarizeBy: none
+		sourceColumn: CITY
+
+		annotation SummarizationSetBy = User
+
+	column STATE_CODE
+		dataType: string
+		lineageTag: 23adc910-d16a-4c75-9796-7f56fd05cbd8
+		summarizeBy: none
+		sourceColumn: STATE_CODE
+
+		annotation SummarizationSetBy = User
+
+	column REPORT_DATE
+		dataType: dateTime
+		formatString: d mmm yyyy
+		lineageTag: 0b912a9e-91ba-41ee-8742-9ef63fd15322
+		summarizeBy: none
+		sourceColumn: REPORT_DATE
+
+		annotation SummarizationSetBy = User
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column ASSET_SIZE_TIER
+		dataType: string
+		lineageTag: e5441d95-2006-424a-8b91-a33ee57d3bad
+		summarizeBy: none
+		sourceColumn: ASSET_SIZE_TIER
+
+		annotation SummarizationSetBy = User
+
+	column TOTAL_ASSETS_K
+		dataType: double
+		formatString: #,0
+		lineageTag: 744c222c-aca0-42ba-b76f-c7d2c4315376
+		summarizeBy: sum
+		sourceColumn: TOTAL_ASSETS_K
+
+		annotation SummarizationSetBy = User
+
+	column DISTRESS_PROBABILITY
+		dataType: double
+		formatString: 0.0%
+		lineageTag: 5472141c-1777-4a93-b0ee-000b50d0a4da
+		summarizeBy: none
+		sourceColumn: DISTRESS_PROBABILITY
+
+		annotation SummarizationSetBy = User
+
+	column RISK_PERCENTILE
+		dataType: double
+		formatString: 0%
+		lineageTag: 85f2b85d-c41e-4c53-bc45-1db8d454f19e
+		summarizeBy: none
+		sourceColumn: RISK_PERCENTILE
+
+		annotation SummarizationSetBy = User
+
+	column RISK_RANK
+		dataType: double
+		formatString: #,0
+		lineageTag: 76e2a5b3-2309-48d0-8c0f-aedde516bb0b
+		summarizeBy: none
+		sourceColumn: RISK_RANK
+
+		annotation SummarizationSetBy = User
+
+	column RISK_BAND
+		dataType: string
+		lineageTag: b8c9cbd7-39b0-4b65-969b-2c2d6353b50d
+		summarizeBy: none
+		sourceColumn: RISK_BAND
+		sortByColumn: BAND_ORDER
+
+		annotation SummarizationSetBy = User
+
+	column ALREADY_IN_DISTRESS
+		dataType: boolean
+		lineageTag: 01fd9bee-69d7-4b75-a456-d198715a6d1a
+		summarizeBy: none
+		sourceColumn: ALREADY_IN_DISTRESS
+
+		annotation SummarizationSetBy = User
+
+	column REASON_1
+		dataType: string
+		lineageTag: c934d24b-3784-48b0-b412-969b3176da2d
+		summarizeBy: none
+		sourceColumn: REASON_1
+
+		annotation SummarizationSetBy = User
+
+	column REASON_2
+		dataType: string
+		lineageTag: f4385b1b-deab-4318-a2e3-0f5d0404e739
+		summarizeBy: none
+		sourceColumn: REASON_2
+
+		annotation SummarizationSetBy = User
+
+	column REASON_3
+		dataType: string
+		lineageTag: 57e34e44-00fa-4930-8ead-0c150caefdbe
+		summarizeBy: none
+		sourceColumn: REASON_3
+
+		annotation SummarizationSetBy = User
+
+	column TIER1_LEVERAGE_PCT
+		dataType: double
+		formatString: 0.00
+		lineageTag: ba8f2583-09de-407f-adbb-ebb20511a40d
+		summarizeBy: none
+		sourceColumn: TIER1_LEVERAGE_PCT
+
+		annotation SummarizationSetBy = User
+
+	column NONCURRENT_LOANS_PCT
+		dataType: double
+		formatString: 0.00
+		lineageTag: 1942ecbb-d2f2-4fe1-97d5-9cf8adf9bc26
+		summarizeBy: none
+		sourceColumn: NONCURRENT_LOANS_PCT
+
+		annotation SummarizationSetBy = User
+
+	column ROA_PCT
+		dataType: double
+		formatString: 0.00
+		lineageTag: c88001e2-b08d-422c-bab1-64cdc2562f95
+		summarizeBy: none
+		sourceColumn: ROA_PCT
+
+		annotation SummarizationSetBy = User
+
+	column COMPLAINTS
+		dataType: double
+		formatString: #,0
+		lineageTag: 2f169180-8b30-42c6-9c54-dac16333b65e
+		summarizeBy: sum
+		sourceColumn: COMPLAINTS
+
+		annotation SummarizationSetBy = User
+
+	column COMPLAINTS_PER_1B_DEPOSITS
+		dataType: double
+		formatString: 0.0
+		lineageTag: 73a69032-5d5e-473f-8a08-2b50b0496658
+		summarizeBy: none
+		sourceColumn: COMPLAINTS_PER_1B_DEPOSITS
+
+		annotation SummarizationSetBy = User
+
+	column MODEL_VERSION
+		dataType: double
+		formatString: 0
+		lineageTag: b385fb02-695c-4dce-8286-a723474a23eb
+		summarizeBy: none
+		sourceColumn: MODEL_VERSION
+
+		annotation SummarizationSetBy = User
+
+	column BAND_ORDER
+		dataType: int64
+		isHidden
+		lineageTag: 5fa26ccb-e2b3-4f27-9db8-81eb903a4196
+		summarizeBy: none
+		sourceColumn: BAND_ORDER
+
+	partition 'Early Warning' = m
+		mode: import
+		source =
+				let
+				    Source = Snowflake.Databases(SnowflakeServer, "BANK_WH", [Role = "BANK_REPORTER_ROLE", Implementation = "2.0"]),
+				    BANK_HEALTH_Database = Source{[Name = "BANK_HEALTH", Kind = "Database"]}[Data],
+				    MARTS_Schema = BANK_HEALTH_Database{[Name = "MARTS", Kind = "Schema"]}[Data],
+				    Data = MARTS_Schema{[Name = "MART_EARLY_WARNING", Kind = "Table"]}[Data],
+				    Kept = Table.SelectColumns(Data, {"CERT", "BANK_NAME", "CITY", "STATE_CODE", "REPORT_DATE", "ASSET_SIZE_TIER", "TOTAL_ASSETS_K", "DISTRESS_PROBABILITY", "RISK_PERCENTILE", "RISK_RANK", "RISK_BAND", "ALREADY_IN_DISTRESS", "REASON_1", "REASON_2", "REASON_3", "TIER1_LEVERAGE_PCT", "NONCURRENT_LOANS_PCT", "ROA_PCT", "COMPLAINTS", "COMPLAINTS_PER_1B_DEPOSITS", "MODEL_VERSION"}),
+				    Ordered = Table.AddColumn(Kept, "BAND_ORDER", each if [RISK_BAND] = "High" then 1 else if [RISK_BAND] = "Elevated" then 2 else if [RISK_BAND] = "Watch" then 3 else if [RISK_BAND] = "Low" then 4 else 5, Int64.Type)
+				in
+				    Ordered
+
+	annotation PBI_ResultType = Table
+

@@ -1,0 +1,560 @@
+cultureInfo en-US
+
+	linguisticMetadata =
+			{
+			  "Version": "2.0.0",
+			  "Language": "en-US",
+			  "Entities": {
+			    "scorecard.bank_quarters": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Bank Quarters"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Banks reporting": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.banks_reporting": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Banks Reporting"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Banks": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.complaints_per_1b_deposits": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Complaints per $1B Deposits"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Complaints per $1B deposits": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.share_of_banks_with_ncl__3": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Share of Banks with NCL > 3%"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Banks with non-current loans > 3%": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.bank_ncl_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Bank NCL %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "This bank": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.peer_median_ncl_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Peer Median NCL %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Median of same-size banks": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.bank_tier_1_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Bank Tier 1 %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "This bank": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.peer_median_tier_1_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Peer Median Tier 1 %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Median of same-size banks": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.bank_roa_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Bank ROA %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "This bank": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "scorecard.peer_median_roa_": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Scorecard",
+			          "ConceptualProperty": "Peer Median ROA %"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Median of same-size banks": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.banks_scored": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "Banks Scored"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Banks": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.asset_size_tier": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "ASSET_SIZE_TIER"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Size": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.distress_probability": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "DISTRESS_PROBABILITY"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Probability": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.risk_band": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "RISK_BAND"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Band": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.reason_1": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "REASON_1"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "early_warning.reason_2": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "REASON_2"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "early_warning.tier1_leverage_pct": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "TIER1_LEVERAGE_PCT"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Tier 1 %": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.noncurrent_loans_pct": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "NONCURRENT_LOANS_PCT"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "NCL %": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.avg_distress_probability": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "Avg Distress Probability"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Distress probability": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.avg_complaints_per_1b": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "Avg Complaints per $1B"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Complaints per $1B deposits": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "bank.cert": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Bank",
+			          "ConceptualProperty": "CERT"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "bank.bank_name": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Bank",
+			          "ConceptualProperty": "BANK_NAME"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "bank.state_code": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Bank",
+			          "ConceptualProperty": "STATE_CODE"
+			        }
+			      },
+			      "State": "Generated"
+			    },
+			    "complaints.complaint_count": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Complaints",
+			          "ConceptualProperty": "Complaint Count"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Complaints": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.cert": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "CERT"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "CERT": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.bank_name": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "BANK_NAME"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Bank": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.state_code": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "STATE_CODE"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "State": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.main_reason": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "Main Reason"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Main reason": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    },
+			    "early_warning.second_reason": {
+			      "Definition": {
+			        "Binding": {
+			          "ConceptualEntity": "Early Warning",
+			          "ConceptualProperty": "Second Reason"
+			        }
+			      },
+			      "State": "Generated",
+			      "Terms": [
+			        {
+			          "Second reason": {
+			            "State": "Suggested",
+			            "Source": {
+			              "Type": "External",
+			              "Agent": "PowerBI.VisualColumnRename"
+			            },
+			            "Weight": 0.9
+			          }
+			        }
+			      ]
+			    }
+			  }
+			}
+		contentType: json
+

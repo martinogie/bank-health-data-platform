@@ -1,0 +1,87 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 339.2858969798134,
+            "y": -49.997582654905045
+          },
+          "nodeIndex": "Bank",
+          "nodeLineageTag": "5bc85db3-3645-4d55-b900-09296f10562a",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 50,
+            "y": -50
+          },
+          "nodeIndex": "Complaints",
+          "nodeLineageTag": "b782b917-2959-4705-950c-5b02c5d4e4bc",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 843.09932286727189,
+            "y": 36.753201816566275
+          },
+          "nodeIndex": "Early Warning",
+          "nodeLineageTag": "e09982f0-37d3-48f9-9916-43df6910a1ef",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 553.24106488716507,
+            "y": 374.08297967598691
+          },
+          "nodeIndex": "Quarter",
+          "nodeLineageTag": "07250b07-da5e-4c13-9c28-2f5945f02281",
+          "size": {
+            "height": 176,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 268.54916435980016,
+            "y": 303.71810763234106
+          },
+          "nodeIndex": "Scorecard",
+          "nodeLineageTag": "653c2416-5779-411b-8604-4933b2273b7a",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}

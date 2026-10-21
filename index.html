@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Health Data Platform</title>
+<meta name="description" content="End-to-end data platform on real FDIC and CFPB data: Airflow, Databricks (PySpark, MLflow), Snowflake, dbt and Power BI, with a bank distress early-warning model.">
+<style>
+:root{color-scheme:light;
+  --page:#f6f8f8;--surface:#ffffff;--ink:#16302d;--ink2:#3c524f;--muted:#5f6f6d;--ring:#d9e2e1;
+  --teal:#0f766e;--teal-d:#115e59;--teal-l:#99d5cf;--coral:#d9480f;
+  --sans:"Segoe UI",system-ui,-apple-system,sans-serif}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+  --page:#0e1716;--surface:#15211f;--ink:#e8f1f0;--ink2:#c3d2d0;--muted:#8fa3a0;--ring:#25332f;
+  --teal:#2bb3a6;--teal-d:#0f766e;--teal-l:#99d5cf;--coral:#f0773f}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --page:#0e1716;--surface:#15211f;--ink:#e8f1f0;--ink2:#c3d2d0;--muted:#8fa3a0;--ring:#25332f;
+  --teal:#2bb3a6;--teal-d:#0f766e;--teal-l:#99d5cf;--coral:#f0773f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.6 var(--sans)}
+.bar{background:#0f766e;color:#fff}
+.bar .in{max-width:1180px;margin:0 auto;padding:14px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.bar b{letter-spacing:.06em}
+.bar span{color:#c9ece8;font-size:13px}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 56px}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.12;margin:0 0 10px;letter-spacing:-.01em}
+h2{font-size:19px;margin:0 0 10px}
+p{margin:0 0 10px;max-width:78ch}
+.lede{color:var(--ink2);font-size:16px}
+.links{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 22px}
+.links a{font-size:13px;font-weight:600;color:var(--ink);text-decoration:none;border:1px solid var(--ring);background:var(--surface);padding:6px 12px;border-radius:999px}
+.links a.primary{background:var(--teal-d);color:#fff;border-color:transparent}
+.links a:hover,.links a:focus-visible{border-color:var(--teal);outline:none}
+.stack{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:22px}
+.stack span{font-size:12px;font-weight:600;color:var(--teal);background:color-mix(in srgb,var(--teal) 10%,transparent);padding:4px 10px;border-radius:6px}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:16px;min-width:0}
+.kpi .lab{font-size:12px;color:var(--muted)}
+.kpi .val{font-size:26px;font-weight:600;font-variant-numeric:tabular-nums;margin:2px 0}
+.kpi .sub{font-size:12px;color:var(--muted)}
+.shot{padding:0;overflow:hidden;margin-bottom:12px}
+.shot img{display:block;width:100%;height:auto}
+.shot .cap{padding:10px 16px;font-size:13px;color:var(--muted);border-top:1px solid var(--ring)}
+.tabs{display:flex;gap:6px;margin:6px 0 10px;flex-wrap:wrap}
+.tabs button{font:600 13px var(--sans);border:1px solid var(--ring);background:var(--surface);color:var(--ink);padding:6px 12px;border-radius:999px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--teal-d);color:#fff;border-color:transparent}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 4px}
+.flow div{background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:8px 10px;font-size:13px}
+.flow div b{display:block;font-size:13px}
+.flow i{color:var(--muted);font-style:normal}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--ring);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+td.n{font-variant-numeric:tabular-nums;white-space:nowrap}
+code{font-size:13px;background:color-mix(in srgb,var(--muted) 14%,transparent);padding:1px 5px;border-radius:5px}
+.note{font-size:13px;color:var(--muted)}
+footer{margin-top:28px;color:var(--muted);font-size:13px}
+footer a{color:var(--ink2)}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="bar"><div class="in"><b>BANK HEALTH</b><span>US banks · FDIC call reports + CFPB complaints</span></div></div>
+<div class="wrap">
+  <h1>Which US banks are most likely to run into trouble next year?</h1>
+  <p class="lede">An end-to-end data platform on real public data: 26 years of FDIC call reports for 27,835 banks and nearly 2 million CFPB consumer complaints, moved by Airflow, shaped in Databricks and dbt, stored in Snowflake, scored by an MLflow model and reported in Power BI.</p>
+  <div class="links">
+    <a class="primary" href="https://github.com/martinogie/bank-health-data-platform">Source on GitHub</a>
+    <a href="https://github.com/martinogie/bank-health-data-platform#testing">Testing</a>
+    <a href="docs/Bank_Health_Pipeline_Workflow.pdf">Workflow PDF</a>
+    <a href="https://martinogie.github.io/budget-variance-pack/">Budget Variance Pack</a>
+    <a href="https://martinogie.github.io/uk-bank-customer-dashboard/">UK Bank Customer Dashboard</a>
+  </div>
+  <div class="stack"><span>Apache Airflow</span><span>Databricks</span><span>PySpark</span><span>MLflow</span><span>Snowflake</span><span>dbt</span><span>Power BI</span><span>Docker</span><span>pytest</span></div>
+
+  <div class="kpis">
+    <div class="card kpi"><div class="lab">Bank-quarters modelled</div><div class="val">743,802</div><div class="sub">2000 Q1 – 2026 Q2</div></div>
+    <div class="card kpi"><div class="lab">CFPB complaints</div><div class="val">1,969,948</div><div class="sub">Oct 2023 – Oct 2026, 30% matched to FDIC banks</div></div>
+    <div class="card kpi"><div class="lab">Model ROC-AUC (2020–24 test)</div><div class="val">0.854</div><div class="sub">PR-AUC 0.357 vs 5.6% base rate</div></div>
+    <div class="card kpi"><div class="lab">dbt data tests</div><div class="val">87 / 89</div><div class="sub">passed; 2 warnings, 0 errors</div></div>
+  </div>
+
+  <h2>The report</h2>
+  <div class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-img="powerbi/screenshots/overview.png" data-cap="Overview: KPI cards with the change from the previous quarter, asset quality since 2000, banks left, complaint rates for large banks.">Overview</button>
+    <button role="tab" aria-selected="false" data-img="powerbi/screenshots/early_warning.png" data-cap="Early warning: every bank's 12-month distress probability, risk band and top reasons.">Early warning</button>
+    <button role="tab" aria-selected="false" data-img="powerbi/screenshots/bank_detail.png" data-cap="Bank detail (drill-through): one bank against the median of banks the same size.">Bank detail</button>
+  </div>
+  <div class="card shot"><img id="shot" src="powerbi/screenshots/overview.png" alt="Power BI report page" loading="lazy"><div class="cap" id="cap">Overview: KPI cards with the change from the previous quarter, asset quality since 2000, banks left, complaint rates for large banks.</div></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>How the data moves</h2>
+      <div class="flow">
+        <div><b>FDIC + CFPB APIs</b><i>public, no key</i></div>→
+        <div><b>Airflow</b><i>weekly, Docker</i></div>→
+        <div><b>Databricks</b><i>bronze → silver → gold</i></div>→
+        <div><b>MLflow</b><i>train + score</i></div>→
+        <div><b>Snowflake</b><i>RAW</i></div>→
+        <div><b>dbt</b><i>marts + tests</i></div>→
+        <div><b>Power BI</b><i>Import</i></div>
+      </div>
+      <p class="note">Databricks Free Edition blocks most outbound internet, so Airflow downloads the files and pushes them into a Unity Catalog volume. Watermarks mean later runs only fetch new quarters and new complaint dates.</p>
+    </div>
+    <div class="card">
+      <h2>The distress model</h2>
+      <p class="lede">A bank-quarter counts as distressed if, within 4 quarters, the bank fails, loses money two quarters running, has non-current loans above 3% or Tier 1 leverage below 5%.</p>
+      <table>
+        <tr><th>Test 2020–2024</th><th>Gradient boosting</th><th>Logistic baseline</th></tr>
+        <tr><td>ROC-AUC</td><td class="n"><b>0.854</b></td><td class="n">0.742</td></tr>
+        <tr><td>PR-AUC</td><td class="n"><b>0.357</b></td><td class="n">0.222</td></tr>
+        <tr><td>Caught in riskiest 10%</td><td class="n"><b>53.5%</b></td><td class="n">39.6%</td></tr>
+      </table>
+      <p class="note">Portfolio model on public data, not a supervisory rating.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>Testing</h2>
+    <table>
+      <tr><th>Type</th><th>What it checks</th><th>Latest result</th></tr>
+      <tr><td>Unit</td><td>Single functions with faked HTTP sessions and files; runs offline</td><td class="n">76 passed</td></tr>
+      <tr><td>Integration</td><td>Live FDIC/CFPB APIs, Databricks Files API, Snowflake key-pair load</td><td class="n">10 tests, run with credentials</td></tr>
+      <tr><td>End-to-end</td><td>Full DAG run: row counts, freshness, numbers against live sources</td><td class="n">17 passed</td></tr>
+      <tr><td>Data quality</td><td>dbt: keys, relationships, accepted values, ranges, freshness</td><td class="n">87 passed, 2 warned</td></tr>
+      <tr><td>Smoke</td><td>Airflow containers healthy, API answers, DAG imports</td><td class="n">7 passed</td></tr>
+    </table>
+  </div>
+
+  <footer>Built by Martins Ogiekpolor · <a href="https://github.com/martinogie">github.com/martinogie</a> · Data: FDIC BankFind (public domain), CFPB Consumer Complaint Database (CC0) · Built with AI-assisted coding; the design, analysis and review are my own.</footer>
+</div>
+<script>
+document.querySelectorAll('.tabs button').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.tabs button').forEach(function(x){x.setAttribute('aria-selected','false')});
+    b.setAttribute('aria-selected','true');
+    document.getElementById('shot').src=b.dataset.img;
+    document.getElementById('cap').textContent=b.dataset.cap;
+  });
+});
+</script>
+</body>
+</html>

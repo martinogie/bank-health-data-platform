@@ -1,0 +1,90 @@
+{
+  "name": "Bank Health Teal",
+  "dataColors": [
+    "#0F766E",
+    "#5EAAA8",
+    "#D9480F",
+    "#F2A65A",
+    "#3D5A80",
+    "#9AA5A4",
+    "#B8E0DC",
+    "#16302D"
+  ],
+  "background": "#FFFFFF",
+  "foreground": "#16302D",
+  "tableAccent": "#0F766E",
+  "good": "#0F766E",
+  "neutral": "#9AA5A4",
+  "bad": "#D9480F",
+  "maximum": "#0F766E",
+  "center": "#B8E0DC",
+  "minimum": "#F0F7F6",
+  "textClasses": {
+    "callout": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 24,
+      "color": "#16302D"
+    },
+    "title": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 11,
+      "color": "#16302D"
+    },
+    "header": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 10,
+      "color": "#16302D"
+    },
+    "label": {
+      "fontFace": "Segoe UI",
+      "fontSize": 9,
+      "color": "#5F6F6D"
+    }
+  },
+  "visualStyles": {
+    "*": {
+      "*": {
+        "dropShadow": [
+          {
+            "show": false
+          }
+        ],
+        "border": [
+          {
+            "show": true,
+            "color": {
+              "solid": {
+                "color": "#D9E2E1"
+              }
+            },
+            "radius": 6
+          }
+        ]
+      }
+    },
+    "page": {
+      "*": {
+        "background": [
+          {
+            "color": {
+              "solid": {
+                "color": "#F6F8F8"
+              }
+            },
+            "transparency": 0
+          }
+        ],
+        "outspace": [
+          {
+            "color": {
+              "solid": {
+                "color": "#F6F8F8"
+              }
+            },
+            "transparency": 0
+          }
+        ]
+      }
+    }
+  }
+}

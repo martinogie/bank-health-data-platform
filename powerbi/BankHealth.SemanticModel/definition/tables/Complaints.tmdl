@@ -1,0 +1,128 @@
+table Complaints
+	lineageTag: b782b917-2959-4705-950c-5b02c5d4e4bc
+
+	measure 'Complaint Count' = COUNTROWS ( Complaints )
+		formatString: #,0
+		lineageTag: a531d136-8a34-4abc-a5c2-346e4447edf0
+
+	measure 'Monetary Relief %' = DIVIDE ( CALCULATE ( [Complaint Count], Complaints[IS_MONETARY_RELIEF] = TRUE () ), [Complaint Count] )
+		formatString: 0.0%
+		lineageTag: 681ed15c-e91a-461e-ae22-7e9a9ff1b473
+
+	column CERT
+		dataType: double
+		formatString: 0
+		lineageTag: be807971-cfde-4fcc-94da-dfb78f1edddf
+		summarizeBy: none
+		sourceColumn: CERT
+
+		annotation SummarizationSetBy = User
+
+	column DATE_RECEIVED
+		dataType: dateTime
+		formatString: d mmm yyyy
+		lineageTag: 32d58bec-7eee-4695-97f8-b1d69fc99541
+		summarizeBy: none
+		sourceColumn: DATE_RECEIVED
+
+		annotation SummarizationSetBy = User
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column QUARTER_END_DATE
+		dataType: dateTime
+		formatString: d mmm yyyy
+		lineageTag: d56086a8-d306-4495-bfb3-c88c0a4aaa57
+		summarizeBy: none
+		sourceColumn: QUARTER_END_DATE
+
+		annotation SummarizationSetBy = User
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column COMPANY
+		dataType: string
+		lineageTag: 8adae1c4-055c-402d-baeb-0b1fd8dc7552
+		summarizeBy: none
+		sourceColumn: COMPANY
+
+		annotation SummarizationSetBy = User
+
+	column IS_MATCHED_BANK
+		dataType: boolean
+		lineageTag: e82f5f06-e42a-4e15-b056-1065fcd02336
+		summarizeBy: none
+		sourceColumn: IS_MATCHED_BANK
+
+		annotation SummarizationSetBy = User
+
+	column PRODUCT
+		dataType: string
+		lineageTag: 14b9f780-2c51-4d8b-9ef8-704ce09f035a
+		summarizeBy: none
+		sourceColumn: PRODUCT
+
+		annotation SummarizationSetBy = User
+
+	column ISSUE
+		dataType: string
+		lineageTag: 7a6645f7-1cc2-49f2-acc7-d9c5ad0c0dbe
+		summarizeBy: none
+		sourceColumn: ISSUE
+
+		annotation SummarizationSetBy = User
+
+	column COMPANY_RESPONSE
+		dataType: string
+		lineageTag: 57807b73-edb0-42b5-a287-68204769e9c9
+		summarizeBy: none
+		sourceColumn: COMPANY_RESPONSE
+
+		annotation SummarizationSetBy = User
+
+	column IS_MONETARY_RELIEF
+		dataType: boolean
+		lineageTag: 60740fe4-0a9b-4ee5-b369-54f43bc3deab
+		summarizeBy: none
+		sourceColumn: IS_MONETARY_RELIEF
+
+		annotation SummarizationSetBy = User
+
+	column TIMELY_RESPONSE
+		dataType: boolean
+		lineageTag: 703a8cb9-fc3b-4306-a329-99a2f501e024
+		summarizeBy: none
+		sourceColumn: TIMELY_RESPONSE
+
+		annotation SummarizationSetBy = User
+
+	column SUBMITTED_VIA
+		dataType: string
+		lineageTag: b6516517-da97-4480-a0b9-4c303dc44499
+		summarizeBy: none
+		sourceColumn: SUBMITTED_VIA
+
+		annotation SummarizationSetBy = User
+
+	column STATE_CODE
+		dataType: string
+		lineageTag: ea0aab2a-d8f2-49d0-ae2c-62500d364d85
+		summarizeBy: none
+		sourceColumn: STATE_CODE
+
+		annotation SummarizationSetBy = User
+
+	partition Complaints = m
+		mode: import
+		source =
+				let
+				    Source = Snowflake.Databases(SnowflakeServer, "BANK_WH", [Role = "BANK_REPORTER_ROLE", Implementation = "2.0"]),
+				    BANK_HEALTH_Database = Source{[Name = "BANK_HEALTH", Kind = "Database"]}[Data],
+				    MARTS_Schema = BANK_HEALTH_Database{[Name = "MARTS", Kind = "Schema"]}[Data],
+				    Data = MARTS_Schema{[Name = "FCT_COMPLAINTS", Kind = "Table"]}[Data],
+				    Kept = Table.SelectColumns(Data, {"CERT", "DATE_RECEIVED", "QUARTER_END_DATE", "COMPANY", "IS_MATCHED_BANK", "PRODUCT", "ISSUE", "COMPANY_RESPONSE", "IS_MONETARY_RELIEF", "TIMELY_RESPONSE", "SUBMITTED_VIA", "STATE_CODE"})
+				in
+				    Kept
+
+	annotation PBI_ResultType = Table
+
