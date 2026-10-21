@@ -5,6 +5,45 @@
   "displayOption": "FitToPage",
   "height": 720,
   "width": 1280,
+  "filterConfig": {
+    "filters": [
+      {
+        "name": "drillcert",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "CERT"
+          }
+        },
+        "type": "Categorical",
+        "howCreated": "Drillthrough"
+      }
+    ]
+  },
+  "pageBinding": {
+    "name": "drillbinding",
+    "type": "Drillthrough",
+    "parameters": [
+      {
+        "name": "certparam",
+        "boundFilter": "drillcert",
+        "fieldExpr": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "CERT"
+          }
+        }
+      }
+    ]
+  },
   "objects": {
     "background": [
       {
@@ -55,45 +94,5 @@
       }
     ]
   },
-  "visibility": "HiddenInViewMode",
-  "filterConfig": {
-    "filters": [
-      {
-        "name": "drillcert",
-        "field": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "Early Warning"
-              }
-            },
-            "Property": "CERT"
-          }
-        },
-        "type": "Categorical",
-        "howCreated": "Drillthrough"
-      }
-    ]
-  },
-  "pageBinding": {
-    "name": "drillbinding",
-    "type": "Drillthrough",
-    "referenceScope": "Default",
-    "parameters": [
-      {
-        "name": "certparam",
-        "boundFilter": "drillcert",
-        "fieldExpr": {
-          "Column": {
-            "Expression": {
-              "SourceRef": {
-                "Entity": "Early Warning"
-              }
-            },
-            "Property": "CERT"
-          }
-        }
-      }
-    ]
-  }
+  "visibility": "HiddenInViewMode"
 }

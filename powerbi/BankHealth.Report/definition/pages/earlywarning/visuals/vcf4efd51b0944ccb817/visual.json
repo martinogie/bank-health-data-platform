@@ -32,44 +32,6 @@
             }
           ]
         },
-        "X": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Early Warning"
-                    }
-                  },
-                  "Property": "Avg Distress Probability"
-                }
-              },
-              "queryRef": "Early Warning.Avg Distress Probability",
-              "nativeQueryRef": "Avg Distress Probability",
-              "displayName": "Distress probability"
-            }
-          ]
-        },
-        "Y": {
-          "projections": [
-            {
-              "field": {
-                "Measure": {
-                  "Expression": {
-                    "SourceRef": {
-                      "Entity": "Early Warning"
-                    }
-                  },
-                  "Property": "Avg Complaints per $1B"
-                }
-              },
-              "queryRef": "Early Warning.Avg Complaints per $1B",
-              "nativeQueryRef": "Avg Complaints per $1B",
-              "displayName": "Complaints per $1B deposits"
-            }
-          ]
-        },
         "Tooltips": {
           "projections": [
             {
@@ -91,6 +53,45 @@
               "queryRef": "Min(Early Warning.BANK_NAME)",
               "nativeQueryRef": "Min of BANK_NAME",
               "displayName": "Bank"
+            }
+          ]
+        },
+        "X": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Early Warning"
+                    }
+                  },
+                  "Property": "Avg Distress Probability"
+                }
+              },
+              "queryRef": "Early Warning.Avg Distress Probability",
+              "nativeQueryRef": "Avg Distress Probability",
+              "active": true,
+              "displayName": "Distress probability"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "Early Warning"
+                    }
+                  },
+                  "Property": "Avg Complaints per $1B"
+                }
+              },
+              "queryRef": "Early Warning.Avg Complaints per $1B",
+              "nativeQueryRef": "Avg Complaints per $1B",
+              "displayName": "Complaints per $1B deposits"
             }
           ]
         }
@@ -189,15 +190,7 @@
       ],
       "markers": [
         {
-          "properties": {
-            "markerSize": {
-              "expr": {
-                "Literal": {
-                  "Value": "4D"
-                }
-              }
-            }
-          }
+          "properties": {}
         }
       ]
     },
