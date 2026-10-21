@@ -4,3 +4,5 @@ pandas>=2.2
 pyarrow>=17
 pytest>=8
 snowflake-connector-python>=4.7
+playwright>=1.48
+pytest-playwright>=0.5

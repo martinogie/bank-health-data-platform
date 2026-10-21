@@ -83,7 +83,7 @@ def test_dag_schedule_and_settings(dag_facts):
 
 
 CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "decide_retrain", "sync_databricks_job",
-              "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline"}
+              "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline", "export_watchlist"}
 
 
 def test_dag_tasks_retries_docs_and_order(dag_facts):
@@ -101,6 +101,7 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(tasks["run_databricks_job"]["upstream"])
     assert tasks["decide_retrain"]["upstream"] == ["download_fdic"]
     assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
+    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]   # final task
 
 
 def test_cosmos_renders_dbt_models_as_tasks(dag_facts):

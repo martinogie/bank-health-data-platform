@@ -66,7 +66,8 @@ footer a{color:var(--ink2)}
   <h1>Which US banks are most likely to run into trouble next year?</h1>
   <p class="lede">An end-to-end data platform on real public data: 26 years of FDIC call reports for 27,835 banks and nearly 2 million CFPB consumer complaints, moved by Airflow, shaped in Databricks and dbt, stored in Snowflake, scored by an MLflow model and reported in Power BI.</p>
   <div class="links">
-    <a class="primary" href="https://github.com/martinogie/bank-health-data-platform">Source on GitHub</a>
+    <a class="primary" href="watchlist.html">Bank watchlist</a>
+    <a href="https://github.com/martinogie/bank-health-data-platform">Source on GitHub</a>
     <a href="https://github.com/martinogie/bank-health-data-platform#testing">Testing</a>
     <a href="docs/Bank_Health_Pipeline_Workflow.pdf">Workflow PDF</a>
     <a href="https://martinogie.github.io/budget-variance-pack/">Budget Variance Pack</a>
@@ -103,7 +104,7 @@ footer a{color:var(--ink2)}
       </div>
       <p class="note">Databricks Free Edition blocks most outbound internet, so Airflow downloads the files and pushes them into a Unity Catalog volume. Watermarks mean later runs only fetch new quarters and new complaint dates.</p>
     </div>
-    <div class="card">
+    <div class="card" id="methods">
       <h2>The distress model</h2>
       <p class="lede">A bank-quarter counts as distressed if, within 4 quarters, the bank fails, loses money two quarters running, has non-current loans above 3% or Tier 1 leverage below 5%.</p>
       <table>
@@ -120,11 +121,12 @@ footer a{color:var(--ink2)}
     <h2>Testing</h2>
     <table>
       <tr><th>Type</th><th>What it checks</th><th>Latest result</th></tr>
-      <tr><td>Unit</td><td>Single functions with faked HTTP sessions and files; runs offline</td><td class="n">76 passed</td></tr>
+      <tr><td>Unit</td><td>Single functions with faked HTTP sessions and files; runs offline</td><td class="n">110 passed</td></tr>
       <tr><td>Integration</td><td>Live FDIC/CFPB APIs, Databricks Files API, Snowflake key-pair load</td><td class="n">10 tests, run with credentials</td></tr>
       <tr><td>End-to-end</td><td>Full DAG run: row counts, freshness, numbers against live sources</td><td class="n">17 passed</td></tr>
       <tr><td>Data quality</td><td>dbt: keys, relationships, accepted values, ranges, freshness</td><td class="n">87 passed, 2 warned</td></tr>
       <tr><td>Smoke</td><td>Airflow containers healthy, API answers, DAG imports</td><td class="n">7 passed</td></tr>
+      <tr><td>Browser smoke</td><td>Watchlist page in Chromium: list persists, shared links render, phone width</td><td class="n">7 passed</td></tr>
     </table>
   </div>
 

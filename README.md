@@ -1,17 +1,34 @@
 # Bank Health Data Platform
 
-An end-to-end data platform that tracks the health of every FDIC-insured US bank and predicts which
-banks are most likely to run into trouble in the next 12 months. It runs on **real public data**:
-26 years of FDIC call reports for 27,835 banks and nearly 2 million CFPB consumer complaints.
+**Which of the banks you depend on should you worry about this quarter, and why?**
 
-**Stack:** Apache Airflow · Databricks (PySpark, Delta, Unity Catalog, MLflow) · Snowflake · dbt · Power BI · Docker · pytest
+Regulators rate every US bank, but those ratings are confidential. Everyone else with money at
+risk at a bank has to work it out from public filings:
 
-**Project page:** [martinogie.github.io/bank-health-data-platform](https://martinogie.github.io/bank-health-data-platform/)
+- a **fintech** whose customer accounts sit at one small sponsor bank,
+- a **company treasurer** holding deposits above the $250,000 FDIC limit,
+- a **bank** with loan participations or correspondent accounts at other banks.
 
-![Early warning page](powerbi/screenshots/early_warning.png)
+When Silicon Valley Bank failed in March 2023, and when Synapse collapsed in 2024 and froze its
+fintech customers' funds, those were the people caught out.
+
+This project is an early-warning system for them, built only from public data. Every quarter it
+scores every FDIC-insured bank (4,257 in 2026 Q2) on its chance of distress in the next 12 months.
+It gives each bank's top three reasons and compares it with banks of the same size. A
+**watchlist** lets you enter the banks you deal with and see their scores, trends and reasons on
+one page.
+
+**Try the watchlist:** [martinogie.github.io/bank-health-data-platform/watchlist.html](https://martinogie.github.io/bank-health-data-platform/watchlist.html)
+
+It runs on 26 years of FDIC call reports for 27,835 banks and nearly 2 million CFPB consumer
+complaints, through a full production-style pipeline.
+
+> A screening tool on public data, not a supervisory rating. Use it to decide which banks to look
+> at more closely, not to judge any bank.
 
 ## What it answers
 
+- Which of the banks I depend on should I worry about this quarter, and why?
 - How healthy is the US banking system right now, and how has it changed since 2000?
 - Which large banks get the most consumer complaints for their size?
 - Which banks are most likely to enter distress in the next 12 months, and why?
@@ -80,6 +97,32 @@ measuring how much the probability falls.
 > This is a portfolio model on public data. It is not a supervisory rating and should not be used to
 > judge any real bank.
 
+## Watchlist
+
+[`watchlist.html`](https://martinogie.github.io/bank-health-data-platform/watchlist.html) answers the
+question for one organisation's own banks. Search by name, city, state or FDIC certificate number
+and add the banks you depend on. Each card shows:
+
+- the risk band, the probability of distress in the next 12 months and the percentile against banks
+  of the same size,
+- the top three reasons in plain words,
+- what changed since last quarter, and 8-quarter trend lines for non-current loans, Tier 1 leverage,
+  ROA, efficiency ratio and deposit growth, each against the median of same-size banks,
+- consumer complaints, for banks matched to the CFPB data.
+
+Banks under 3 years old are labelled *"new bank: ratios distorted by start-up costs"* (review finding
+M-02, until the model handles start-up losses). The list is kept in the browser and in the link
+(`watchlist.html?certs=628,3511`), so it can be shared, and exported to CSV. Plain HTML, CSS and
+JavaScript with no build step and no libraries.
+
+| Desktop | Phone (375 px) |
+|---|---|
+| ![Watchlist on desktop](docs/images/watchlist_desktop.png) | ![Watchlist at phone width](docs/images/watchlist_phone.png) |
+
+The data is `site/data/watchlist.json` (schema in [`site/data/README.md`](site/data/README.md)): one
+record per scored bank, exported from Snowflake `MARTS` by `scripts/export_watchlist_data.py` and by
+the DAG's final task, `export_watchlist`, on every run.
+
 ## Power BI report
 
 | Overview | Early warning | Bank detail (drill-through) |
@@ -108,11 +151,12 @@ Five kinds of tests, each in code:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming and retry logic. | `ingestion/tests/` | 76 passed |
+| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic and the watchlist export (JSON schema, rounding, new-bank flag, 8-quarter ordering). | `ingestion/tests/` | 110 passed |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload and list, Snowflake key-pair login and a small `write_pandas` load. Skipped when credentials are missing. | `tests/integration/` (10 tests) | run on demand with credentials |
 | **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. | `tests/e2e/` | 17 passed (20 Oct 2026 run) |
 | **Data quality** | The data itself: unique and not-null keys, relationships, accepted values, value ranges, source freshness. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`) and checks in the silver notebook | 87 passed, 2 warned, 0 errors |
 | **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors. | `tests/smoke/` | 7 passed |
+| **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; new-bank label; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed |
 
 How to run them:
 
@@ -121,6 +165,8 @@ pytest                                        # unit tests (offline)
 pytest tests/integration -m integration       # needs .env credentials
 pytest tests/smoke -m smoke                   # needs the Airflow stack running
 pytest tests/e2e -m e2e                       # after a full DAG run
+python -m playwright install chromium         # once
+pytest tests/browser -m browser               # watchlist page in a real browser
 cd dbt && dbt build                           # models + data tests
 ```
 
@@ -135,6 +181,9 @@ cd dbt && dbt build                           # models + data tests
    `bank_health_weekly`. The first run loads the full history; later runs only add new data.
 5. **Power BI:** run `snowflake/powerbi_user.sql`, open `powerbi/BankHealth.pbip`, sign in with
    **Key pair** as `SVC_POWERBI`, then click Refresh. Details are in `powerbi/DASHBOARD_GUIDE.md`.
+6. **Watchlist:** the DAG refreshes `site/data/watchlist.json` on every run (or run
+   `python scripts/export_watchlist_data.py`). Preview with `python -m http.server` and open
+   http://localhost:8000/watchlist.html; commit the JSON to publish it on GitHub Pages.
 
 ## Repository layout
 
@@ -145,8 +194,11 @@ databricks/   notebooks 00_setup to 05_score (PySpark, MLflow)
 snowflake/    setup.sql, powerbi_user.sql
 dbt/          staging, intermediate and mart models with tests
 powerbi/      BankHealth.pbip (TMDL + PBIR), build_report.py, theme, screenshots
-tests/        integration, smoke and end-to-end tests
-docs/         workflow PDF, end-to-end run report
+watchlist.html  the watchlist page (plain HTML/CSS/JS); index.html is the project page
+site/data/    watchlist.json + its schema (README.md)
+scripts/      export_watchlist_data.py and helper scripts
+tests/        integration, smoke, browser and end-to-end tests
+docs/         workflow PDF, end-to-end run report, screenshots
 ```
 
 ## Data sources

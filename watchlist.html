@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bank Watchlist</title>
+<meta name="description" content="Watchlist for organisations that depend on other banks: each bank's chance of distress in the next 12 months, its top reasons and 8-quarter trends against banks of the same size. Public FDIC and CFPB data.">
+<style>
+:root{color-scheme:light;
+  --page:#f6f8f8;--surface:#ffffff;--ink:#16302d;--ink2:#3c524f;--muted:#5f6f6d;--ring:#d9e2e1;
+  --teal:#0f766e;--teal-d:#115e59;--teal-l:#99d5cf;--coral:#d9480f;
+  --good:#0f766e;--bad:#c2410c;--peer:#94a3a1;
+  --b-d:#7f1d1d;--b-h:#c2410c;--b-e:#b45309;--b-w-bg:#fef3c7;--b-w:#854d0e;--b-l-bg:#ccfbf1;--b-l:#115e59;
+  --warn-bg:#fff7ed;--warn:#9a3412;
+  --sans:"Segoe UI",system-ui,-apple-system,sans-serif}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])){color-scheme:dark;
+  --page:#0e1716;--surface:#15211f;--ink:#e8f1f0;--ink2:#c3d2d0;--muted:#8fa3a0;--ring:#25332f;
+  --teal:#2bb3a6;--teal-d:#0f766e;--teal-l:#99d5cf;--coral:#f0773f;
+  --good:#2bb3a6;--bad:#f0773f;--peer:#6b7f7c;
+  --b-w-bg:#3b2f0b;--b-w:#fcd34d;--b-l-bg:#0f3b36;--b-l:#99f6e4;--warn-bg:#3a1f10;--warn:#fdba74}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --page:#0e1716;--surface:#15211f;--ink:#e8f1f0;--ink2:#c3d2d0;--muted:#8fa3a0;--ring:#25332f;
+  --teal:#2bb3a6;--teal-d:#0f766e;--teal-l:#99d5cf;--coral:#f0773f;
+  --good:#2bb3a6;--bad:#f0773f;--peer:#6b7f7c;
+  --b-w-bg:#3b2f0b;--b-w:#fcd34d;--b-l-bg:#0f3b36;--b-l:#99f6e4;--warn-bg:#3a1f10;--warn:#fdba74}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:15px/1.55 var(--sans)}
+.bar{background:#0f766e;color:#fff}
+.bar .in{max-width:1180px;margin:0 auto;padding:14px 16px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.bar b{letter-spacing:.06em}
+.bar a{color:#fff;text-decoration:none}
+.bar span{color:#c9ece8;font-size:13px}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 16px 56px}
+h1{font-size:clamp(24px,4vw,34px);line-height:1.15;margin:0 0 8px;letter-spacing:-.01em}
+h2{font-size:17px;margin:0 0 8px}
+p{margin:0 0 10px;max-width:78ch}
+.lede{color:var(--ink2);font-size:16px}
+.card{background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:16px;min-width:0}
+.note{font-size:13px;color:var(--muted)}
+button,.btn{font:600 13px var(--sans);border:1px solid var(--ring);background:var(--surface);color:var(--ink);
+  padding:7px 12px;border-radius:999px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:34px}
+button:hover,button:focus-visible,.btn:hover,.btn:focus-visible{border-color:var(--teal);outline:none}
+button.primary{background:var(--teal-d);color:#fff;border-color:transparent}
+button[disabled]{opacity:.5;cursor:default}
+.search{margin:18px 0 14px}
+.search label{display:block;font-weight:600;margin-bottom:6px}
+.search input{width:100%;font:16px var(--sans);padding:11px 14px;border:1px solid var(--ring);border-radius:8px;background:var(--page);color:var(--ink)}
+.search input:focus{outline:2px solid var(--teal);outline-offset:1px;border-color:transparent}
+.results{list-style:none;margin:10px 0 0;padding:0}
+.results li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--ring)}
+.results .who{min-width:0}
+.results .who b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.results .who span{font-size:13px;color:var(--muted)}
+.tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 14px}
+.tools .note{margin-left:auto}
+.strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin:0 0 14px}
+.strip>div{background:var(--surface);border:1px solid var(--ring);border-radius:8px;padding:10px 12px}
+.strip .n{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1}
+.strip .l{font-size:12px;color:var(--muted)}
+.strip .h .n{color:var(--b-h)}.strip .d .n{color:var(--b-d)}.strip .e .n{color:var(--b-e)}
+.badge{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.02em;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.badge.D{background:var(--b-d);color:#fff}.badge.H{background:var(--b-h);color:#fff}.badge.E{background:var(--b-e);color:#fff}
+.badge.W{background:var(--b-w-bg);color:var(--b-w)}.badge.L{background:var(--b-l-bg);color:var(--b-l)}
+.cards{display:grid;gap:14px}
+.bank header{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.bank h2{margin:0;font-size:18px;line-height:1.25;overflow-wrap:anywhere}
+.bank .meta{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+/* Grid/flex children default to min-width:auto (their longest unbreakable content), which let
+   long reasons and change values push cards past a 375 px screen. Let them shrink and wrap. */
+.bank header>div,.cols>div,.sparks>.spark,.strip>div,.results .who,.score>*,ul.changes li>span{min-width:0}
+.bank .remove{flex:none}
+.score{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:baseline;margin:10px 0 6px}
+.score .prob{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.score .pct{font-size:13px;color:var(--ink2)}
+.newbank{background:var(--warn-bg);color:var(--warn);border-radius:6px;padding:6px 10px;font-size:13px;font-weight:600;margin:6px 0}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px}
+.cols h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px}
+ol.reasons{margin:0;padding-left:20px}
+ol.reasons li{margin:2px 0;overflow-wrap:anywhere}
+ul.changes{list-style:none;margin:0;padding:0}
+ul.changes li{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 10px;padding:3px 0;border-bottom:1px dashed var(--ring);font-size:14px}
+ul.changes .v{font-variant-numeric:tabular-nums;text-align:right;margin-left:auto;overflow-wrap:anywhere}
+.up-good,.down-good{color:var(--good)}.up-bad,.down-bad{color:var(--bad)}.flat{color:var(--muted)}
+.sparks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-top:14px}
+.spark{border:1px solid var(--ring);border-radius:8px;padding:8px}
+.spark .t{font-size:12px;color:var(--muted);line-height:1.3;min-height:2.6em}
+.spark .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+.spark svg{display:block;width:100%;height:40px;margin-top:4px}
+.spark .x{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.legend i{display:inline-block;width:18px;height:0;border-top:2px solid var(--teal);vertical-align:middle;margin-right:5px}
+.legend i.peer{border-top:2px dashed var(--peer)}
+.empty{text-align:center;padding:30px 16px}
+.msg{padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn);font-size:14px;margin-bottom:12px}
+footer{margin-top:28px;color:var(--muted);font-size:13px}
+footer a{color:var(--ink2)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (max-width:860px){.strip{grid-template-columns:repeat(3,minmax(0,1fr))}.cols{grid-template-columns:1fr}
+  .sparks{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:420px){.tools .note{margin-left:0;width:100%}.score .prob{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="bar"><div class="in"><a href="index.html"><b>BANK HEALTH</b></a><span>Watchlist · FDIC call reports + CFPB complaints</span></div></div>
+<div class="wrap">
+  <h1>Which of my banks should I worry about this quarter, and why?</h1>
+  <p class="lede">Add the banks you depend on: a sponsor bank, banks holding your deposits, counterparties. Each card shows the bank's chance of distress in the next 12 months, why, and how its ratios have moved against banks of the same size.</p>
+
+  <div id="loadmsg" class="msg" hidden></div>
+
+  <div class="card search">
+    <label for="q">Find a bank by name, city, state or FDIC certificate number</label>
+    <input id="q" type="search" autocomplete="off" placeholder="e.g. Synchrony, Columbus OH, TX, 628" aria-describedby="qhint" disabled>
+    <div id="qhint" class="note" aria-live="polite" style="margin-top:6px">Loading bank data…</div>
+    <ul id="results" class="results"></ul>
+  </div>
+
+  <div class="tools">
+    <button id="share" type="button" disabled>Copy share link</button>
+    <button id="csv" type="button" disabled>Export CSV</button>
+    <button id="clear" type="button" disabled>Clear list</button>
+    <span class="note" id="count"></span>
+  </div>
+
+  <div id="strip" class="strip" aria-label="Watchlist summary by risk band"></div>
+  <div id="cards" class="cards" aria-live="polite"></div>
+
+  <footer id="foot">
+    A screening tool on public data, not a supervisory rating. Use it to decide which banks to look at more
+    closely, not to judge any bank. · <a href="index.html#methods">How the score works</a> ·
+    <a href="https://github.com/martinogie/bank-health-data-platform">Source</a>
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var DATA_URL = "site/data/watchlist.json";
+  var STORE_KEY = "bankWatchlist.v1";
+  var BAND_ORDER = { D: 0, H: 1, E: 2, W: 3, L: 4 };
+  var BAND_NAME = { D: "Already in distress", H: "High", E: "Elevated", W: "Watch", L: "Low" };
+  var TIER_NAME = { 1: "under $100m", 2: "$100m–$1bn", 3: "$1bn–$10bn", 4: "$10bn–$100bn", 5: "over $100bn" };
+  var EXAMPLE = [628, 3511, 7213, 27314, 59362];
+
+  var data = null, byCert = {}, list = [], searchIndex = [];
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------ storage
+  function readStore() {
+    try { var v = JSON.parse(window.localStorage.getItem(STORE_KEY) || "[]"); return Array.isArray(v) ? v : []; }
+    catch (e) { return []; }
+  }
+  function writeStore() {
+    try { window.localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch (e) { /* private mode etc.: URL still works */ }
+  }
+  function certsFromUrl() {
+    var raw = new URLSearchParams(window.location.search).get("certs");
+    if (raw === null) return null;
+    return raw.split(",").map(function (s) { return parseInt(s, 10); }).filter(function (n) { return n > 0; });
+  }
+  function writeUrl() {
+    var url = new URL(window.location.href);
+    if (list.length) url.searchParams.set("certs", list.join(",")); else url.searchParams.delete("certs");
+    // keep the commas readable in the shared link
+    window.history.replaceState(null, "", url.pathname + (list.length ? "?certs=" + list.join(",") : "") + url.hash);
+  }
+  function save() { writeStore(); writeUrl(); }
+
+  // ------------------------------------------------------------ formatting
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function pct(v, d) { return v == null ? "n/a" : v.toFixed(d == null ? 2 : d) + "%"; }
+  function money(m) {                       // $ millions in
+    if (m == null) return "n/a";
+    if (m >= 1e6) return "$" + (m / 1e6).toFixed(2) + "tn";
+    if (m >= 1e3) return "$" + (m / 1e3).toFixed(1) + "bn";
+    return "$" + Math.round(m) + "m";
+  }
+  function ordinalPct(n) { return n + "%"; }
+  function ageText(age) {
+    if (age == null) return "";
+    if (age < 1) return " · under 1 year old";
+    var y = Math.floor(age);
+    return " · " + y + (y === 1 ? " year old" : " years old");
+  }
+  function lastTwo(arr) {
+    var last = null, prev = null, i;
+    for (i = arr.length - 1; i >= 0; i--) { if (arr[i] != null) { last = { v: arr[i], i: i }; break; } }
+    if (last && last.i === arr.length - 1 && arr.length > 1 && arr[arr.length - 2] != null) prev = arr[arr.length - 2];
+    return { last: last && last.i === arr.length - 1 ? last.v : null, prev: prev };
+  }
+
+  // ------------------------------------------------------------ search
+  function buildIndex() {
+    searchIndex = data.banks.map(function (b) {
+      return { b: b, hay: (b.n + " " + (b.ci || "") + " " + (b.st || "") + " " + b.c).toLowerCase() };
+    });
+  }
+  function search(q) {
+    var words = q.toLowerCase().split(/[\s,]+/).filter(Boolean);
+    if (!words.length) return [];
+    var hits = [];
+    for (var i = 0; i < searchIndex.length && hits.length < 200; i++) {
+      var e = searchIndex[i], ok = true;
+      for (var w = 0; w < words.length; w++) {
+        var word = words[w];
+        if (/^\d+$/.test(word)) { if (String(e.b.c) !== word && e.hay.indexOf(word) < 0) { ok = false; break; } }
+        else if (word.length === 2 && e.b.st && e.b.st.toLowerCase() === word) { continue; }
+        else if (e.hay.indexOf(word) < 0) { ok = false; break; }
+      }
+      if (ok) hits.push(e.b);
+    }
+    hits.sort(function (a, b) { return (b.a || 0) - (a.a || 0); });   // larger banks first
+    return hits.slice(0, 12);
+  }
+  function renderResults() {
+    var q = $("q").value.trim(), ul = $("results");
+    if (q.length < 2 && !/^\d+$/.test(q)) {
+      ul.innerHTML = "";
+      $("qhint").innerHTML = data.banks.length.toLocaleString() + " banks scored for " + esc(data.meta.quarterLabel) +
+        ". Type at least 2 characters, or <button type='button' id='example'>load an example list</button>";
+      var ex = $("example"); if (ex) ex.addEventListener("click", function () { EXAMPLE.forEach(add); });
+      return;
+    }
+    var hits = search(q);
+    $("qhint").textContent = hits.length ? "Showing " + hits.length + (hits.length === 12 ? "+ " : " ") + "matching banks, largest first" : "No bank matches “" + q + "”";
+    ul.innerHTML = hits.map(function (b) {
+      var on = list.indexOf(b.c) >= 0;
+      return "<li><div class='who'><b>" + esc(b.n) + "</b><span>" + esc(b.ci) + ", " + esc(b.st) + " · CERT " + b.c +
+        " · " + money(b.a) + " · <span class='badge " + b.b + "'>" + BAND_NAME[b.b] + "</span></span></div>" +
+        "<button type='button' data-cert='" + b.c + "' class='" + (on ? "" : "primary") + "' aria-pressed='" + on + "' aria-label='" +
+        (on ? "Remove " : "Add ") + esc(b.n) + "'>" + (on ? "Remove" : "Add") + "</button></li>";
+    }).join("");
+  }
+
+  // ------------------------------------------------------------ list ops
+  function add(cert) { if (byCert[cert] && list.indexOf(cert) < 0) { list.push(cert); save(); render(); } }
+  function remove(cert) { list = list.filter(function (c) { return c !== cert; }); save(); render(); }
+  function sortedBanks() {
+    return list.map(function (c) { return byCert[c]; }).filter(Boolean).sort(function (a, b) {
+      return (BAND_ORDER[a.b] - BAND_ORDER[b.b]) || ((b.p || 0) - (a.p || 0)) || (a.c - b.c);
+    });
+  }
+
+  // ------------------------------------------------------------ sparkline
+  function sparkPath(vals, x, y) {
+    var d = "", pen = false;
+    vals.forEach(function (v, i) {
+      if (v == null) { pen = false; return; }
+      d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1) + " ";
+      pen = true;
+    });
+    return d.trim();
+  }
+  function spark(vals, peer, label) {
+    var all = vals.concat(peer).filter(function (v) { return v != null; });
+    if (!all.length) return "<svg viewBox='0 0 120 40' role='img' aria-label='" + esc(label) + ": no data'></svg>";
+    var lo = Math.min.apply(null, all), hi = Math.max.apply(null, all);
+    if (hi - lo < 1e-9) { hi += 1; lo -= 1; }
+    var n = vals.length, x = function (i) { return 4 + i * (112 / (n - 1)); }, y = function (v) { return 36 - (v - lo) / (hi - lo) * 32; };
+    var dots = vals.map(function (v, i) { return v == null || i !== n - 1 ? "" : "<circle cx='" + x(i).toFixed(1) + "' cy='" + y(v).toFixed(1) + "' r='2.5' fill='var(--teal)'/>"; }).join("");
+    return "<svg viewBox='0 0 120 40' preserveAspectRatio='none' role='img' aria-label='" + esc(label) + "'>" +
+      "<path d='" + sparkPath(peer, x, y) + "' fill='none' stroke='var(--peer)' stroke-width='1.5' stroke-dasharray='3 3' vector-effect='non-scaling-stroke'/>" +
+      "<path d='" + sparkPath(vals, x, y) + "' fill='none' stroke='var(--teal)' stroke-width='2' vector-effect='non-scaling-stroke'/>" + dots + "</svg>";
+  }
+
+  // ------------------------------------------------------------ cards
+  function changeRow(key, b) {
+    var m = data.meta.metrics[key], t = lastTwo(b.h[key]);
+    if (t.last == null) return "<li><span>" + esc(m.label) + "</span><span class='v flat'>not reported this quarter</span></li>";
+    if (t.prev == null) return "<li><span>" + esc(m.label) + "</span><span class='v'>" + pct(t.last) + " <span class='flat'>(no prior quarter)</span></span></li>";
+    var d = t.last - t.prev;
+    if (Math.abs(d) < 0.005) {
+      return "<li><span>" + esc(m.label) + "</span><span class='v'>" + pct(t.last) + " <span class='flat'>no change</span></span></li>";
+    }
+    var cls = m.higherIsBetter === null ? "flat"
+      : (d > 0) === m.higherIsBetter ? (d > 0 ? "up-good" : "down-good") : (d > 0 ? "up-bad" : "down-bad");
+    return "<li><span>" + esc(m.label) + "</span><span class='v'>" + pct(t.prev) + " → " + pct(t.last) +
+      " <span class='" + cls + "'>" + (d > 0 ? "▲" : "▼") + " " + Math.abs(d).toFixed(2) + " pp</span></span></li>";
+  }
+  function card(b) {
+    var peers = data.peers[String(b.t)] || {};
+    var h = data.meta.history, keys = Object.keys(data.meta.metrics);
+    var prob = b.p == null ? "n/a" : (b.p * 100).toFixed(1) + "%";
+    var scoreLine = b.b === "D"
+      ? "<span class='pct'>Meets a distress test now (bad loans, capital or repeated losses), so it isn't ranked. Model probability " + prob + ".</span>"
+      : "<span class='prob'>" + prob + "</span><span class='pct'>chance of distress in the next 12 months" +
+        (b.pp == null ? "" : " · riskier than " + ordinalPct(b.pp) + " of banks with " + TIER_NAME[b.t] + " in assets") + "</span>";
+    var complaints = b.cx == null ? "" :
+      "<li><span>Consumer complaints (CFPB)</span><span class='v'>" + b.cx.toLocaleString() + " this quarter · " +
+      (b.cr == null ? "n/a" : b.cr.toFixed(2)) + " per $1bn deposits</span></li>";
+    return "<article class='card bank' data-cert='" + b.c + "'>" +
+      "<header><div><h2>" + esc(b.n) + "</h2><div class='meta'>" + esc(b.ci) + ", " + esc(b.st) + " · CERT " + b.c +
+      " · " + money(b.a) + " assets" + ageText(b.age) + "</div></div>" +
+      "<button type='button' class='remove' data-cert='" + b.c + "' aria-label='Remove " + esc(b.n) + " from watchlist'>Remove</button></header>" +
+      "<div class='score'><span class='badge " + b.b + "'>" + BAND_NAME[b.b] + "</span>" + scoreLine + "</div>" +
+      (b.nb ? "<div class='newbank'>New bank: ratios distorted by start-up costs. Less than " + data.meta.newBankYears + " years old, so losses and high costs are normal and the score can overstate risk.</div>" : "") +
+      "<div class='cols'><div><h3>Why</h3><ol class='reasons'>" +
+      (b.r.length ? b.r.map(function (r) { return "<li>" + esc(r) + "</li>"; }).join("") : "<li>No reasons recorded</li>") + "</ol></div>" +
+      "<div><h3>What changed since last quarter</h3><ul class='changes'>" + keys.map(function (k) { return changeRow(k, b); }).join("") + complaints + "</ul></div></div>" +
+      "<div class='sparks'>" + keys.map(function (k) {
+        var m = data.meta.metrics[k], vals = b.h[k], t = lastTwo(vals);
+        return "<div class='spark'><div class='t'>" + esc(m.label) + "</div><div class='v'>" + (t.last == null ? "n/a" : pct(t.last)) + "</div>" +
+          spark(vals, peers[k] || [], m.label + " over 8 quarters vs peer median") +
+          "<div class='x'><span>" + esc(h[0]) + "</span><span>" + esc(h[h.length - 1]) + "</span></div></div>";
+      }).join("") + "</div>" +
+      "<div class='legend'><span><i></i>This bank</span><span><i class='peer'></i>Median of banks " + esc(TIER_NAME[b.t] || "") + "</span></div>" +
+      "</article>";
+  }
+  function renderStrip(banks) {
+    var counts = { D: 0, H: 0, E: 0, W: 0, L: 0 };
+    banks.forEach(function (b) { counts[b.b]++; });
+    $("strip").innerHTML = "<div><div class='n'>" + banks.length + "</div><div class='l'>banks watched</div></div>" +
+      ["D", "H", "E", "W", "L"].map(function (k) {
+        return "<div class='" + k.toLowerCase() + "'><div class='n'>" + counts[k] + "</div><div class='l'>" + BAND_NAME[k] + "</div></div>";
+      }).join("");
+  }
+  function render() {
+    var banks = sortedBanks();
+    renderStrip(banks);
+    $("count").textContent = banks.length ? "Sorted by risk, highest first" : "";
+    ["share", "csv", "clear"].forEach(function (id) { $(id).disabled = !banks.length; });
+    $("cards").innerHTML = banks.length ? banks.map(card).join("") :
+      "<div class='card empty'><h2>Your watchlist is empty</h2><p class='note' style='margin:0 auto'>Search above to add banks, or <button type='button' id='example2'>load an example list</button>.</p></div>";
+    var ex2 = $("example2"); if (ex2) ex2.addEventListener("click", function () { EXAMPLE.forEach(add); });
+    renderResults();
+  }
+
+  // ------------------------------------------------------------ CSV
+  function csvCell(v) { var s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+  function exportCsv() {
+    var keys = Object.keys(data.meta.metrics);
+    var head = ["cert", "bank", "city", "state", "total_assets_musd", "age_years", "new_bank", "risk_band", "distress_probability",
+      "size_peer_percentile", "reason_1", "reason_2", "reason_3"].concat(keys.map(function (k) { return k + "_latest"; }))
+      .concat(["complaints", "complaints_per_1bn_deposits", "data_quarter", "model_version"]);
+    var rows = sortedBanks().map(function (b) {
+      return [b.c, b.n, b.ci, b.st, b.a, b.age, b.nb ? "yes" : "no", BAND_NAME[b.b], b.p, b.pp, b.r[0], b.r[1], b.r[2]]
+        .concat(keys.map(function (k) { return lastTwo(b.h[k]).last; }))
+        .concat([b.cx, b.cr, data.meta.quarterLabel, data.meta.modelVersion]);
+    });
+    var text = [head].concat(rows).map(function (r) { return r.map(csvCell).join(","); }).join("\r\n");
+    var blob = new Blob(["﻿" + text], { type: "text/csv;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "bank-watchlist-" + data.meta.quarterLabel.replace(" ", "") + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+
+  // ------------------------------------------------------------ wiring
+  function wire() {
+    $("q").addEventListener("input", renderResults);
+    document.addEventListener("click", function (ev) {
+      var btn = ev.target.closest("button[data-cert]");
+      if (!btn) return;
+      var cert = parseInt(btn.getAttribute("data-cert"), 10);
+      if (btn.classList.contains("remove") || list.indexOf(cert) >= 0) remove(cert); else add(cert);
+    });
+    $("csv").addEventListener("click", exportCsv);
+    $("clear").addEventListener("click", function () { if (window.confirm("Remove all banks from the watchlist?")) { list = []; save(); render(); } });
+    $("share").addEventListener("click", function () {
+      var link = window.location.href, btn = $("share");
+      var done = function (ok) { btn.textContent = ok ? "Link copied" : "Copy failed: use the address bar"; setTimeout(function () { btn.textContent = "Copy share link"; }, 2500); };
+      if (navigator.clipboard) navigator.clipboard.writeText(link).then(function () { done(true); }, function () { done(false); });
+      else done(false);
+    });
+  }
+
+  function start(json) {
+    data = json;
+    data.banks.forEach(function (b) { byCert[b.c] = b; });
+    buildIndex();
+    var fromUrl = certsFromUrl(), wanted = fromUrl !== null ? fromUrl : readStore();
+    var unknown = wanted.filter(function (c) { return !byCert[c]; });
+    list = wanted.filter(function (c, i) { return byCert[c] && wanted.indexOf(c) === i; });
+    if (unknown.length) {
+      var m = $("loadmsg"); m.hidden = false;
+      m.textContent = unknown.length + " CERT" + (unknown.length > 1 ? "s" : "") + " not found in " + data.meta.quarterLabel + " data (" + unknown.join(", ") + "). The bank may have merged, closed or not filed.";
+    }
+    save();
+    $("q").disabled = false;
+    $("foot").insertAdjacentHTML("afterbegin", "Data quarter <b>" + esc(data.meta.quarterLabel) + "</b> · model v" + esc(data.meta.modelVersion) +
+      " · exported " + esc(data.meta.exported) + " · ");
+    wire();
+    render();
+  }
+
+  fetch(DATA_URL, { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(start)
+    .catch(function (err) {
+      var m = $("loadmsg"); m.hidden = false;
+      m.textContent = "Couldn't load the bank data (" + err.message + "). If you opened this file directly, serve the folder with a web server, e.g. python -m http.server.";
+      $("qhint").textContent = "";
+    });
+})();
+</script>
+</body>
+</html>
