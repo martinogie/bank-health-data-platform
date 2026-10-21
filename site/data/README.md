@@ -57,7 +57,7 @@ bank, using the bank's current tier.
 | `p` | number | Probability of distress or failure in the next 4 quarters, 3 decimals |
 | `b` | string | Risk band: `H` High (top 5%), `E` Elevated (next 10%), `W` Watch (next 25%), `L` Low, `D` Already in distress (not ranked) |
 | `pp` | int \| null | Percentile of `p` among banks in the same tier, 0–100 (share of same-size banks with a lower probability). `null` for band `D` |
-| `r` | string[≤3] | Top reasons in plain words, e.g. `Non-current loans: 2.73% of loans (typical bank: 0.46% of loans)` |
+| `r` | string[≤3] | Top reasons in plain words, e.g. `Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)`. The comparison is the median of **all** scored banks that quarter (from the model's scoring step), not the size-tier peers used in `peers` |
 | `h` | object | Last 8 quarters, aligned with `meta.history`, oldest first, `null` where not reported: `ncl` non-current loans % of loans, `t1` Tier 1 leverage %, `roa` return on assets %, `eff` efficiency ratio %, `dep` deposit growth year on year %. 2 decimals |
 | `cx` | int | Complaints in the data quarter. Present only if the bank was matched to CFPB complaints |
 | `cr` | number | Complaints per $1bn of deposits in the data quarter, 2 decimals. Present only if matched |

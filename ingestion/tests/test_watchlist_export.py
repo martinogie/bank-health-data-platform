@@ -162,16 +162,23 @@ def test_bank_without_history_still_valid():
 # ------------------------------------------------------------ other fields
 def test_reasons_are_plain_words():
     assert wx.plain_reason("noncurrent_loans_pct = 2.73 (median 0.46)") == \
-        "Non-current loans: 2.73% of loans (typical bank: 0.46% of loans)"
+        "Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)"
     assert wx.plain_reason("tier1_change_4q_pp = -2.04 (median 0.19)") == \
-        "Change in Tier 1 leverage over the year: -2.04 pp (typical bank: +0.19 pp)"
+        "Change in Tier 1 leverage over the year: -2.04 pp (median of all US banks: +0.19 pp)"
     assert wx.plain_reason("efficiency_ratio_pct = 9,840.95 (median 61.97)") == \
-        "Efficiency ratio (costs per $1 of revenue): 9,841% (typical bank: 62.0%)"
-    assert wx.plain_reason("roa_pct = n/a (median 1.22)") == "Return on assets: not reported (typical bank: 1.22%)"
+        "Efficiency ratio (costs per $1 of revenue): 9,841% (median of all US banks: 62.0%)"
+    assert wx.plain_reason("roa_pct = n/a (median 1.22)") == "Return on assets: not reported (median of all US banks: 1.22%)"
     size = wx.plain_reason(f"log_total_assets = {math.log(2.5e9):.2f} (median {math.log(3e8):.2f})")
-    assert size.startswith("Size (total assets): $2.5bn (typical bank: $300m")
+    assert size.startswith("Size (total assets): $2.5bn (median of all US banks: $300m")
     assert wx.plain_reason(None) is None
     assert wx.plain_reason("something unexpected") == "something unexpected"
+
+
+def test_reasons_compare_against_all_banks_not_typical_or_peers():
+    # The reason's median is over ALL banks (05_score); the charts use size-tier peers.
+    text = wx.plain_reason("roa_pct = -0.03 (median 1.22)")
+    assert "median of all US banks" in text
+    assert "typical" not in text and "peer" not in text
 
 
 def test_missing_reasons_are_dropped():

@@ -118,7 +118,10 @@ def _parse_number(text: str) -> float | None:
 
 def plain_reason(raw: str | None) -> str | None:
     """'noncurrent_loans_pct = 2.73 (median 0.46)' ->
-    'Non-current loans: 2.73% of loans (typical bank: 0.46% of loans)'."""
+    'Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)'.
+
+    The median comes from 05_score: the median of ALL scored banks that quarter. That is not
+    the size-tier peer median used for the trend lines (`peers`), so the wording says so."""
     if not raw:
         return None
     m = _REASON_RE.match(raw)
@@ -126,7 +129,7 @@ def plain_reason(raw: str | None) -> str | None:
         return raw.strip()                    # unknown format: show as-is rather than drop it
     feature, value, median = m.group(1), _parse_number(m.group(2)), _parse_number(m.group(3))
     label, unit = FEATURE_LABELS.get(feature, (feature.replace("_", " ").capitalize(), "num"))
-    return f"{label}: {_fmt_value(value, unit)} (typical bank: {_fmt_value(median, unit)})"
+    return f"{label}: {_fmt_value(value, unit)} (median of all US banks: {_fmt_value(median, unit)})"
 
 
 # ------------------------------------------------------------------ dates
