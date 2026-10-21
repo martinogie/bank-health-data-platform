@@ -151,7 +151,7 @@ Five kinds of tests, each in code:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic and the watchlist export (JSON schema, rounding, new-bank flag, 8-quarter ordering). | `ingestion/tests/` | 109 passed |
+| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic and the watchlist export (JSON schema, rounding, new-bank flag, 8-quarter ordering). | `ingestion/tests/` | 110 passed |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload and list, Snowflake key-pair login and a small `write_pandas` load. Skipped when credentials are missing. | `tests/integration/` (10 tests) | run on demand with credentials |
 | **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. | `tests/e2e/` | 17 passed (20 Oct 2026 run) |
 | **Data quality** | The data itself: unique and not-null keys, relationships, accepted values, value ranges, source freshness. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`) and checks in the silver notebook | 87 passed, 2 warned, 0 errors |
