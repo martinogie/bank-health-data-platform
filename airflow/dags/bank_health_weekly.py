@@ -16,6 +16,7 @@ Every Monday 06:00 America/Chicago. Every task is safe to re-run (clear it, or t
 | `dbt_build` | Cosmos: one task per dbt model with its tests, plus source freshness | dbt rebuilds models |
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
+| `export_watchlist` | refresh `site/data/watchlist.json` for the watchlist page | file replaced atomically |
 
 The model retrains automatically when a new FDIC quarter arrives; trigger with
 `{"retrain_model": true}` to force a retrain.
@@ -34,6 +35,7 @@ from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, 
 from cosmos.constants import LoadMode, SourceRenderingBehavior, TestBehavior
 
 RAW_DIR = Path("/opt/airflow/data/raw")
+SITE_DATA = Path("/opt/airflow/site/data")   # ../site mounted by docker-compose
 DBT_DIR = "/opt/airflow/dbt"
 DBT_BIN = os.environ.get("DBT_EXECUTABLE", "/home/airflow/dbt_venv/bin/dbt")
 TZ = "America/Chicago"
@@ -209,6 +211,22 @@ def bank_health_weekly():
             raise ValueError("Pipeline checks failed: " + "; ".join(problems))
         return {"counts": counts, "latest_quarter": latest_q}
 
+    @task(doc_md="Refresh site/data/watchlist.json (one record per scored bank) for the watchlist page. "
+                 "Overwrites the file atomically, so it is safe to re-run. Commit the file to publish it.")
+    def export_watchlist() -> dict:
+        import logging
+
+        from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+
+        from ingestion.watchlist_export import export
+
+        logging.getLogger("snowflake").setLevel(logging.ERROR)   # login URL contains the account
+        conn = SnowflakeHook(snowflake_conn_id="snowflake_default").get_conn()
+        try:
+            return export(conn, SITE_DATA / "watchlist.json")
+        finally:
+            conn.close()
+
     fdic_result = download_fdic()
     cfpb_result = download_cfpb()
     uploads = upload_raw(fdic_result, cfpb_result)
@@ -217,7 +235,7 @@ def bank_health_weekly():
     job = sync_databricks_job()
     [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
-    run_databricks_job >> loaded >> dbt_build >> dbt_docs_generate >> verify_pipeline(watermarks)
+    run_databricks_job >> loaded >> dbt_build >> dbt_docs_generate >> verify_pipeline(watermarks) >> export_watchlist()
 
 
 bank_health_weekly()
