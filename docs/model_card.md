@@ -187,18 +187,31 @@ passed on 2026-10-25.
 - The label mixes capital, asset quality and earnings stress, so "distress" is not the same as
   failure.
 
-## v6 candidates (not implemented)
+## v6 candidates (planned, not implemented)
 
-Changes to consider for the next version. Each needs its own comparison on the same split before
-it is adopted.
+**Goal:** a sharper definition of distress and a time-to-distress model. v6 is one release,
+compared with v5 on the same 2020–2024 test rows. The order of work is in
+[ROADMAP.md](ROADMAP.md).
 
-| Issue (v5) | Example | Candidate change |
-|---|---|---|
-| "Two losses in a row" fires on immaterial losses at micro-banks | Transact Bank, CO: $3k loss, score 0.748 | Count a loss only if it is material, e.g. above a share of assets or of equity |
-| Realised securities losses look like operating losses | Banc of California, 2026 Q2: $254.5M securities loss | An earnings feature that excludes realised securities gains and losses (FDIC `IGLSEC`), next to the reported figure |
-| Young and recently merged banks keep start-up or merger effects | Genesis Bank, CA: 4.9 years old, merged June 2025 | Extend the not-scored rule to 5 years, or add a recent-merger flag from the FDIC structure-change history |
-| One list mixes credit risk and earnings risk | 32 of the top 50 have non-current loans of 2–3% | Separate outputs: asset-quality risk and failure risk (fits with the planned hazard model) |
-| Probabilities run slightly high | Riskiest 10%: 34.5% predicted, 29.0% observed | Calibrate on out-of-sample predictions from the training years |
+| # | Item | Evidence from the v5 review | Proposed approach |
+|---|---|---|---|
+| 6.1 | Count losses toward distress only when they are material | Transact Bank, CO ($6.5M of assets) ranks 7th because a ~$3k quarterly loss can trigger the two-losses rule; the stricter-label challenger ranks it 463 | Require consecutive losses to total at least a threshold share of assets or equity, chosen on 2001–2019 only; report the effect on labels and ranks |
+| 6.2 | Separate realised securities gains and losses from operating earnings | Banc of California lost $233M in 2026 Q2, mostly a $254.5M realised securities loss, which the model reads as an operating loss | Ingest the call-report securities gains/losses field; earnings features that exclude it; a separate securities-loss feature |
+| 6.3 | Handle young and recently merged banks | Genesis Bank, CA (4.9 years old; absorbed EH National Bank in June 2025) scores 0.719 on earnings alone; the challenger ranks it 549 | Test a 5-year new-bank rule against a recent-merger flag from the FDIC merger history; pick on training data only |
+| 6.4 | Report credit risk and failure risk as separate outputs | The v5 top 20 mixes credit warnings (NCL near 3%) with earnings warnings; 32 of the top 50 have NCL of 2–3% | An asset-quality warning score and a failure-risk score (from 6.6), both on the watchlist and bank pages |
+| 6.5 | Calibrate the classifier's probabilities | In the riskiest 10%, v5 predicts 34.5% against 29.0% observed | Isotonic or Platt calibration fitted on time-ordered out-of-sample predictions from 2001–2019 only |
+| 6.6 | Time-to-distress hazard model | v5 gives one 4-quarter probability; it can't say when distress is likely or rank by failure risk on its own | Discrete-time hazard model (below) |
+
+**6.6 hazard model in more detail.**
+- Discrete-time hazard on one row per bank per quarter at risk.
+- Outcome on the v6 distress definition, plus a failure-only variant that feeds 6.4.
+- Censoring for mergers and for the latest quarters, whose outcome isn't known yet.
+- Terms for bank-age bands and for calendar or macro conditions.
+- Risk curves at 1, 2, 4 and 8 quarters, and hazard ratios.
+- A sensitivity run that treats "merged while weak" as an event.
+- Checked with time-dependent AUC and Brier score at each horizon, and compared with the
+  classifier at 4 quarters on the same test rows.
+- It depends on 6.1 and 6.3, because the distress definition must be settled first.
 
 ## v7 candidate: complaint features as a tested challenger (not implemented)
 
