@@ -85,8 +85,9 @@ A bank-quarter is labelled **distressed** if, within the next 4 quarters, the ba
 quarters in a row, has non-current loans above 3%, or has Tier 1 leverage below 5%. Training uses
 2001–2019 and the model is tested once on 2020–2024, so it never sees the future. The model uses
 **FDIC call-report features only**; CFPB complaints are shown next to the scores as context, not
-used as inputs. Full details, known limits and the changes planned for v6:
-[model card](docs/model_card.md).
+used as inputs. Full details and known limits: [model card](docs/model_card.md).
+
+Next: v6. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Version 5 fixes data problems found in a review of v4
 ([investigation](docs/investigations/model_credibility.md)) and is compared with v4 on the **same
