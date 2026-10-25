@@ -188,6 +188,13 @@ type `POSTGRES_VIEWER_PASSWORD`. To register it yourself: host **`postgres`** (t
 pgAdmin runs inside Docker), port 5432, database `bank_health`. From the PC itself (psql, DBeaver,
 Python) use host **`localhost`**.
 
+**First mirror run (24 Oct 2026):** 24 tables (14 Databricks, 10 Snowflake) plus the FDIC flags,
+13.5 million rows, **25 of 25 row counts MATCH**; database size 5.07 GB; about 46 minutes, most of it
+streaming the two-million-row complaint tables. Snowflake: about 0.13 credits (estimate from query
+history). Databricks: about 49 minutes of the 2X-Small serverless SQL warehouse running.
+
+![explore.top_risk_50 in pgAdmin](docs/images/pgadmin_top_risk_50.png)
+
 Example queries:
 
 ```sql
