@@ -322,7 +322,7 @@ def create_views(pg) -> str:
     sql = VIEWS_SQL.read_text(encoding="utf-8")
     needed = ["bronze.fdic_financials", "bronze.cfpb_complaints", "silver.fdic_financials", "silver.fdic_institutions",
               "silver.cfpb_complaints", "gold.bank_quarter", "ml.risk_scores", "snowflake_raw.fdic_financials",
-              "snowflake_marts.mart_bank_scorecard", "explore.fdic_capital_flags"]
+              "snowflake_marts.mart_bank_scorecard", "ml.risk_scores_v4"]
     missing = [t for t in needed if not pg.execute("select to_regclass(%s) is not null", (t,)).fetchone()[0]]
     if missing:
         return "views skipped, tables missing: " + ", ".join(missing)

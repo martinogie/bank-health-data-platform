@@ -3,7 +3,7 @@
 `bank_health.ml.distress_model` in Unity Catalog. *Portfolio model on public data, not a
 supervisory rating.*
 
-## Version 5 (registered 2026-10-25 as `@candidate`; `@champion` after review)
+## Version 5 (registered 2026-10-25; reviewed and promoted to `@champion` the same day)
 
 **What it predicts.** The probability that a bank that is not in distress today enters distress
 or fails within the next 4 quarters. Distress = non-current loans > 3% of loans, Tier 1 leverage
@@ -169,6 +169,33 @@ passed on 2026-10-25.
 - **Override list.** Foreign-bank offices that the FDIC does not flag (IBA or class OI) are only
   excluded once a person adds them to the override list. Until then they are scored as normal
   banks and appear in `gold.capital_zero_review`.
+- **Immaterial losses count.** The "two losses in a row" trigger fires on any loss, however
+  small. Example: Transact Bank, CO ($6.5M of assets, 2026 Q2 score 0.748) breaks even on about
+  $10k a quarter, and 2026 Q2 was a $3k loss. The stricter-label challenger scores it 0.098.
+- **Securities losses look like operating losses.** Net income includes realised gains and losses
+  on securities, so a one-off securities sale reads like weak earnings. Example: Banc of California,
+  2026 Q2. Its $233M net loss was a $254.5M realised securities loss plus a $162M provision. The
+  provision and the charge-offs are a real credit signal; the securities loss is not.
+- **Young and recently merged banks.** Banks just past the 3-year cut-off can still have start-up
+  economics, and a merger changes growth, capital and earnings in one quarter. Example: Genesis
+  Bank, CA, 4.9 years old, which absorbed EH National Bank in June 2025. Its score is earnings-driven
+  (0.072 with earnings at the median) and its credit is clean.
+- **Credit risk and earnings risk share one list.** Banks just under the 3% non-current-loan line
+  (32 of the top 50 in 2026 Q2) and banks with thin earnings both rank high. Users can't tell
+  from the probability which kind of risk a bank carries; the reasons show it.
 - Public data only, quarterly, with a lag of about 2 months after quarter-end.
 - The label mixes capital, asset quality and earnings stress, so "distress" is not the same as
   failure.
+
+## v6 candidates (not implemented)
+
+Changes to consider for the next version. Each needs its own comparison on the same split before
+it is adopted.
+
+| Issue (v5) | Example | Candidate change |
+|---|---|---|
+| "Two losses in a row" fires on immaterial losses at micro-banks | Transact Bank, CO: $3k loss, score 0.748 | Count a loss only if it is material, e.g. above a share of assets or of equity |
+| Realised securities losses look like operating losses | Banc of California, 2026 Q2: $254.5M securities loss | An earnings feature that excludes realised securities gains and losses (FDIC `IGLSEC`), next to the reported figure |
+| Young and recently merged banks keep start-up or merger effects | Genesis Bank, CA: 4.9 years old, merged June 2025 | Extend the not-scored rule to 5 years, or add a recent-merger flag from the FDIC structure-change history |
+| One list mixes credit risk and earnings risk | 32 of the top 50 have non-current loans of 2–3% | Separate outputs: asset-quality risk and failure risk (fits with the planned hazard model) |
+| Probabilities run slightly high | Riskiest 10%: 34.5% predicted, 29.0% observed | Calibrate on out-of-sample predictions from the training years |

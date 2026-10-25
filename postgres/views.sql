@@ -1,9 +1,10 @@
 -- Browsing views for the PostgreSQL mirror. Recreated by scripts/mirror_to_postgres.py after
 -- every load (loading drops the tables, which drops dependent views).
--- Definitions follow docs/investigations/model_credibility.md:
---   CBLR bank             CBLRIND = 1 (Community Bank Leverage Ratio, from 2020)
---   foreign-bank office   IBA = 1, or both capital ratios 0 with CBLRIND blank
---   new bank              under 3 years old at the data quarter
+-- Definitions (model v5, see docs/model_card.md), carried in gold.bank_quarter:
+--   CBLR bank             cblr_reporter (FDIC CBLRIND = 1, from 2020)
+--   foreign-bank office   is_foreign_office (IBA flag, FDIC class OI, or the reviewed override list)
+--   new bank              under 3 years old at the data quarter (is_new_bank in ml.risk_scores)
+-- Gold leaves capital ratios a bank doesn't report empty; silver keeps FDIC's 0.
 
 -- ------------------------------------------------------------------ lineage_counts
 create or replace view explore.lineage_counts as
@@ -51,50 +52,53 @@ select r.cert, r.bank_name, r.state_code,
        round((g.total_assets_k / 1000)::numeric, 1)                                   as assets_musd,
        r.risk_band, round(r.distress_probability::numeric, 3)                          as probability,
        r.reason_1, r.reason_2, r.reason_3,
-       f.cblrind                                                                       as cblr_flag,
-       f.iba                                                                           as iba_flag,
+       g.cblr_reporter, g.is_foreign_office,
        g.total_risk_based_capital_pct, g.tier1_leverage_pct,
        round(g.efficiency_ratio_pct::numeric, 1)                                       as efficiency_ratio_pct,
        r.report_date
 from ml.risk_scores r
 left join silver.fdic_institutions i on i.cert = r.cert
 left join gold.bank_quarter g on g.cert = r.cert and g.report_date = r.report_date
-left join explore.fdic_capital_flags f on f.cert = r.cert and f.report_date = r.report_date
 where r.report_date = (select max(report_date) from ml.risk_scores)
+  and r.risk_band in ('High', 'Elevated', 'Watch', 'Low')
 order by r.distress_probability desc
 limit 50;
 
 -- ------------------------------------------------------------------ cblr_zero_capital
+-- Banks whose FDIC total risk-based capital is 0 this quarter (silver), and what gold does with it
 create or replace view explore.cblr_zero_capital as
 select g.cert, g.bank_name, g.state_code, g.report_date,
-       g.total_risk_based_capital_pct, g.tier1_leverage_pct, f.cblrind, f.iba,
-       case when f.cblrind = 1 then 'CBLR bank: risk-weighted capital not reported'
-            when f.iba = 1 or (g.tier1_leverage_pct = 0 and f.cblrind is null) then 'Foreign-bank office: no capital of its own'
-            else 'other' end                                                           as why_zero,
+       s.total_risk_based_capital_pct                                                  as fdic_total_rbc_pct,
+       g.total_risk_based_capital_pct                                                  as gold_total_rbc_pct,
+       s.tier1_leverage_pct                                                            as fdic_tier1_pct,
+       g.tier1_leverage_pct                                                            as gold_tier1_pct,
+       g.cblr_indicator, g.iba_flag, g.bank_class,
+       case when g.is_foreign_office then 'Foreign-bank office (' || g.foreign_office_rule || '): no capital ratios of its own'
+            when g.cblr_reporter then 'CBLR bank: risk-weighted capital not reported'
+            else 'reported as 0 (kept: real zero capital)' end                         as why_zero,
        r.risk_band, round(r.distress_probability::numeric, 3)                          as probability
 from gold.bank_quarter g
-left join explore.fdic_capital_flags f on f.cert = g.cert and f.report_date = g.report_date
+join silver.fdic_financials s on s.cert = g.cert and s.report_date = g.report_date
 left join ml.risk_scores r on r.cert = g.cert and r.report_date = g.report_date
 where g.report_date = (select max(report_date) from gold.bank_quarter)
-  and g.total_risk_based_capital_pct = 0;
+  and s.total_risk_based_capital_pct = 0;
 
 -- ------------------------------------------------------------------ foreign_offices
 create or replace view explore.foreign_offices as
 select g.cert, g.bank_name, g.city, g.state_code, g.report_date,
        round((g.total_assets_k / 1000)::numeric, 1)                                   as assets_musd,
        round((g.total_deposits_k / 1000)::numeric, 1)                                 as deposits_musd,
-       g.tier1_leverage_pct, g.total_risk_based_capital_pct, f.iba, f.cblrind,
+       g.foreign_office_rule, g.iba_flag, g.bank_class,
        r.risk_band, round(r.distress_probability::numeric, 3)                          as probability
 from gold.bank_quarter g
-left join explore.fdic_capital_flags f on f.cert = g.cert and f.report_date = g.report_date
 left join ml.risk_scores r on r.cert = g.cert and r.report_date = g.report_date
 where g.report_date = (select max(report_date) from gold.bank_quarter)
-  and (f.iba = 1 or (g.tier1_leverage_pct = 0 and g.total_risk_based_capital_pct = 0 and f.cblrind is null));
+  and g.is_foreign_office;
 
 -- ------------------------------------------------------------------ new_banks
 create or replace view explore.new_banks as
 select r.cert, r.bank_name, r.state_code, i.established_date,
-       round(((r.report_date - i.established_date) / 365.25)::numeric, 1)            as age_years,
+       round(r.bank_age_years::numeric, 1)                                             as age_years,
        round((g.total_assets_k / 1000)::numeric, 1)                                   as assets_musd,
        r.risk_band, round(r.distress_probability::numeric, 3)                          as probability,
        round(g.efficiency_ratio_pct::numeric, 1)                                       as efficiency_ratio_pct,
@@ -103,8 +107,8 @@ from ml.risk_scores r
 join silver.fdic_institutions i on i.cert = r.cert
 left join gold.bank_quarter g on g.cert = r.cert and g.report_date = r.report_date
 where r.report_date = (select max(report_date) from ml.risk_scores)
-  and r.report_date - i.established_date < 3 * 365.25
-order by r.distress_probability desc;
+  and r.is_new_bank
+order by r.bank_age_years;
 
 -- ------------------------------------------------------------------ bank_history
 -- One bank across the layers: select * from explore.bank_history where cert = 628 order by report_date;
@@ -154,3 +158,31 @@ select 'cfpb_complaints', b.complaint_id,
 from bronze.cfpb_complaints b
 join cfpb_dupes d on d.complaint_id = b.complaint_id
 left join silver.cfpb_complaints s on s.complaint_id::text = b.complaint_id;
+
+-- ------------------------------------------------------------------ v4_vs_v5
+-- Per bank, 2026 Q2: model v4 (snapshot ml.risk_scores_v4, taken before promotion) next to v5.
+create or replace view explore.v4_vs_v5 as
+with bands(band, ord) as (values ('High', 1), ('Elevated', 2), ('Watch', 3), ('Low', 4),
+                                 ('Already in distress', 0))
+select coalesce(n.cert, o.cert)                                                        as cert,
+       coalesce(n.bank_name, o.bank_name)                                              as bank_name,
+       coalesce(n.state_code, o.state_code)                                            as state_code,
+       o.risk_band                                                                     as v4_band,
+       n.risk_band                                                                     as v5_band,
+       case when o.risk_band = n.risk_band then 'same band'
+            when n.risk_band like '%not scored' then 'now not scored'
+            when bo.ord is null or bn.ord is null then 'changed'
+            when bn.ord < bo.ord then 'riskier band'
+            else 'safer band' end                                                      as band_change,
+       round(o.distress_probability::numeric, 3)                                       as v4_probability,
+       round(n.distress_probability::numeric, 3)                                       as v5_probability,
+       round((n.distress_probability - o.distress_probability)::numeric, 3)            as probability_change,
+       o.risk_rank                                                                     as v4_rank,
+       n.risk_rank                                                                     as v5_rank,
+       o.reason_1 as v4_reason_1, o.reason_2 as v4_reason_2, o.reason_3 as v4_reason_3,
+       n.reason_1 as v5_reason_1, n.reason_2 as v5_reason_2, n.reason_3 as v5_reason_3,
+       n.is_new_bank, n.is_foreign_office, n.cblr_reporter, round(n.bank_age_years::numeric, 1) as age_years
+from ml.risk_scores n
+full join ml.risk_scores_v4 o on o.cert = n.cert
+left join bands bo on bo.band = o.risk_band
+left join bands bn on bn.band = n.risk_band;

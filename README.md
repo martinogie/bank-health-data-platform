@@ -85,7 +85,8 @@ A bank-quarter is labelled **distressed** if, within the next 4 quarters, the ba
 quarters in a row, has non-current loans above 3%, or has Tier 1 leverage below 5%. Training uses
 2001–2019 and the model is tested once on 2020–2024, so it never sees the future. The model uses
 **FDIC call-report features only**; CFPB complaints are shown next to the scores as context, not
-used as inputs. Full details: [model card](docs/model_card.md).
+used as inputs. Full details, known limits and the changes planned for v6:
+[model card](docs/model_card.md).
 
 Version 5 fixes data problems found in a review of v4
 ([investigation](docs/investigations/model_credibility.md)) and is compared with v4 on the **same
@@ -269,10 +270,10 @@ Five kinds of tests, each in code:
 | **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value) and the top-20 release check. | `ingestion/tests/` | 166 passed |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload and list, Snowflake key-pair login and a small `write_pandas` load. Skipped when credentials are missing. | `tests/integration/` (10 tests) | run on demand with credentials |
 | **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. | `tests/e2e/` | 17 passed (20 Oct 2026 run) |
-| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 87 passed, 2 warned, 0 errors (20 Oct 2026; v5 tests run after promotion) |
-| **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores (25 Oct 2026) |
+| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5) |
+| **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores in Databricks and in Snowflake RAW (25 Oct 2026) |
 | **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (including the release check before dbt). | `tests/smoke/` | 7 passed |
-| **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v4 data); re-run after the v5 watchlist export |
+| **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v5 data, 25 Oct 2026) |
 
 How to run them:
 
