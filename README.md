@@ -145,6 +145,83 @@ measures, relationships, theme and the three pages), so the report can be rebuil
 in Import mode as `SVC_POWERBI`, a read-only service user with key-pair login
 (`snowflake/powerbi_user.sql`).
 
+## Browse all the data in PostgreSQL
+
+A local PostgreSQL 16 copy of **every** layer (Databricks bronze, silver, gold and ml; Snowflake RAW
+and MARTS) plus pgAdmin, so each table can be inspected and compared with plain SQL. It runs in its
+own Docker project (`postgres/docker-compose.yaml`), separate from Airflow, listening on 127.0.0.1 only.
+
+| Schema | What it holds |
+|---|---|
+| `bronze` | Databricks bronze: raw files as Delta, every value as delivered (text), plus `_source_file`, `_file_modified_at`, `_ingested_at`. Keeps duplicates when a file was loaded twice. |
+| `silver` | Databricks silver: typed, de-duplicated tables, CFPB company → FDIC bank map, data-quality results |
+| `gold` | Databricks gold: `bank_quarter`, one row per bank per quarter with derived ratios and complaint counts |
+| `ml` | Databricks ml: model features and labels (`model_frame`), model metrics, `risk_scores` |
+| `snowflake_raw` | Snowflake `RAW`: the Databricks exports loaded by Airflow |
+| `snowflake_marts` | Snowflake `MARTS`: the dbt marts Power BI uses |
+| `explore` | Views for checking the data (below), `mirror_log`, and `fdic_capital_flags` (`CBLRIND`, `IBA` per bank-quarter from the public FDIC API, 2020 onward; not yet loaded by the pipeline) |
+
+Views in `explore`: `lineage_counts` (rows per dataset at each layer and why they drop),
+`top_risk_50`, `cblr_zero_capital`, `foreign_offices`, `new_banks`, `bank_history` (one bank across
+layers) and `bronze_vs_silver_duplicates`.
+
+**Start it and copy the data** (add `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_VIEWER_PASSWORD`,
+`PGADMIN_EMAIL` and `PGADMIN_PASSWORD` to `.env` first):
+
+```bash
+cd postgres && docker compose --env-file ../.env up -d && cd ..
+python scripts/mirror_to_postgres.py                      # everything (Databricks, Snowflake, FDIC flags, views)
+python scripts/mirror_to_postgres.py --source snowflake   # one source
+python scripts/mirror_to_postgres.py --tables "silver.*"  # some tables; --force reloads matching ones
+```
+
+Each table loads in one transaction (drop, create, `COPY` in chunks, keys and indexes), so a failed
+table is rolled back and a re-run skips tables that already match. The script ends with source vs
+Postgres row counts for every table and fails on any mismatch. Databricks tables are read through the
+serverless SQL warehouse as Arrow; if that fails, a small notebook writes the table to Parquet in a
+volume and the script downloads it with the Files API. The script stops if today's Databricks usage is
+already high (`--dbu-warn`, default 4 DBU).
+
+**pgAdmin:** open http://localhost:5050 and sign in with `PGADMIN_EMAIL` / `PGADMIN_PASSWORD`. The
+server *bank_health (local mirror)* is pre-registered as the read-only user `viewer`: expand it and
+type `POSTGRES_VIEWER_PASSWORD`. To register it yourself: host **`postgres`** (the container name, as
+pgAdmin runs inside Docker), port 5432, database `bank_health`. From the PC itself (psql, DBeaver,
+Python) use host **`localhost`**.
+
+**First mirror run (24 Oct 2026):** 24 tables (14 Databricks, 10 Snowflake) plus the FDIC flags,
+13.5 million rows, **25 of 25 row counts MATCH**; database size 5.07 GB; about 46 minutes, most of it
+streaming the two-million-row complaint tables. Snowflake: about 0.13 credits (estimate from query
+history). Databricks: about 49 minutes of the 2X-Small serverless SQL warehouse running.
+
+![explore.top_risk_50 in pgAdmin](docs/images/pgadmin_top_risk_50.png)
+
+Example queries:
+
+```sql
+-- 1. How many rows each layer holds, and why they drop
+select * from explore.lineage_counts;
+
+-- 2. The 50 highest probabilities this quarter, with age, capital and the CBLR / IBA flags
+select bank_name, state_code, age_years, risk_band, probability, total_risk_based_capital_pct, cblr_flag, iba_flag
+from explore.top_risk_50;
+
+-- 3. One bank through every layer (JPMorgan Chase, CERT 628)
+select * from explore.bank_history where cert = 628 order by report_date desc limit 8;
+
+-- 4. Why total risk-based capital is 0 this quarter
+select why_zero, count(*) from explore.cblr_zero_capital group by why_zero;
+
+-- 5. Rows loaded twice into bronze, and the copy silver kept
+select dataset, row_key, _source_file, _ingested_at, kept_by_silver
+from explore.bronze_vs_silver_duplicates order by row_key limit 20;
+
+-- 6. Same bank-quarter in Databricks silver and Snowflake RAW: any differences?
+select count(*) as differing_rows
+from silver.fdic_financials s join snowflake_raw.fdic_financials r using (cert, report_date)
+where s.total_assets_k is distinct from r.total_assets_k
+   or s.tier1_leverage_pct is distinct from r.tier1_leverage_pct;
+```
+
 ## Testing
 
 Five kinds of tests, each in code:
