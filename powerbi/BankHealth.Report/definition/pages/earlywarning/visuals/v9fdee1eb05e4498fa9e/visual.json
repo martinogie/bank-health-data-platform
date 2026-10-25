@@ -606,6 +606,132 @@
             }
           ]
         }
+      },
+      {
+        "name": "0a976a76cb7bac000004",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "CERT"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "bce839e6576030651674",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "BANK_NAME"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "ac9983865ff1cb1ce118",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "STATE_CODE"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "3aff56ffc1e856838940",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "ASSET_SIZE_TIER"
+          }
+        },
+        "type": "Categorical"
+      },
+      {
+        "name": "83e78369d3e13b233c6e",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "DISTRESS_PROBABILITY"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a7e751939b8ea1cf3672",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "Main Reason"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "5b30b3685be8f90c46df",
+        "field": {
+          "Measure": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "Second Reason"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "fd0c838ceb37cee1b178",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "TIER1_LEVERAGE_PCT"
+          }
+        },
+        "type": "Advanced"
+      },
+      {
+        "name": "a30e94480e593091fb96",
+        "field": {
+          "Column": {
+            "Expression": {
+              "SourceRef": {
+                "Entity": "Early Warning"
+              }
+            },
+            "Property": "NONCURRENT_LOANS_PCT"
+          }
+        },
+        "type": "Advanced"
       }
     ]
   }
