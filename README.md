@@ -87,7 +87,7 @@ quarters in a row, has non-current loans above 3%, or has Tier 1 leverage below 
 **FDIC call-report features only**; CFPB complaints are shown next to the scores as context, not
 used as inputs. Full details and known limits: [model card](docs/model_card.md).
 
-Next: v6. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Next: v6 and v7. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Version 5 fixes data problems found in a review of v4
 ([investigation](docs/investigations/model_credibility.md)) and is compared with v4 on the **same
