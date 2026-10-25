@@ -1,18 +1,18 @@
 table Complaints
-	lineageTag: b782b917-2959-4705-950c-5b02c5d4e4bc
+	lineageTag: 0c929153-c412-5a3c-be21-99df4dbe40ac
 
 	measure 'Complaint Count' = COUNTROWS ( Complaints )
 		formatString: #,0
-		lineageTag: a531d136-8a34-4abc-a5c2-346e4447edf0
+		lineageTag: c58cbe2d-93a3-5e1a-9a32-390d75f449c7
 
 	measure 'Monetary Relief %' = DIVIDE ( CALCULATE ( [Complaint Count], Complaints[IS_MONETARY_RELIEF] = TRUE () ), [Complaint Count] )
 		formatString: 0.0%
-		lineageTag: 681ed15c-e91a-461e-ae22-7e9a9ff1b473
+		lineageTag: b040e988-26cb-5ce5-a158-2b2d4d4a1834
 
 	column CERT
-		dataType: double
+		dataType: int64
 		formatString: 0
-		lineageTag: be807971-cfde-4fcc-94da-dfb78f1edddf
+		lineageTag: f28a6c8c-ac86-5002-8e3a-e7113a84008d
 		summarizeBy: none
 		sourceColumn: CERT
 
@@ -21,28 +21,24 @@ table Complaints
 	column DATE_RECEIVED
 		dataType: dateTime
 		formatString: d mmm yyyy
-		lineageTag: 32d58bec-7eee-4695-97f8-b1d69fc99541
+		lineageTag: 5c7ac2ea-e6bf-525c-a66c-6a8f29115dc9
 		summarizeBy: none
 		sourceColumn: DATE_RECEIVED
 
 		annotation SummarizationSetBy = User
 
-		annotation UnderlyingDateTimeDataType = Date
-
 	column QUARTER_END_DATE
 		dataType: dateTime
 		formatString: d mmm yyyy
-		lineageTag: d56086a8-d306-4495-bfb3-c88c0a4aaa57
+		lineageTag: 9fd39b06-7e89-59ed-bc12-abce40f199ac
 		summarizeBy: none
 		sourceColumn: QUARTER_END_DATE
 
 		annotation SummarizationSetBy = User
 
-		annotation UnderlyingDateTimeDataType = Date
-
 	column COMPANY
 		dataType: string
-		lineageTag: 8adae1c4-055c-402d-baeb-0b1fd8dc7552
+		lineageTag: e575e914-1523-5637-9a7c-2eb556fcce33
 		summarizeBy: none
 		sourceColumn: COMPANY
 
@@ -50,7 +46,7 @@ table Complaints
 
 	column IS_MATCHED_BANK
 		dataType: boolean
-		lineageTag: e82f5f06-e42a-4e15-b056-1065fcd02336
+		lineageTag: 5d60ef5c-0891-57ce-80f0-3a63ad0bea35
 		summarizeBy: none
 		sourceColumn: IS_MATCHED_BANK
 
@@ -58,7 +54,7 @@ table Complaints
 
 	column PRODUCT
 		dataType: string
-		lineageTag: 14b9f780-2c51-4d8b-9ef8-704ce09f035a
+		lineageTag: b1606199-09b4-5a97-a379-dd4982098861
 		summarizeBy: none
 		sourceColumn: PRODUCT
 
@@ -66,7 +62,7 @@ table Complaints
 
 	column ISSUE
 		dataType: string
-		lineageTag: 7a6645f7-1cc2-49f2-acc7-d9c5ad0c0dbe
+		lineageTag: 9b3db3d1-c260-5674-b8d1-d59d9b4e7c70
 		summarizeBy: none
 		sourceColumn: ISSUE
 
@@ -74,7 +70,7 @@ table Complaints
 
 	column COMPANY_RESPONSE
 		dataType: string
-		lineageTag: 57807b73-edb0-42b5-a287-68204769e9c9
+		lineageTag: 4b7c6f94-8b8c-5af3-8e70-6721ee22c174
 		summarizeBy: none
 		sourceColumn: COMPANY_RESPONSE
 
@@ -82,7 +78,7 @@ table Complaints
 
 	column IS_MONETARY_RELIEF
 		dataType: boolean
-		lineageTag: 60740fe4-0a9b-4ee5-b369-54f43bc3deab
+		lineageTag: bc606f5b-415a-5914-b8e4-ab9062ab9889
 		summarizeBy: none
 		sourceColumn: IS_MONETARY_RELIEF
 
@@ -90,7 +86,7 @@ table Complaints
 
 	column TIMELY_RESPONSE
 		dataType: boolean
-		lineageTag: 703a8cb9-fc3b-4306-a329-99a2f501e024
+		lineageTag: 696a262d-4d25-52fc-ab09-e67fffe15510
 		summarizeBy: none
 		sourceColumn: TIMELY_RESPONSE
 
@@ -98,7 +94,7 @@ table Complaints
 
 	column SUBMITTED_VIA
 		dataType: string
-		lineageTag: b6516517-da97-4480-a0b9-4c303dc44499
+		lineageTag: 1c948d6d-ca35-5c56-b0c6-715ce30acda6
 		summarizeBy: none
 		sourceColumn: SUBMITTED_VIA
 
@@ -106,7 +102,7 @@ table Complaints
 
 	column STATE_CODE
 		dataType: string
-		lineageTag: ea0aab2a-d8f2-49d0-ae2c-62500d364d85
+		lineageTag: c87280b9-fd37-5140-84c0-c91cb5fb15a0
 		summarizeBy: none
 		sourceColumn: STATE_CODE
 
@@ -125,4 +121,3 @@ table Complaints
 				    Kept
 
 	annotation PBI_ResultType = Table
-
