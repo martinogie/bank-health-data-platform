@@ -1,0 +1,55 @@
+# Local PostgreSQL mirror of all project data, plus pgAdmin to browse it.
+# Separate from the Airflow stack (its own compose project, network and volumes).
+#
+# Run from the postgres/ folder (values come from the project's .env):
+#   docker compose --env-file ../.env up -d
+#   docker compose --env-file ../.env down          (stop; data is kept in the volumes)
+#
+# Postgres: localhost:5432 (database bank_health)   pgAdmin: http://localhost:5050
+# Both listen on 127.0.0.1 only, so nothing outside this PC can reach them.
+# Only the five values below are passed in; the rest of .env (tokens etc.) is not.
+name: bank-health-postgres
+
+services:
+  postgres:
+    image: postgres:16.15
+    environment:
+      POSTGRES_DB: bank_health
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_VIEWER_PASSWORD: ${POSTGRES_VIEWER_PASSWORD:?set POSTGRES_VIEWER_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once, on the first start with an empty volume: schemas + read-only role
+      - ./init:/docker-entrypoint-initdb.d:ro
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "maintenance_work_mem=256MB", "-c", "max_wal_size=2GB"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d bank_health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:9.17
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?set PGADMIN_EMAIL in .env}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?set PGADMIN_PASSWORD in .env}
+      PGADMIN_CONFIG_UPGRADE_CHECK_ENABLED: "False"
+      PGADMIN_DISABLE_POSTFIX: "True"
+    ports:
+      - "127.0.0.1:5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      # The server is pre-registered (host "postgres", user "viewer"); you only type the password
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  pgadmin-data:

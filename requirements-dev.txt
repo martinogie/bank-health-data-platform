@@ -6,3 +6,5 @@ pytest>=8
 snowflake-connector-python>=4.7
 playwright>=1.48
 pytest-playwright>=0.5
+databricks-sql-connector[pyarrow]==4.8.0
+psycopg[binary]==3.3.6
