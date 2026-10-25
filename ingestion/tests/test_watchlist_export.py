@@ -20,7 +20,7 @@ def bank_row(cert=628, **over):
         "reason_2": "tier1_change_4q_pp = -2.04 (median 0.19)",
         "reason_3": None,
         "complaints": 6834, "complaints_per_1b_deposits": 2.42317,
-        "report_date": LATEST, "model_name": "bank_health.ml.distress_model", "model_version": 4,
+        "report_date": LATEST, "model_name": "bank_health.ml.distress_model", "model_version": 5,
         "established_date": date(1824, 1, 1), "has_cfpb_complaints": True, "peer_pct": 0.1049,
     }
     row.update(over)
@@ -51,7 +51,7 @@ def test_payload_matches_documented_schema():
     assert set(p) == {"meta", "peers", "banks"}
     m = p["meta"]
     assert m["quarter"] == "2026-06-30" and m["quarterLabel"] == "2026 Q2"
-    assert m["exported"] == "2026-10-21" and m["modelVersion"] == 4 and m["banks"] == 1
+    assert m["exported"] == "2026-10-21" and m["modelVersion"] == 5 and m["banks"] == 1
     assert m["history"] == ["2024 Q3", "2024 Q4", "2025 Q1", "2025 Q2", "2025 Q3", "2025 Q4", "2026 Q1", "2026 Q2"]
     b = p["banks"][0]
     assert set(b) == {"c", "n", "ci", "st", "a", "age", "t", "p", "b", "pp", "r", "h", "cx", "cr"}
@@ -112,25 +112,45 @@ def test_bank_record_rounding():
     assert b["h"]["roa"][0] == 1.23        # history: 2 decimals
 
 
-# ----------------------------------------------------------------- new banks
-@pytest.mark.parametrize("established, expected_age, is_new", [
-    (date(2024, 1, 1), 2.5, True),
-    (date(2023, 7, 1), 3.0, False),          # exactly 3 years is not new
-    (date(1824, 1, 1), 202.5, False),
-    (None, None, False),
-    (date(2027, 1, 1), None, False),         # bad data (after the quarter): no age, no flag
+# ------------------------------------------------------- bank age, not-scored bands
+@pytest.mark.parametrize("established, expected_age", [
+    (date(2024, 1, 1), 2.5),
+    (date(1824, 1, 1), 202.5),
+    (None, None),
+    (date(2027, 1, 1), None),                # bad data (after the quarter): no age
 ])
-def test_bank_age_and_new_bank_flag(established, expected_age, is_new):
-    age = wx.bank_age_years(established, LATEST)
-    assert age == expected_age
-    assert wx.is_new_bank(age) is is_new
+def test_bank_age(established, expected_age):
+    assert wx.bank_age_years(established, LATEST) == expected_age
 
 
-def test_new_bank_flag_only_on_young_banks():
-    p = payload(banks=[bank_row(1, established_date=date(2025, 12, 1)),
-                       bank_row(2, established_date=date(1990, 1, 1))])
-    flags = {b["c"]: b.get("nb") for b in p["banks"]}
-    assert flags == {1: 1, 2: None}
+def test_not_scored_bands_come_from_scoring_not_from_age():
+    # 05_score decides who is not scored; the export only passes the band through
+    p = payload(banks=[
+        bank_row(1, established_date=date(2025, 12, 1), risk_band="New bank – not scored",
+                 distress_probability=None, peer_pct=None, reason_1=None, reason_2=None),
+        bank_row(2, risk_band="Office of a foreign bank – not scored", distress_probability=None,
+                 peer_pct=None, reason_1=None, reason_2=None),
+        bank_row(3, established_date=date(2025, 12, 1)),          # young but scored: stays scored
+    ])
+    wx.validate_payload(p)
+    by = {b["c"]: b for b in p["banks"]}
+    assert (by[1]["b"], by[1]["p"]) == ("N", None)
+    assert (by[2]["b"], by[2]["p"]) == ("F", None)
+    assert by[3]["b"] == "L" and "nb" not in by[3]
+    assert [b["c"] for b in p["banks"]] == [3, 1, 2]                # not scored last
+    assert p["meta"]["bands"]["N"] == "New bank – not scored"
+
+
+def test_unknown_band_is_an_error_not_low():
+    with pytest.raises(ValueError, match="unknown risk band"):
+        payload(banks=[bank_row(1, risk_band="Medium")])
+
+
+def test_scored_bank_without_probability_is_rejected():
+    p = payload()
+    p["banks"][0]["p"] = None
+    with pytest.raises(ValueError, match="no probability"):
+        wx.validate_payload(p)
 
 
 # ------------------------------------------------------------------ history

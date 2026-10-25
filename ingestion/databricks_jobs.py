@@ -19,6 +19,12 @@ log = logging.getLogger(__name__)
 
 JOB_NAME = "bank_health_pipeline"
 REPO_NAME = "bank-health-data-platform"
+# Serverless environment version for every notebook (Python 3.11, numpy 1.23). Training and
+# scoring must share it: a pickled model may not load in another one. Model v5 was trained here.
+# Change it only together with a retrain, and update docs/model_card.md and EXPECTED_ENVIRONMENT
+# in databricks/notebooks/_common.py.
+ENVIRONMENT_VERSION = "2"
+ENVIRONMENTS = [{"environment_key": "pinned", "spec": {"environment_version": ENVIRONMENT_VERSION}}]
 NOTEBOOK_TASKS = [
     # (task_key, notebook, timeout seconds)
     ("bronze", "01_bronze", 3600),
@@ -82,6 +88,7 @@ def job_settings(repo_path: str, catalog: str = "bank_health") -> dict:
                               "source": "WORKSPACE"},
             "timeout_seconds": timeout,
             "max_retries": 0,  # retries are Airflow's job; avoids silent double compute
+            "environment_key": "pinned",
         }
         if previous:
             task["depends_on"] = [{"task_key": previous}]
@@ -98,6 +105,7 @@ def job_settings(repo_path: str, catalog: str = "bank_health") -> dict:
             {"name": "retrain", "default": "false"},
         ],
         "tags": {"project": "bank_health"},
+        "environments": ENVIRONMENTS,
         "tasks": tasks,
     }
 

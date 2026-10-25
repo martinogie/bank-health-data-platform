@@ -1,8 +1,26 @@
 -- Derived ratios per bank per quarter, plus prior-quarter values for QoQ changes.
 -- Prior periods are joined on the exact quarter-end, so a missing quarter gives NULL
 -- rather than comparing against the wrong period.
-with fin as (
+--
+-- FDIC files a capital ratio as 0 when it is not reported. Here those become NULL:
+--   CBLR banks (from 2020) report no risk-based capital ratio;
+--   US offices of foreign banks (IBA flag, FDIC class OI, or the reviewed override list in
+--   dbt_project.yml) report no capital ratios at all.
+-- Everyone else keeps the reported values, including real zero or negative capital.
+with reported as (
     select * from {{ ref('stg_fdic__financials') }}
+),
+
+fin as (
+    select
+        r.* exclude (tier1_leverage_pct, total_risk_based_capital_pct),
+        coalesce(r.cblr_indicator = 1, false)                              as cblr_reporter,
+        coalesce(r.iba_flag = 1 or i.bank_class = 'OI'
+                 or r.cert in ({{ var('foreign_office_overrides') | join(', ') }}), false) as is_foreign_office,
+        iff(is_foreign_office, null, r.tier1_leverage_pct)                 as tier1_leverage_pct,
+        iff(cblr_reporter or is_foreign_office, null, r.total_risk_based_capital_pct) as total_risk_based_capital_pct
+    from reported r
+    left join {{ ref('stg_fdic__institutions') }} i on i.cert = r.cert
 ),
 
 prev_q as (
@@ -55,6 +73,8 @@ select
     net_chargeoff_rate_pct,
     tier1_leverage_pct,
     total_risk_based_capital_pct,
+    cblr_reporter,
+    is_foreign_office,
     brokered_deposits_k,
 
     -- FDIC income is year-to-date: Q1 as reported, later quarters minus the prior quarter
@@ -67,9 +87,11 @@ select
     round((total_deposits_k / nullif(total_deposits_k_prev_y, 0) - 1) * 100, 4) as deposit_growth_yoy_pct,
     round((total_assets_k / nullif(total_assets_k_prev_y, 0) - 1) * 100, 4)     as asset_growth_yoy_pct,
 
-    -- CRE concentration: construction + multifamily + non-farm non-residential
-    coalesce(construction_loans_k, 0) + coalesce(multifamily_loans_k, 0)
-        + coalesce(nonfarm_nonres_loans_k, 0)                            as cre_loans_k,
+    -- CRE concentration: construction + multifamily + non-farm non-residential.
+    -- Missing only if all three parts are missing (then NULL, never 0%).
+    case when coalesce(construction_loans_k, multifamily_loans_k, nonfarm_nonres_loans_k) is not null
+         then coalesce(construction_loans_k, 0) + coalesce(multifamily_loans_k, 0)
+              + coalesce(nonfarm_nonres_loans_k, 0) end                  as cre_loans_k,
     round(cre_loans_k / nullif(gross_loans_k, 0) * 100, 4)               as cre_to_loans_pct,
     round(cre_loans_k / nullif(total_equity_k, 0) * 100, 4)              as cre_to_equity_pct,
     round(total_equity_k / nullif(total_assets_k, 0) * 100, 4)           as equity_to_assets_pct,

@@ -15,8 +15,18 @@
 # MAGIC **Label** (`distress_next_4q`) = distress in any of quarters t+1..t+4, **or** an FDIC failure
 # MAGIC within 12 months after `t` (every failure date counts, not just a bank's first).
 # MAGIC
+# MAGIC **Challenger label** (`distress_strict_next_4q`) = failure within 12 months, or Tier 1 < 5%,
+# MAGIC or non-current loans > 3% in t+1..t+4 (no "two net losses" condition).
+# MAGIC
+# MAGIC Total risk-based capital is **not** a feature: CBLR banks (from 2020) don't report it, and
+# MAGIC no training year has CBLR banks. It stays in the data for display.
+# MAGIC
 # MAGIC Rows used for training/testing (`is_model_row`):
 # MAGIC - the bank is **not already in distress** at `t` (we predict the onset of distress);
+# MAGIC - it is **not a US office of a foreign bank** (`is_foreign_office`: no capital ratios, so
+# MAGIC   the model can't judge it);
+# MAGIC - it is **at least 3 years old** (`is_new_bank`): new banks make start-up losses by design,
+# MAGIC   which the label reads as distress;
 # MAGIC - the outcome is **observed**: the bank still reports at t+4, or it failed within the window
 # MAGIC   (banks that vanish without failing, usually mergers, have an unknown outcome and are dropped);
 # MAGIC - `t` is at least 4 quarters before the latest data (otherwise the label is incomplete).
@@ -28,10 +38,11 @@ from pyspark.sql import functions as F
 
 NCL_THRESHOLD = 3.0      # non-current loans, % of loans
 TIER1_THRESHOLD = 5.0    # Tier 1 leverage ratio, %
+NEW_BANK_YEARS = 3.0     # younger banks are not scored
 
 FEATURES = [
     # capital
-    "tier1_leverage_pct", "total_risk_based_capital_pct", "equity_to_assets_pct",
+    "tier1_leverage_pct", "equity_to_assets_pct",
     # asset quality
     "noncurrent_loans_pct", "net_chargeoff_rate_pct", "past_due_30_89_to_loans_pct",
     "past_due_90_to_loans_pct", "nonaccrual_to_assets_pct", "ore_to_assets_pct",
@@ -49,6 +60,10 @@ FEATURES = [
     # changes
     "noncurrent_change_1q_pp", "noncurrent_change_4q_pp", "tier1_change_4q_pp", "roa_change_4q_pp",
 ]
+
+# Capital ratios built on risk-weighted assets: CBLR banks (from 2020) don't report them, so
+# they are kept out of FEATURES (v5 onward). Listed so a test can check they stay out.
+RISK_BASED_CAPITAL_FEATURES = ["total_risk_based_capital_pct"]
 
 
 def _ratio(num, den, scale=100.0):
@@ -74,6 +89,8 @@ def build_model_frame():
         .withColumn("residential_to_loans_pct", _ratio("residential_re_loans_k", "gross_loans_k"))
         .withColumn("ag_to_loans_pct", _ratio("agricultural_loans_k", "gross_loans_k"))
         .withColumn("is_loss_qtr", F.col("net_income_qtr_k") < 0)
+        .withColumn("cblr_reporter_flag", F.col("cblr_reporter").cast("double"))
+        .withColumn("is_new_bank", F.coalesce(F.col("bank_age_years") < NEW_BANK_YEARS, F.lit(False)))
     )
 
     # Values from exactly 1 and 4 quarters earlier (NULL if that quarter is missing)
@@ -98,12 +115,17 @@ def build_model_frame():
                     | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False))
                     | (F.coalesce(F.col("is_loss_qtr"), F.lit(False))
                        & F.coalesce(F.col("is_loss_qtr_lag1"), F.lit(False))))
+        # Challenger: capital or asset-quality breach only
+        .withColumn("is_distressed_strict",
+                    F.coalesce(F.col("noncurrent_loans_pct") > NCL_THRESHOLD, F.lit(False))
+                    | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False)))
     )
 
     # Future window t+1..t+4 (by quarter index, so gaps are handled)
     future = Window.partitionBy("cert").orderBy("q_idx").rangeBetween(1, 4)
     df = (
         df.withColumn("distress_in_next_4q", F.max(F.col("is_distressed").cast("int")).over(future))
+        .withColumn("strict_in_next_4q", F.max(F.col("is_distressed_strict").cast("int")).over(future))
         .withColumn("last_future_q", F.max("q_idx").over(future))
     )
 
@@ -121,15 +143,19 @@ def build_model_frame():
     df = (
         df.withColumn("distress_next_4q",
                       F.greatest(F.coalesce("distress_in_next_4q", F.lit(0)), F.col("fails_within_12m")))
+        .withColumn("distress_strict_next_4q",
+                    F.greatest(F.coalesce("strict_in_next_4q", F.lit(0)), F.col("fails_within_12m")))
         .withColumn("outcome_observed",
                     F.coalesce(F.col("last_future_q") == F.col("q_idx") + 4, F.lit(False))
                     | (F.col("fails_within_12m") == 1))
         .withColumn("label_complete", F.col("q_idx") <= F.lit(latest_idx - 4))
         .withColumn("is_model_row",
                     ~F.col("is_distressed") & F.col("outcome_observed") & F.col("label_complete")
-                    & (F.col("total_assets_k") > 0))
+                    & (F.col("total_assets_k") > 0) & ~F.col("is_foreign_office") & ~F.col("is_new_bank"))
     )
     return df.select(
         "cert", "report_date", "bank_name", "state_code", "asset_size_tier", "total_assets_k",
-        *FEATURES, "is_distressed", "fails_within_12m", "distress_next_4q", "is_model_row",
+        *FEATURES, "cblr_reporter_flag", "cblr_reporter", "is_foreign_office", "foreign_office_rule",
+        "bank_age_years", "is_new_bank", "capital_zero_review", "outcome_observed", "label_complete",
+        "is_distressed", "fails_within_12m", "distress_next_4q", "distress_strict_next_4q", "is_model_row",
     )

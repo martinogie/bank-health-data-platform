@@ -180,7 +180,13 @@ MEASURES += arrow("ROA", "KPI ROA %", "KPI ROA % PQ", "pp", True, "0.00", " pp")
 MEASURES += arrow("Complaints", "KPI Complaints per $1B", "KPI Complaints per $1B PQ", "abs", False, "0.0", "")
 
 MEASURES += [
-    ("Early Warning", "Banks Scored", "COUNTROWS ( 'Early Warning' )", "#,0"),
+    ("Early Warning", "Banks In Band", "COUNTROWS ( 'Early Warning' )", "#,0"),
+    ("Early Warning", "Banks Scored",
+     "CALCULATE ( COUNTROWS ( 'Early Warning' ), NOT 'Early Warning'[RISK_BAND] IN { \"New bank – not scored\", "
+     "\"Office of a foreign bank – not scored\" } )", "#,0"),
+    ("Early Warning", "Banks Not Scored",
+     "CALCULATE ( COUNTROWS ( 'Early Warning' ), 'Early Warning'[RISK_BAND] IN { \"New bank – not scored\", "
+     "\"Office of a foreign bank – not scored\" } )", "#,0"),
     ("Early Warning", "Banks High Risk", "CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = \"High\" )", "#,0"),
     ("Early Warning", "Banks Elevated Risk", "CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = \"Elevated\" )", "#,0"),
     ("Early Warning", "Banks Watch", "CALCULATE ( [Banks Scored], 'Early Warning'[RISK_BAND] = \"Watch\" )", "#,0"),
@@ -262,7 +268,8 @@ def m_query(sf_table, cols):
         f"    Kept = Table.SelectColumns(Data, {{{names}}})" + ("," if sf_table == "MART_EARLY_WARNING" else ""),
     ] + ([
         '    Ordered = Table.AddColumn(Kept, "BAND_ORDER", each if [RISK_BAND] = "High" then 1 else if [RISK_BAND] = "Elevated" then 2 '
-        'else if [RISK_BAND] = "Watch" then 3 else if [RISK_BAND] = "Low" then 4 else 5, Int64.Type)',
+        'else if [RISK_BAND] = "Watch" then 3 else if [RISK_BAND] = "Low" then 4 else if [RISK_BAND] = "Already in distress" then 5 '
+        'else if [RISK_BAND] = "New bank – not scored" then 6 else 7, Int64.Type)',
         "in",
         "    Ordered",
     ] if sf_table == "MART_EARLY_WARNING" else ["in", "    Kept"])
@@ -679,16 +686,18 @@ def early_warning():
     p = Page("earlywarning", "Early warning")
     topbar(p, "earlywarning")
     header(p, "Which banks are most likely to enter distress in the next 12 months?",
-           "Gradient-boosted model on FDIC ratios and CFPB complaints. Right-click a bank in the table → "
-           "Drill through → Bank detail.", width=860)
+           "The model uses FDIC call-report features only; CFPB complaints are shown as context, not model "
+           "inputs. Right-click a bank in the table → Drill through → Bank detail.", width=860)
     card(p, 900, 80, 364, 36, mea(E, "Scores As Of"), size=9, bold=False, value_color=MUTED, wrap=True)
-    tiles = [("High risk (top 5%)", mea(E, "Banks High Risk"), RED),
-             ("Elevated (next 10%)", mea(E, "Banks Elevated Risk"), "#E8590C"),
-             ("Watch (next 25%)", mea(E, "Banks Watch"), INK),
+    # Band meanings: share of such banks that entered distress within a year, out of sample 2001–2019
+    tiles = [("High (≥50% became distressed)", mea(E, "Banks High Risk"), RED),
+             ("Elevated (25–50%)", mea(E, "Banks Elevated Risk"), "#E8590C"),
+             ("Watch (10–25%)", mea(E, "Banks Watch"), INK),
              ("Already in distress", mea(E, "Banks Already in Distress"), MUTED),
+             ("Not scored (new or foreign office)", mea(E, "Banks Not Scored"), MUTED),
              ("Assets in High + Elevated", mea(E, "Assets High + Elevated $B"), INK)]
     g = 12
-    w = (CW - 4 * g) / 5
+    w = (CW - (len(tiles) - 1) * g) / len(tiles)
     for i, (lab, f, vc) in enumerate(tiles):
         kpi_tile(p, L + i * (w + g), 128, w, 86, lab, f, value_color=vc)
 
@@ -696,7 +705,7 @@ def early_warning():
     objs, vco = chart_style("clusteredBarChart", "How many banks fall in each risk band?")
     p.add("clusteredBarChart", L, 226, lw, 210,
           query={"Category": {"projections": [proj(col(E, "RISK_BAND"), active=True)]},
-                 "Y": {"projections": [proj(mea(E, "Banks Scored"), "Banks")]}},
+                 "Y": {"projections": [proj(mea(E, "Banks In Band"), "Banks")]}},
           objects=objs, vco=vco, sort=sort_by(col(E, "RISK_BAND"), desc=False))
 
     objs = {"dataPoint": props(fill=color(TEAL)),
@@ -741,9 +750,11 @@ def early_warning():
           filters=[in_filter("notyet", E, "RISK_BAND", ["High", "Elevated", "Watch", "Low"])])
 
     textbox(p, L, 688, CW, 28, [[(
-        "Model: gradient boosting trained on 2001–2019, tested once on 2020–2024: ROC-AUC 0.854, PR-AUC 0.357 "
-        "against a 5.6% base rate (6.4× random); 53.5% of distress cases fall in the riskiest 10%. "
-        "Portfolio model on public data, not a supervisory rating.", {"fontSize": "8pt", "color": MUTED})]])
+        "Model v5: gradient boosting on FDIC call-report ratios, trained on 2001–2019, tested once on 2020–2024: "
+        "ROC-AUC 0.8515, PR-AUC 0.333 against a 5.5% base rate (6.0× random); 52.6% of distress cases fall in the "
+        "riskiest 10%. Bands are fixed probability cut-offs. Banks under 3 years old and offices of foreign "
+        "banks are not scored. Portfolio model on public data, not a supervisory rating.",
+        {"fontSize": "8pt", "color": MUTED})]])
     return p
 
 

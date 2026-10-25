@@ -51,12 +51,29 @@ def test_incremental_run_after_gap_fills_missing_quarters():
     assert qs == [date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]
 
 
+def write_cached(path, fields):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fdic.write_jsonl_gz([{f: 1 for f in fields}], path)
+
+
+def test_cached_file_without_new_fields_is_downloaded_again(tmp_path):
+    latest = date(2026, 6, 30)
+    old = [f for f in fdic.FINANCIAL_FIELDS if f not in ("CBLRIND", "IBA")]
+    write_cached(fdic.financials_path(tmp_path, date(2025, 9, 30)), old)               # before the change
+    write_cached(fdic.financials_path(tmp_path, date(2025, 12, 31)), fdic.FINANCIAL_FIELDS)
+    to_fetch, cached = fdic.split_cached_quarters([date(2025, 9, 30), date(2025, 12, 31)], tmp_path, latest)
+    assert to_fetch == [date(2025, 9, 30)]
+    assert cached == [fdic.financials_path(tmp_path, date(2025, 12, 31))]
+
+
+def test_financial_fields_include_reporting_flags():
+    assert {"CBLRIND", "IBA"} <= set(fdic.FINANCIAL_FIELDS)
+
+
 def test_split_cached_quarters_reuses_old_files_but_refreshes_latest(tmp_path):
     latest = date(2026, 6, 30)
     for q in (date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)):
-        p = fdic.financials_path(tmp_path, q)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("x")
+        write_cached(fdic.financials_path(tmp_path, q), fdic.FINANCIAL_FIELDS)
     quarters = [date(2025, 9, 30), date(2025, 12, 31), date(2026, 3, 31), date(2026, 6, 30)]
     to_fetch, cached = fdic.split_cached_quarters(quarters, tmp_path, latest)
     # 2025-09-30 has no file -> fetch; 2025-12-31 on disk and old -> reuse;

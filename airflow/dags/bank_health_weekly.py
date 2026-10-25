@@ -13,13 +13,16 @@ Every Monday 06:00 America/Chicago. Every task is safe to re-run (clear it, or t
 | `sync_databricks_job` | pull the Git folder, create/update job `bank_health_pipeline` | both idempotent |
 | `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
+| `sanity_check_top20` | fails if the 20 riskiest scored banks include a new bank, a foreign-bank office or a 0% capital ratio | read-only |
 | `dbt_build` | Cosmos: one task per dbt model with its tests, plus source freshness | dbt rebuilds models |
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
 | `export_watchlist` | refresh `site/data/watchlist.json` for the watchlist page | file replaced atomically |
 
 The model retrains automatically when a new FDIC quarter arrives; trigger with
-`{"retrain_model": true}` to force a retrain.
+`{"retrain_model": true}` to force a retrain. A retrained model is registered as `@candidate`;
+scoring keeps using `@champion` until a person reviews the candidate and promotes it
+(docs/runbook.md).
 """
 from __future__ import annotations
 
@@ -160,6 +163,28 @@ def bank_health_weekly():
         finally:
             conn.close()
 
+    @task(retries=0,
+          doc_md="Release guardrail on RAW.ML_RISK_SCORES, before dbt publishes the marts: the 20 riskiest "
+                 "scored banks must not include a new bank, a foreign-bank office, a 0% or missing Tier 1 "
+                 "leverage ratio, or a reason quoting an unusable capital ratio. Fails with the list of problems.")
+    def sanity_check_top20() -> dict:
+        import logging
+
+        from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+
+        from ingestion import sanity_checks
+
+        logging.getLogger("snowflake").setLevel(logging.ERROR)   # login URL contains the account
+        conn = SnowflakeHook(snowflake_conn_id="snowflake_default").get_conn()
+        try:
+            cur = conn.cursor()
+            try:
+                return sanity_checks.run(cur, "RAW.ML_RISK_SCORES")
+            finally:
+                cur.close()
+        finally:
+            conn.close()
+
     dbt_build = DbtTaskGroup(
         group_id="dbt_build",
         project_config=ProjectConfig(DBT_DIR),
@@ -235,7 +260,8 @@ def bank_health_weekly():
     job = sync_databricks_job()
     [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
-    run_databricks_job >> loaded >> dbt_build >> dbt_docs_generate >> verify_pipeline(watermarks) >> export_watchlist()
+    run_databricks_job >> loaded >> sanity_check_top20() >> dbt_build >> dbt_docs_generate
+    dbt_docs_generate >> verify_pipeline(watermarks) >> export_watchlist()
 
 
 bank_health_weekly()

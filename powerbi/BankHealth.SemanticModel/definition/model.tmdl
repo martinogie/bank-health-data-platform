@@ -11,6 +11,10 @@ annotation __PBI_TimeIntelligenceEnabled = 0
 
 annotation PBI_ProTooling = ["DevMode"]
 
+
+
+ref cultureInfo en-US
+
 annotation PBI_QueryOrder = ["SnowflakeServer", "Bank", "Scorecard", "Early Warning", "Complaints"]
 
 ref table Bank
@@ -18,6 +22,3 @@ ref table Scorecard
 ref table 'Early Warning'
 ref table Complaints
 ref table Quarter
-
-ref cultureInfo en-US
-

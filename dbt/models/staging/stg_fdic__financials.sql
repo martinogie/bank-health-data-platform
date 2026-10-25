@@ -32,5 +32,8 @@ select
     commercial_industrial_loans_k,
     consumer_loans_k,
     agricultural_loans_k,
+    -- reporting flags: CBLR bank (from 2020; NULL before), International Banking Act entity
+    cast(cblr_indicator as integer)       as cblr_indicator,
+    cast(iba_flag as integer)             as iba_flag,
     _loaded_at
 from {{ source('raw', 'fdic_financials') }}

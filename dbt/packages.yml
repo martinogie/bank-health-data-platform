@@ -4,3 +4,8 @@ packages:
   # Maintained fork of calogica/dbt_expectations (the original is archived)
   - package: metaplane/dbt_expectations
     version: 0.10.10
+  # Needed by dbt_expectations. Listed here (same version as the lock file) because Cosmos leaves
+  # package-lock.yml out when it parses the project; without it dbt sees 3 installed packages
+  # but only 2 declared, and a full parse fails.
+  - package: godatadriven/dbt_date
+    version: 0.21.0

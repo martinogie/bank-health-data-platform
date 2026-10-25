@@ -1,21 +1,21 @@
 table Scorecard
-	lineageTag: 653c2416-5779-411b-8604-4933b2273b7a
+	lineageTag: 46301e4d-9bc3-51e7-b125-22c47ab349a2
 
 	measure 'Bank Quarters' = COUNTROWS ( Scorecard )
 		formatString: #,0
-		lineageTag: 7c40cd53-8cae-402e-883d-8ac6858a3c58
+		lineageTag: c28ad61e-fe19-5da6-983f-e0c71069bff6
 
 	measure 'Total Assets $B' = DIVIDE ( SUM ( Scorecard[TOTAL_ASSETS_K] ), 1e6 )
 		formatString: #,0
-		lineageTag: 84ac7ea6-85dc-4374-a88a-568c626302bf
+		lineageTag: d5a84779-c623-56e5-a7d6-66b7847edcd7
 
 	measure 'Median Tier 1 Leverage %' = MEDIAN ( Scorecard[TIER1_LEVERAGE_PCT] )
 		formatString: 0.00
-		lineageTag: 1d0c569b-2c48-40aa-9a65-d8199ed04ac3
+		lineageTag: cc6bcec0-38fe-5088-9da2-69e6b394a72a
 
 	measure 'Median Noncurrent Loans %' = MEDIAN ( Scorecard[NONCURRENT_LOANS_PCT] )
 		formatString: 0.00
-		lineageTag: a0ed9f7c-e4ea-408a-952e-881dd1111262
+		lineageTag: d0d105c8-530a-590e-98d8-5eacd2503f76
 
 	measure 'Industry ROA %' =
 			DIVIDE (
@@ -23,15 +23,15 @@ table Scorecard
 			    SUMX ( FILTER ( Scorecard, NOT ISBLANK ( Scorecard[ROA_PCT] ) ), Scorecard[TOTAL_ASSETS_K] )
 			)
 		formatString: 0.00
-		lineageTag: 006cc283-8da7-42a2-a8e3-b42b9248f4d3
+		lineageTag: 073e1705-90a4-59da-970b-24a113d859d8
 
 	measure 'Share of Banks with NCL > 3%' = DIVIDE ( COUNTROWS ( FILTER ( Scorecard, Scorecard[NONCURRENT_LOANS_PCT] > 3 ) ), [Bank Quarters] )
 		formatString: 0.0%
-		lineageTag: 2a7e1eba-4bd6-4ddc-9edb-00d99aef01cc
+		lineageTag: d6a577a7-b0f8-5770-96fe-08c5fd27d774
 
 	measure 'Complaints (covered)' = CALCULATE ( SUM ( Scorecard[COMPLAINTS] ), Scorecard[COMPLAINT_DATA_COVERED] = TRUE () )
 		formatString: #,0
-		lineageTag: d7e628f4-b1ff-4a2f-a740-9b2aa62ed69d
+		lineageTag: 9ac5a7ba-e6fd-54d8-97d9-a7a77569b54c
 
 	measure 'Complaints per $1B Deposits' =
 			DIVIDE (
@@ -39,177 +39,177 @@ table Scorecard
 			    CALCULATE ( SUM ( Scorecard[TOTAL_DEPOSITS_K] ), Scorecard[COMPLAINT_DATA_COVERED] = TRUE () ) / 1e6
 			)
 		formatString: 0.0
-		lineageTag: 8691a6ce-f9f7-4708-b227-50e526dd641f
+		lineageTag: c07def55-d08a-53b2-9148-d64f3e649c29
 
 	measure 'Report Quarter' =
 			VAR selected = MAX ( 'Quarter'[Quarter End] )
 			VAR latest = CALCULATE ( MAX ( Scorecard[REPORT_DATE] ), REMOVEFILTERS ( 'Quarter' ) )
 			RETURN MIN ( selected, latest )
 		formatString: d mmm yyyy
-		lineageTag: 65a87b28-f1b7-4639-a32a-14d7c49e6bed
+		lineageTag: 40c1da5f-1c83-5365-979b-cdf2c48952e0
 
 	measure 'Report Quarter Label' =
 			VAR q = [Report Quarter]
 			RETURN "Quarter: " & YEAR ( q ) & " Q" & ROUNDUP ( MONTH ( q ) / 3, 0 )
-		lineageTag: 7ce401ff-e12a-47d4-b1d7-f52b11ff3f4e
+		lineageTag: 59c35210-d920-59b8-b466-9363f25590c2
 
 	measure 'Previous Quarter' = EOMONTH ( [Report Quarter], -3 )
 		formatString: d mmm yyyy
-		lineageTag: 328c5274-6287-4016-8143-2a1db122271f
+		lineageTag: ac55c45d-5dc4-5c07-aed2-0a9a60b4ebaa
 
 	measure 'Banks Reporting' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Bank Quarters], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: #,0
-		lineageTag: dcab7fe6-ca15-4063-a124-3e564c318f02
+		lineageTag: dc644d7c-73e7-5269-b90d-39e86ee31d9f
 
 	measure 'Banks Reporting PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Bank Quarters], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: #,0
-		lineageTag: a5061b6f-0bc9-464b-944a-2f896375ec0f
+		lineageTag: 58325916-033a-5c47-a76f-456bf5520d90
 
 	measure 'KPI Total Assets $B' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Total Assets $B], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: \$#,0.0B
-		lineageTag: 5f3c6777-71e7-4c75-ad9d-ea75fc0b3dab
+		lineageTag: 3bf90362-e5dd-5d10-8f3b-2ceeb718e438
 
 	measure 'KPI Total Assets $B PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Total Assets $B], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: \$#,0.0B
-		lineageTag: 6e0f3a43-a6e7-4cca-a133-91940223bb64
+		lineageTag: eaeb64fc-fdfd-564f-a6cb-9e27d8e3d913
 
 	measure 'KPI Total Assets $T' = DIVIDE ( [KPI Total Assets $B], 1000 )
 		formatString: \$#,0.00T
-		lineageTag: cd4999c5-fac9-4702-9f30-77438c5eee39
+		lineageTag: c44580b6-7861-5ba1-bfb0-544d603fbe25
 
 	measure 'KPI Tier 1 %' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Median Tier 1 Leverage %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: f55961e4-85cf-4915-9d8c-81303702e474
+		lineageTag: 6900135a-4007-57eb-b9c4-1c65d7465c7f
 
 	measure 'KPI Tier 1 % PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Median Tier 1 Leverage %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: 0d3bd803-b101-4a66-b1e1-644b875ba6fa
+		lineageTag: f68a21e1-e808-590d-b4fe-7cf671abd78a
 
 	measure 'KPI NCL %' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Median Noncurrent Loans %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: bb7bcef5-9ebf-4114-9f40-73233c0ee628
+		lineageTag: a14190cf-b88f-5954-9cc8-1c8115b96499
 
 	measure 'KPI NCL % PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Median Noncurrent Loans %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: a64a7628-0231-428e-9b73-9ca5d1aed6bb
+		lineageTag: c998dc40-e092-5585-b76f-de185cc198c9
 
 	measure 'KPI ROA %' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Industry ROA %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: c94e31f8-0322-46c7-a5f2-fc6f69a82f63
+		lineageTag: 7aaace5f-e0a5-5057-aa82-4c658b949d94
 
 	measure 'KPI ROA % PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Industry ROA %], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.00\%
-		lineageTag: 1db88423-7510-4cd2-829b-b4cbcc164252
+		lineageTag: bb7ecaea-dce8-5722-9d6d-595662959e09
 
 	measure 'KPI Complaints per $1B' =
 			VAR q = [Report Quarter]
 			RETURN CALCULATE ( [Complaints per $1B Deposits], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.0
-		lineageTag: ae5252ad-1ad2-47f1-b869-e0718ded0b9a
+		lineageTag: d9924828-b49f-526f-87c7-f16d55a5d318
 
 	measure 'KPI Complaints per $1B PQ' =
 			VAR q = [Previous Quarter]
 			RETURN CALCULATE ( [Complaints per $1B Deposits], REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 		formatString: 0.0
-		lineageTag: 2e67e132-0c7e-44bb-a8a8-3fe149a25757
+		lineageTag: 12b85510-5f4f-5323-b634-850b5b2c0fba
 
 	measure 'Arrow Banks' =
 			VAR d = [Banks Reporting] - [Banks Reporting PQ]
 			RETURN IF ( ISBLANK ( [Banks Reporting PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "#,0" ) & " banks vs prior quarter" )
-		lineageTag: ff7f994c-dff7-4c90-8d28-c261964ee5d2
+		lineageTag: f72a0cb1-8de8-5d92-b19a-f043b288530b
 
 	measure 'Color Banks' =
 			VAR d = [Banks Reporting] - [Banks Reporting PQ]
 			RETURN IF ( d >= 0, "#0F766E", "#D9480F" )
-		lineageTag: a9eb4e1c-c54f-4ea7-9b7a-2a6a67cf19fc
+		lineageTag: b74a314c-2699-5768-9ae1-b4ba780e1b8f
 
 	measure 'Arrow Assets' =
 			VAR d = DIVIDE ( [KPI Total Assets $B] - [KPI Total Assets $B PQ], [KPI Total Assets $B PQ] )
 			RETURN IF ( ISBLANK ( [KPI Total Assets $B PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.0%" ) & " vs prior quarter" )
-		lineageTag: da288075-8e9d-4e73-b126-3519ecc97419
+		lineageTag: 0b290b5a-4870-583c-8d39-eeb351360ff3
 
 	measure 'Color Assets' =
 			VAR d = DIVIDE ( [KPI Total Assets $B] - [KPI Total Assets $B PQ], [KPI Total Assets $B PQ] )
 			RETURN IF ( d >= 0, "#0F766E", "#D9480F" )
-		lineageTag: 7cbadd76-bd22-45ca-93e7-9f514c9f24d8
+		lineageTag: 31b977e2-ed66-5df5-bcc9-f0439c8a4308
 
 	measure 'Arrow Tier 1' =
 			VAR d = [KPI Tier 1 %] - [KPI Tier 1 % PQ]
 			RETURN IF ( ISBLANK ( [KPI Tier 1 % PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
-		lineageTag: 87f0abf8-89d9-4a47-85d9-aa45c3fa7b88
+		lineageTag: e1eb536e-a351-5495-8e3b-82c1832a842d
 
 	measure 'Color Tier 1' =
 			VAR d = [KPI Tier 1 %] - [KPI Tier 1 % PQ]
 			RETURN IF ( d >= 0, "#0F766E", "#D9480F" )
-		lineageTag: 6b08e209-8df1-4681-a771-a1e232f788c0
+		lineageTag: 2d99491d-244b-514f-ad9f-c55d2fb3ede3
 
 	measure 'Arrow NCL' =
 			VAR d = [KPI NCL %] - [KPI NCL % PQ]
 			RETURN IF ( ISBLANK ( [KPI NCL % PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
-		lineageTag: a78c7c13-19da-4dcc-b37f-0b09a1efefb0
+		lineageTag: 2eb7c5e4-3eab-5859-8102-d6051f167c9f
 
 	measure 'Color NCL' =
 			VAR d = [KPI NCL %] - [KPI NCL % PQ]
 			RETURN IF ( d <= 0, "#0F766E", "#D9480F" )
-		lineageTag: 41909624-303b-45a7-aa69-980ece6caf53
+		lineageTag: 0993127a-289b-5d65-96c6-322b2636e6dc
 
 	measure 'Arrow ROA' =
 			VAR d = [KPI ROA %] - [KPI ROA % PQ]
 			RETURN IF ( ISBLANK ( [KPI ROA % PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.00" ) & " pp vs prior quarter" )
-		lineageTag: 9c796f3c-82db-4194-a8f7-52fe50f6dd94
+		lineageTag: 9649e703-ced4-582b-8e41-189f92f15916
 
 	measure 'Color ROA' =
 			VAR d = [KPI ROA %] - [KPI ROA % PQ]
 			RETURN IF ( d >= 0, "#0F766E", "#D9480F" )
-		lineageTag: 54086a0a-aeea-492c-84d9-3c6a1071b13d
+		lineageTag: b4b32ef2-1afe-5948-bed3-fd4ce8792f27
 
 	measure 'Arrow Complaints' =
 			VAR d = [KPI Complaints per $1B] - [KPI Complaints per $1B PQ]
 			RETURN IF ( ISBLANK ( [KPI Complaints per $1B PQ] ), "",
 			    IF ( d >= 0, "▲ ", "▼ " ) & FORMAT ( ABS ( d ), "0.0" ) & " vs prior quarter" )
-		lineageTag: 2bdb4721-39f4-4791-87e7-55193a5d1a28
+		lineageTag: bddfe554-cfb3-5855-8943-c33666a17793
 
 	measure 'Color Complaints' =
 			VAR d = [KPI Complaints per $1B] - [KPI Complaints per $1B PQ]
 			RETURN IF ( d <= 0, "#0F766E", "#D9480F" )
-		lineageTag: be1a2687-b653-4bf4-8fcb-b81f805ab56b
+		lineageTag: 696d4120-e27b-5e71-9f0f-371cdbdbe2ff
 
 	measure 'Bank NCL %' = SELECTEDVALUE ( Scorecard[NONCURRENT_LOANS_PCT] )
 		formatString: 0.00
-		lineageTag: 1133e343-27b2-4374-9ff5-68633cbfed0d
+		lineageTag: 71a83c8d-3369-5b04-9ef3-fb3d2734110a
 
 	measure 'Bank Tier 1 %' = SELECTEDVALUE ( Scorecard[TIER1_LEVERAGE_PCT] )
 		formatString: 0.00
-		lineageTag: 00981be9-775d-4f83-9812-efa667707461
+		lineageTag: 65508ab1-5573-5955-9aac-a4ebf87751a0
 
 	measure 'Bank ROA %' = SELECTEDVALUE ( Scorecard[ROA_PCT] )
 		formatString: 0.00
-		lineageTag: 91bbf26c-28bd-4363-b33c-cfdf356fb1e4
+		lineageTag: e241d7d5-7788-589f-97f6-1dc088aea53e
 
 	measure 'Peer Median NCL %' =
 			VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
@@ -217,7 +217,7 @@ table Scorecard
 			    CALCULATE ( MEDIAN ( Scorecard[NONCURRENT_LOANS_PCT] ), REMOVEFILTERS ( Bank ), REMOVEFILTERS ( 'Early Warning' ), REMOVEFILTERS ( Scorecard[CERT] ),
 			        Scorecard[ASSET_SIZE_TIER] = tier ) )
 		formatString: 0.00
-		lineageTag: c50b377d-64f0-4366-8828-9b6ee348b438
+		lineageTag: dc7edc2e-2026-5407-9993-0da390e6864e
 
 	measure 'Peer Median Tier 1 %' =
 			VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
@@ -225,7 +225,7 @@ table Scorecard
 			    CALCULATE ( MEDIAN ( Scorecard[TIER1_LEVERAGE_PCT] ), REMOVEFILTERS ( Bank ), REMOVEFILTERS ( 'Early Warning' ), REMOVEFILTERS ( Scorecard[CERT] ),
 			        Scorecard[ASSET_SIZE_TIER] = tier ) )
 		formatString: 0.00
-		lineageTag: af48c0ce-a40a-482b-b2b4-7218cf13912c
+		lineageTag: 6a53617c-dce3-52eb-af86-f5d89f54d4aa
 
 	measure 'Peer Median ROA %' =
 			VAR tier = SELECTEDVALUE ( Scorecard[ASSET_SIZE_TIER] )
@@ -233,18 +233,18 @@ table Scorecard
 			    CALCULATE ( MEDIAN ( Scorecard[ROA_PCT] ), REMOVEFILTERS ( Bank ), REMOVEFILTERS ( 'Early Warning' ), REMOVEFILTERS ( Scorecard[CERT] ),
 			        Scorecard[ASSET_SIZE_TIER] = tier ) )
 		formatString: 0.00
-		lineageTag: acd8f478-59c3-4af0-ae5a-d7a3eb1e12f7
+		lineageTag: 70ec88c6-45c7-54fc-95b1-fc3b9cc1d231
 
 	measure 'Bank Complaint Peer Percentile' =
 			VAR q = [Report Quarter]
 			VAR p = CALCULATE ( SELECTEDVALUE ( Scorecard[COMPLAINTS_PER_1B_DEPOSITS_PEER_PCTILE] ), REMOVEFILTERS ( 'Quarter' ), Scorecard[REPORT_DATE] = q )
 			RETURN IF ( ISBLANK ( p ) || p = 0, "No CFPB complaints matched to this bank", "Higher complaint rate than " & FORMAT ( p, "0%" ) & " of size peers" )
-		lineageTag: e1560299-204a-4be6-845c-fc917b340240
+		lineageTag: 8ebcc3e8-1bf0-5ca3-ba6d-73be3e54a681
 
 	column CERT
-		dataType: double
+		dataType: int64
 		formatString: 0
-		lineageTag: 6e59271e-b72d-4ba5-a4f8-722ae980731e
+		lineageTag: 1325f9d2-5a95-5ceb-989b-af09207e3dfa
 		summarizeBy: none
 		sourceColumn: CERT
 
@@ -253,26 +253,24 @@ table Scorecard
 	column REPORT_DATE
 		dataType: dateTime
 		formatString: d mmm yyyy
-		lineageTag: 4365bd20-8543-4b0c-bc26-854142c081b0
+		lineageTag: 365358cc-6f21-5e00-91d9-504f8c2f1c14
 		summarizeBy: none
 		sourceColumn: REPORT_DATE
 
 		annotation SummarizationSetBy = User
 
-		annotation UnderlyingDateTimeDataType = Date
-
 	column ASSET_SIZE_TIER
 		dataType: string
-		lineageTag: dd427497-46fd-4781-bfc9-7420e55bfc7d
+		lineageTag: 9723c1a6-1f54-584c-9807-394582869aef
 		summarizeBy: none
 		sourceColumn: ASSET_SIZE_TIER
 
 		annotation SummarizationSetBy = User
 
 	column PEERS_IN_TIER
-		dataType: double
+		dataType: int64
 		formatString: #,0
-		lineageTag: c949d303-7f02-4d67-9207-3a7a7a42aeb3
+		lineageTag: 4387f597-5bb4-5172-b0e3-e6b9b3b9649b
 		summarizeBy: none
 		sourceColumn: PEERS_IN_TIER
 
@@ -281,7 +279,7 @@ table Scorecard
 	column TOTAL_ASSETS_K
 		dataType: double
 		formatString: #,0
-		lineageTag: 25b5e32f-49e2-4ae6-9647-b78efed8a3bc
+		lineageTag: d6b1dee9-199a-56d3-9228-5995c04de1a4
 		summarizeBy: sum
 		sourceColumn: TOTAL_ASSETS_K
 
@@ -290,7 +288,7 @@ table Scorecard
 	column TOTAL_DEPOSITS_K
 		dataType: double
 		formatString: #,0
-		lineageTag: 5d61326d-51ab-4ba7-b614-2375f29b49ca
+		lineageTag: 7cdb2c46-dfe4-5f86-8f5e-14b7f920039d
 		summarizeBy: sum
 		sourceColumn: TOTAL_DEPOSITS_K
 
@@ -299,7 +297,7 @@ table Scorecard
 	column NET_INCOME_QTR_K
 		dataType: double
 		formatString: #,0
-		lineageTag: 07123816-e578-4374-87f4-df7a5868abae
+		lineageTag: ba4347ed-437e-5dca-84e6-b59856124c19
 		summarizeBy: sum
 		sourceColumn: NET_INCOME_QTR_K
 
@@ -308,7 +306,7 @@ table Scorecard
 	column ROA_PCT
 		dataType: double
 		formatString: 0.00
-		lineageTag: e45fcb49-632e-4a72-98fd-22735a01d402
+		lineageTag: e884456a-e9ca-5a05-99af-bb40d743013e
 		summarizeBy: none
 		sourceColumn: ROA_PCT
 
@@ -317,7 +315,7 @@ table Scorecard
 	column NONCURRENT_LOANS_PCT
 		dataType: double
 		formatString: 0.00
-		lineageTag: 5f190955-f055-41bd-a179-e9f40ad12315
+		lineageTag: 2f413ae4-7dd6-584e-9a52-0e757cf6b0c6
 		summarizeBy: none
 		sourceColumn: NONCURRENT_LOANS_PCT
 
@@ -326,7 +324,7 @@ table Scorecard
 	column TIER1_LEVERAGE_PCT
 		dataType: double
 		formatString: 0.00
-		lineageTag: 6198376d-3489-42e2-9799-a99eca8ee38f
+		lineageTag: e80a6ebe-b73c-5c51-9f8b-fb82c92570ba
 		summarizeBy: none
 		sourceColumn: TIER1_LEVERAGE_PCT
 
@@ -335,7 +333,7 @@ table Scorecard
 	column EFFICIENCY_RATIO_PCT
 		dataType: double
 		formatString: 0.0
-		lineageTag: 23112c98-e554-4e49-aa87-dd7fe65d83e4
+		lineageTag: 7c7ca840-74c0-5c8e-81a9-073128fd0f23
 		summarizeBy: none
 		sourceColumn: EFFICIENCY_RATIO_PCT
 
@@ -344,7 +342,7 @@ table Scorecard
 	column CRE_TO_EQUITY_PCT
 		dataType: double
 		formatString: 0.0
-		lineageTag: cb3e4e08-1b88-4906-a7fd-3184cbdcb26c
+		lineageTag: cb383658-9958-5a44-94bc-585e6fe5222d
 		summarizeBy: none
 		sourceColumn: CRE_TO_EQUITY_PCT
 
@@ -353,7 +351,7 @@ table Scorecard
 	column LOAN_GROWTH_YOY_PCT
 		dataType: double
 		formatString: 0.0
-		lineageTag: 21705c34-c7e0-49f0-9184-8f06f45cd1b8
+		lineageTag: 7e59cd08-fff8-5320-9826-01631fdfddb9
 		summarizeBy: none
 		sourceColumn: LOAN_GROWTH_YOY_PCT
 
@@ -362,7 +360,7 @@ table Scorecard
 	column DEPOSIT_GROWTH_YOY_PCT
 		dataType: double
 		formatString: 0.0
-		lineageTag: e659b09b-949d-4094-bdaa-e561b32223ce
+		lineageTag: 5e22ef2a-873f-5d65-bfd9-2d242c147d0d
 		summarizeBy: none
 		sourceColumn: DEPOSIT_GROWTH_YOY_PCT
 
@@ -370,16 +368,16 @@ table Scorecard
 
 	column COMPLAINT_DATA_COVERED
 		dataType: boolean
-		lineageTag: da24033c-536d-4e39-b946-20fa2bb74208
+		lineageTag: 8810a30a-d4c6-5bcf-8379-6a057a6e574b
 		summarizeBy: none
 		sourceColumn: COMPLAINT_DATA_COVERED
 
 		annotation SummarizationSetBy = User
 
 	column COMPLAINTS
-		dataType: double
+		dataType: int64
 		formatString: #,0
-		lineageTag: 59180122-0fd4-4d1e-9b86-aef8ffd2907f
+		lineageTag: 21c1c61d-32af-57ea-a1e7-2f1dcf26423a
 		summarizeBy: sum
 		sourceColumn: COMPLAINTS
 
@@ -388,7 +386,7 @@ table Scorecard
 	column COMPLAINTS_PER_1B_DEPOSITS
 		dataType: double
 		formatString: 0.0
-		lineageTag: bdf45a33-4a1b-423f-ad38-ddc0286e9167
+		lineageTag: ec846252-cc58-5b6b-8804-2655669f71d8
 		summarizeBy: none
 		sourceColumn: COMPLAINTS_PER_1B_DEPOSITS
 
@@ -397,7 +395,7 @@ table Scorecard
 	column COMPLAINTS_PER_1B_DEPOSITS_PEER_PCTILE
 		dataType: double
 		formatString: 0%
-		lineageTag: 168d92d8-6940-4521-9ca8-611bf0e3577f
+		lineageTag: 52ef1e1a-6af1-5173-ac68-6d748ac7cd89
 		summarizeBy: none
 		sourceColumn: COMPLAINTS_PER_1B_DEPOSITS_PEER_PCTILE
 
@@ -416,4 +414,3 @@ table Scorecard
 				    Kept
 
 	annotation PBI_ResultType = Table
-

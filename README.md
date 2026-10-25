@@ -13,7 +13,8 @@ When Silicon Valley Bank failed in March 2023, and when Synapse collapsed in 202
 fintech customers' funds, those were the people caught out.
 
 This project is an early-warning system for them, built only from public data. Every quarter it
-scores every FDIC-insured bank (4,257 in 2026 Q2) on its chance of distress in the next 12 months.
+rates every FDIC-insured bank (4,257 in 2026 Q2) on its chance of distress in the next 12 months
+(new banks and offices of foreign banks are listed but not scored).
 It gives each bank's top three reasons and compares it with banks of the same size. A
 **watchlist** lets you enter the banks you deal with and see their scores, trends and reasons on
 one page.
@@ -78,21 +79,59 @@ Catalog volume.
 | Snowflake cost | about 0.2 credits for the full run |
 | Spot checks against the live APIs | JPMorgan Chase total assets Q2 2026, Wells Fargo Q4 2008, complaint counts for Jan 2025 and Jul 2026, failed-bank list: all exact matches |
 
-### Distress model
+### Distress model (version 5)
 
 A bank-quarter is labelled **distressed** if, within the next 4 quarters, the bank fails, loses money two
 quarters in a row, has non-current loans above 3%, or has Tier 1 leverage below 5%. Training uses
-2001–2019 and the model is tested once on 2020–2024, so it never sees the future.
+2001–2019 and the model is tested once on 2020–2024, so it never sees the future. The model uses
+**FDIC call-report features only**; CFPB complaints are shown next to the scores as context, not
+used as inputs. Full details, known limits and the changes planned for v6:
+[model card](docs/model_card.md).
 
-| Test period 2020–2024 | Gradient boosting (champion v4) | Logistic regression baseline |
-|---|---|---|
-| ROC-AUC | **0.854** | 0.742 |
-| PR-AUC | **0.357** (6.4× the 5.6% base rate) | 0.222 |
-| Distress cases caught in the riskiest 10% | **53.5%** | 39.6% |
+Version 5 fixes data problems found in a review of v4
+([investigation](docs/investigations/model_credibility.md)) and is compared with v4 on the **same
+test period and the same 86,296 test rows** (4,761 distressed, base rate 5.5%):
 
-Scores for 2026 Q2 (4,257 banks): High 195, Elevated 388, Watch 971, Low 2,330, Already in distress 373.
-Each bank gets its top three reasons, found by resetting one feature at a time to the median and
-measuring how much the probability falls.
+| Test 2020–2024, same rows | v5 (gradient boosting) | v4 | Logistic regression baseline (v5 data) |
+|---|---|---|---|
+| ROC-AUC | **0.8515** | 0.8519 | 0.733 |
+| PR-AUC | **0.333** (6.0× the base rate) | 0.335 | 0.207 |
+| Distress cases caught in the riskiest 10% | **52.6%** | 53.0% | 39.0% |
+
+v5 ranks banks as well as v4 while fixing what v4 got wrong: capital ratios that banks don't
+report were read as 0% (from 2020, 42.6% of banks use the simpler leverage framework and file no
+risk-based ratio), offices of foreign banks were flagged as "already in distress", and new banks
+were scored on start-up losses.
+
+**Why v4's earlier figure (PR-AUC 0.357) was higher.** It was measured on a test set that still
+included banks under 3 years old. Their start-up losses trigger the "two losses in a row" label
+and are easy to predict, which flattered the score. On the same rows, v4 scores 0.335.
+
+**Label sensitivity check.** A challenger trained on a stricter label (failure, Tier 1 < 5% or
+non-current loans > 3%; no "two losses" rule) reaches ROC-AUC 0.858 and PR-AUC 0.243 on its own,
+rarer outcome (base rate 3.1%). Judged on the main label it is clearly weaker (PR-AUC 0.233), so
+the main label stays. The challenger is logged in MLflow, not registered.
+
+**Risk bands** have fixed meanings: the share of banks in the band that became distressed within
+a year, measured out of sample on 2003–2019 (each year predicted by a model trained only on
+earlier years):
+
+| Band | Probability | Distress rate, 2003–2019 (sets the cut-off) | Distress rate, 2020–2024 (report only) |
+|---|---|---|---|
+| High | ≥ 0.358 | 50.0% (35,858 bank-quarters) | 43.8% (3,177) |
+| Elevated | 0.163 – 0.358 | 25.0% (45,564) | 20.0% (5,899) |
+| Watch | 0.036 – 0.163 | 10.0% (123,720) | 6.5% (23,853) |
+| Low | < 0.036 | 2.8% (188,966) | 1.2% (53,367) |
+
+"Distress" includes crossing the 3% non-current-loan line, so banks just under it score high: 32
+of v5's 50 riskiest banks in 2026 Q2 have non-current loans between 2% and 3%, against 7% of all
+scored banks.
+
+Banks under 3 years old (**New bank – not scored**) and US offices of foreign banks (**Office of a
+foreign bank – not scored**) get no probability. Scores for 2026 Q2 with v5 (4,257 banks): High
+150, Elevated 230, Watch 878, Low 2,618, Already in distress 346, New bank 20, Foreign office 15.
+Each scored bank gets its top three reasons, found by resetting one reported feature at a time to
+the median and measuring how much the probability falls.
 
 > This is a portfolio model on public data. It is not a supervisory rating and should not be used to
 > judge any real bank.
@@ -228,12 +267,13 @@ Five kinds of tests, each in code:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic and the watchlist export (JSON schema, rounding, new-bank flag, 8-quarter ordering). | `ingestion/tests/` | 110 passed |
+| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value) and the top-20 release check. | `ingestion/tests/` | 166 passed |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload and list, Snowflake key-pair login and a small `write_pandas` load. Skipped when credentials are missing. | `tests/integration/` (10 tests) | run on demand with credentials |
 | **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. | `tests/e2e/` | 17 passed (20 Oct 2026 run) |
-| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values, value ranges, source freshness. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`) and checks in the silver notebook | 87 passed, 2 warned, 0 errors |
-| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors. | `tests/smoke/` | 7 passed |
-| **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; new-bank label; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed |
+| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5) |
+| **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores in Databricks and in Snowflake RAW (25 Oct 2026) |
+| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (including the release check before dbt). | `tests/smoke/` | 7 passed |
+| **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v5 data, 25 Oct 2026) |
 
 How to run them:
 

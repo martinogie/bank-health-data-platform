@@ -17,9 +17,8 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2            # 2: bands N and F (not scored) replace the old "nb" new-bank flag
 HISTORY_QUARTERS = 8
-NEW_BANK_YEARS = 3.0          # younger banks: ratios distorted by start-up costs (review finding M-02)
 MAX_BYTES = 3 * 1024 * 1024
 
 # Watchlist metric key -> (scorecard column, label, unit, higher_is_better)
@@ -31,13 +30,13 @@ METRICS = {
     "dep": ("deposit_growth_yoy_pct", "Deposit growth (year on year)", "%", None),
 }
 
-BAND_CODES = {"High": "H", "Elevated": "E", "Watch": "W", "Low": "L", "Already in distress": "D"}
+BAND_CODES = {"High": "H", "Elevated": "E", "Watch": "W", "Low": "L", "Already in distress": "D",
+              "New bank – not scored": "N", "Office of a foreign bank – not scored": "F"}
 TIER_CODES = {"1: <$100M": 1, "2: $100M-$1B": 2, "3: $1B-$10B": 3, "4: $10B-$100B": 4, "5: >$100B": 5}
 
 # Model feature -> plain-language label and unit, for the reasons (features from _features.py)
 FEATURE_LABELS = {
     "tier1_leverage_pct": ("Tier 1 leverage ratio", "pct"),
-    "total_risk_based_capital_pct": ("Total risk-based capital ratio", "pct"),
     "equity_to_assets_pct": ("Equity to assets", "pct"),
     "noncurrent_loans_pct": ("Non-current loans", "pct_loans"),
     "net_chargeoff_rate_pct": ("Net charge-off rate", "pct"),
@@ -151,11 +150,6 @@ def bank_age_years(established, as_of) -> float | None:
     return round((ref - est).days / 365.25, 1)
 
 
-def is_new_bank(age_years: float | None) -> bool:
-    """Banks under NEW_BANK_YEARS old: start-up losses and costs distort their ratios."""
-    return age_years is not None and age_years < NEW_BANK_YEARS
-
-
 def quarter_ends(latest, n: int = HISTORY_QUARTERS) -> list[date]:
     """The n quarter-ends ending at `latest`, oldest first."""
     q = _as_date(latest)
@@ -175,6 +169,13 @@ def _month_end(year: int, month: int) -> date:
 def quarter_label(d) -> str:
     d = _as_date(d)
     return f"{d.year} Q{(d.month - 1) // 3 + 1}"
+
+
+def band_code(risk_band: str | None) -> str:
+    """Band name from 05_score -> one-letter code. An unknown band is an error, not 'Low'."""
+    if risk_band not in BAND_CODES:
+        raise ValueError(f"unknown risk band {risk_band!r}")
+    return BAND_CODES[risk_band]
 
 
 # --------------------------------------------------------------- history
@@ -225,19 +226,17 @@ def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: li
             "age": age,
             "t": TIER_CODES.get(r.get("asset_size_tier")),
             "p": round_or_none(r.get("distress_probability"), 3),
-            "b": BAND_CODES.get(r.get("risk_band"), "L"),
+            "b": band_code(r.get("risk_band")),
             "pp": round_or_none(None if r.get("peer_pct") is None else 100 * r["peer_pct"], 0),
             "r": [x for x in (plain_reason(r.get(f"reason_{i}")) for i in (1, 2, 3)) if x],
             "h": build_history(hist_by_cert.get(cert, []), quarters),
         }
-        if is_new_bank(age):
-            rec["nb"] = 1
         if r.get("has_cfpb_complaints"):
             rec["cx"] = round_or_none(r.get("complaints"), 0)
             rec["cr"] = round_or_none(r.get("complaints_per_1b_deposits"), 2)
         banks.append(rec)
 
-    banks.sort(key=lambda b: (-(b["p"] or 0), b["c"]))
+    banks.sort(key=lambda b: (b["p"] is None, -(b["p"] or 0), b["c"]))     # not scored last
     first = bank_rows[0]
     return {
         "meta": {
@@ -251,7 +250,6 @@ def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: li
             "history": [quarter_label(q) for q in quarters],
             "metrics": {k: {"label": v[1], "unit": v[2], "higherIsBetter": v[3]} for k, v in METRICS.items()},
             "bands": {v: k for k, v in BAND_CODES.items()},
-            "newBankYears": NEW_BANK_YEARS,
         },
         "peers": peers,
         "banks": banks,
@@ -287,7 +285,8 @@ def validate_payload(payload: dict) -> None:
         need(len(b["r"]) <= 3, f"bank {b['c']}: more than 3 reasons")
         need(set(b["h"]) == set(METRICS) and all(len(v) == n_hist for v in b["h"].values()),
              f"bank {b['c']}: history must have every metric with {n_hist} values")
-        need(b.get("nb", 1) == 1, f"bank {b['c']}: nb must be 1 when present")
+        need((b["p"] is None) == (b["b"] in ("N", "F")),
+             f"bank {b['c']}: only not-scored banks (N, F) have no probability")
 
 
 def write_payload(payload: dict, path: Path) -> int:
@@ -312,7 +311,7 @@ with ew as (select * from MARTS.MART_EARLY_WARNING),
         select cert,
                percent_rank() over (partition by asset_size_tier order by distress_probability) as peer_pct
         from ew
-        where not already_in_distress
+        where risk_band in ('High', 'Elevated', 'Watch', 'Low')
      )
 select ew.cert, ew.bank_name, ew.city, ew.state_code, ew.asset_size_tier, ew.total_assets_k,
        ew.distress_probability, ew.risk_band, ew.already_in_distress,

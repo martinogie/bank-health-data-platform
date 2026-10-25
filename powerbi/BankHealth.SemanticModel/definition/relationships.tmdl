@@ -1,21 +1,20 @@
-relationship 09781936-475c-4f31-af83-113374617205
+relationship 312abafe-7b30-58e2-b67d-4f3c1989ae47
 	fromColumn: Scorecard.CERT
 	toColumn: Bank.CERT
 
-relationship b7f2cf26-7f0f-469b-be86-61baa8457053
+relationship 000b14e0-82a6-5ffa-bebf-67105596dc21
 	fromColumn: Complaints.CERT
 	toColumn: Bank.CERT
 
-relationship 809a3ebd-3b9c-4045-87be-3bd3af7deeab
+relationship 0ce849f3-c6f4-5562-b7a5-3aaea25ce6dc
 	crossFilteringBehavior: bothDirections
 	fromColumn: 'Early Warning'.CERT
 	toColumn: Bank.CERT
 
-relationship 13dfd5b2-9aed-4cf3-92d4-9071fb7f640c
+relationship d770808e-1cb1-5e11-97a4-a2b99576b673
 	fromColumn: Scorecard.REPORT_DATE
 	toColumn: Quarter.'Quarter End'
 
-relationship c7a12030-6411-4dde-99aa-d471c0beef40
+relationship 4309e3ef-a446-5dc6-b0bc-105aa99d859e
 	fromColumn: Complaints.QUARTER_END_DATE
 	toColumn: Quarter.'Quarter End'
-

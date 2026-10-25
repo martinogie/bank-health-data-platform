@@ -111,8 +111,11 @@ models:
       - name: bank_name
         tests: [not_null]
       - name: distress_probability
+        description: NULL only for banks that are not scored (new banks, foreign-bank offices).
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "risk_band not in ('New bank – not scored', 'Office of a foreign bank – not scored')"
           - dbt_expectations.expect_column_values_to_be_between:
               arguments: {min_value: 0, max_value: 1}
       - name: risk_percentile
@@ -121,9 +124,11 @@ models:
               arguments: {min_value: 0, max_value: 1}
       - name: risk_band
         tests:
+          - not_null
           - accepted_values:
               arguments:
-                values: [High, Elevated, Watch, Low, Already in distress]
+                values: [High, Elevated, Watch, Low, Already in distress,
+                         "New bank – not scored", "Office of a foreign bank – not scored"]
       - name: asset_size_tier
         description: NULL only if the bank's latest quarter is missing from the scorecard.
         tests:

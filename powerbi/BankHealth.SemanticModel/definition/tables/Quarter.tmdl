@@ -1,23 +1,23 @@
 table Quarter
-	lineageTag: 07250b07-da5e-4c13-9c28-2f5945f02281
+	lineageTag: 32baa62c-979c-518a-be61-3533ac160e62
 
 	column 'Quarter End'
 		dataType: dateTime
 		formatString: mmm yyyy
-		lineageTag: 557b92fa-197d-4ead-913f-820fde5512c3
+		lineageTag: e84cf2b8-24d5-556b-9854-390e453e6877
 		summarizeBy: none
 		sourceColumn: [Quarter End]
 
 	column Year
 		dataType: int64
 		formatString: 0
-		lineageTag: 2863ffee-7f2e-4021-8e6e-2740b1e8e024
+		lineageTag: 62a0a085-edae-5a68-a6bb-533362183813
 		summarizeBy: none
 		sourceColumn: [Year]
 
 	column 'Quarter Label'
 		dataType: string
-		lineageTag: 0dbec48d-ff11-4de6-9448-69b248a4fce1
+		lineageTag: 0bed514b-f28c-5ba5-9244-723faad39038
 		summarizeBy: none
 		sourceColumn: [Quarter Label]
 		sortByColumn: 'Quarter End'
@@ -25,7 +25,7 @@ table Quarter
 	column n
 		dataType: int64
 		isHidden
-		lineageTag: 207b7993-d4d1-491a-ba4b-860954a7d889
+		lineageTag: d1c6ae58-5a0b-5071-b4a1-8a902ebb5168
 		summarizeBy: none
 		sourceColumn: [n]
 
@@ -41,5 +41,4 @@ table Quarter
 				            & ROUNDUP ( MONTH ( EOMONTH ( DATE ( 2000, 1, 1 ), [n] * 3 - 1 ) ) / 3, 0 )
 				)
 
-	annotation PBI_Id = 372d080ca6ec4da08a0ffeb9e61832e7
-
+	annotation PBI_Id = f8cff7bb0e3b4793a0cbc67527e80dd4

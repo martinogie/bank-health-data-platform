@@ -1,21 +1,21 @@
 table Bank
-	lineageTag: 5bc85db3-3645-4d55-b900-09296f10562a
+	lineageTag: fe7cd0d3-d2bd-556a-bd17-2cc0f90aaa5a
 
 	measure 'Selected Bank' =
 			VAR b = SELECTEDVALUE ( Bank[BANK_NAME] )
 			RETURN IF ( ISBLANK ( b ), "Right-click a bank on Early warning → Drill through → Bank detail",
 			    b & " · " & SELECTEDVALUE ( Bank[CITY] ) & ", " & SELECTEDVALUE ( Bank[STATE_CODE] ) & " · CERT " & SELECTEDVALUE ( Bank[CERT] ) )
-		lineageTag: f03ef93f-edb1-4225-8c42-138d0785b1c0
+		lineageTag: 6fcf978a-193c-51e2-8930-c6e145225dce
 
 	measure 'Bank Holding Company' =
 			VAR h = SELECTEDVALUE ( Bank[HOLDING_COMPANY] )
 			RETURN IF ( ISBLANK ( h ), "No holding company on file", "Holding company: " & h )
-		lineageTag: c0138366-c438-4a53-8131-6fa9f68c66ae
+		lineageTag: e929b010-cd92-5f74-8e48-945cb9b5135e
 
 	column CERT
-		dataType: double
+		dataType: int64
 		formatString: 0
-		lineageTag: 80922357-e003-4c83-a8cc-ebd325a2a9db
+		lineageTag: 2c80e390-eb2c-5b71-bf13-c2c92d704f7d
 		summarizeBy: none
 		sourceColumn: CERT
 
@@ -23,7 +23,7 @@ table Bank
 
 	column BANK_NAME
 		dataType: string
-		lineageTag: d81cfa58-3319-441e-b63c-bc7ce8b01368
+		lineageTag: 21628c24-7f88-58b4-9b87-9c4881d89277
 		summarizeBy: none
 		sourceColumn: BANK_NAME
 
@@ -31,7 +31,7 @@ table Bank
 
 	column CITY
 		dataType: string
-		lineageTag: 59e4b82f-effe-4338-b56f-818bf6121dd9
+		lineageTag: cc0f5e4a-33af-5d89-ba67-40872281618d
 		summarizeBy: none
 		sourceColumn: CITY
 
@@ -39,7 +39,7 @@ table Bank
 
 	column STATE_CODE
 		dataType: string
-		lineageTag: b13ac0f2-dcf6-4202-83e8-a50b68057306
+		lineageTag: 224a08ba-9fe7-5e9e-b6b4-8abe1b63c168
 		summarizeBy: none
 		sourceColumn: STATE_CODE
 
@@ -47,7 +47,7 @@ table Bank
 
 	column STATE_NAME
 		dataType: string
-		lineageTag: c10c64e8-a1d8-4eef-8dcc-5a0fab972ac3
+		lineageTag: 411452c6-d9e2-54de-b8f8-794da03ed04b
 		summarizeBy: none
 		sourceColumn: STATE_NAME
 
@@ -55,7 +55,7 @@ table Bank
 
 	column BANK_CLASS
 		dataType: string
-		lineageTag: d53851d7-e9d5-4953-b888-b1d9aebd7404
+		lineageTag: 3a6f20d6-2338-5f6e-a1d5-47e1e5a3b034
 		summarizeBy: none
 		sourceColumn: BANK_CLASS
 
@@ -63,7 +63,7 @@ table Bank
 
 	column PRIMARY_REGULATOR
 		dataType: string
-		lineageTag: 3a268c87-0ac6-4e4b-bed0-1e5176a5036c
+		lineageTag: 0788596d-7901-5869-95d7-1c51885bd569
 		summarizeBy: none
 		sourceColumn: PRIMARY_REGULATOR
 
@@ -71,7 +71,7 @@ table Bank
 
 	column HOLDING_COMPANY
 		dataType: string
-		lineageTag: cc3f60d3-b880-4dac-a60d-597b356dd523
+		lineageTag: 9b39a95e-a856-529e-8a6a-9b1d9d71a6cd
 		summarizeBy: none
 		sourceColumn: HOLDING_COMPANY
 
@@ -79,7 +79,7 @@ table Bank
 
 	column IS_ACTIVE
 		dataType: boolean
-		lineageTag: fc801306-f3aa-47c7-acda-d16c1b2487c4
+		lineageTag: 8d77fe8f-fcea-5c25-80cd-e82b04d2e239
 		summarizeBy: none
 		sourceColumn: IS_ACTIVE
 
@@ -87,7 +87,7 @@ table Bank
 
 	column HAS_FAILED
 		dataType: boolean
-		lineageTag: 8349b54d-1740-4c34-b423-3c7309418d35
+		lineageTag: cb2c5cfd-6f5e-5d03-9f81-84060d25d240
 		summarizeBy: none
 		sourceColumn: HAS_FAILED
 
@@ -96,7 +96,7 @@ table Bank
 	column LATEST_TOTAL_ASSETS_K
 		dataType: double
 		formatString: #,0
-		lineageTag: 6a396655-57f5-4bb7-b123-46e19cb8c8f8
+		lineageTag: e3752251-88a6-5f5f-a272-7c9e7d649025
 		summarizeBy: sum
 		sourceColumn: LATEST_TOTAL_ASSETS_K
 
@@ -104,7 +104,7 @@ table Bank
 
 	column LATEST_ASSET_SIZE_TIER
 		dataType: string
-		lineageTag: 1e69d960-6559-4f8e-8ff6-61389221c172
+		lineageTag: e46e1b59-78a9-5869-958c-82e23e5e6b1a
 		summarizeBy: none
 		sourceColumn: LATEST_ASSET_SIZE_TIER
 
@@ -112,7 +112,7 @@ table Bank
 
 	column HAS_CFPB_COMPLAINTS
 		dataType: boolean
-		lineageTag: 84780aed-376d-45ca-ae0f-7a41222a8733
+		lineageTag: bcb88513-754b-5af9-8a93-c407ffd6ff89
 		summarizeBy: none
 		sourceColumn: HAS_CFPB_COMPLAINTS
 
@@ -131,4 +131,3 @@ table Bank
 				    Kept
 
 	annotation PBI_ResultType = Table
-

@@ -41,6 +41,10 @@ FINANCIAL_FIELDS = [
     "RBC1AAJ", "RBCRWAJ",
     # loan mix (CRE concentration = construction + multifamily + nonfarm nonresidential)
     "LNRE", "LNRECONS", "LNREMULT", "LNRENRES", "LNRERES", "LNCI", "LNCON", "LNAG",
+    # reporting framework flags (see docs/investigations/model_credibility.md):
+    # CBLRIND = 1: Community Bank Leverage Ratio bank, reports no risk-based capital (from 2020)
+    # IBA = 1: International Banking Act entity, i.e. a US office of a foreign bank
+    "CBLRIND", "IBA",
 ]
 
 INSTITUTION_FIELDS = [
@@ -187,19 +191,39 @@ def financials_path(out_dir: Path, q: date) -> Path:
     return Path(out_dir) / "financials" / f"financials_{to_repdte(q)}.jsonl.gz"
 
 
+def has_all_fields(path: Path, fields: Iterable[str] = FINANCIAL_FIELDS, sample: int = 50) -> bool:
+    """True if a cached file was downloaded with every field we now request.
+
+    The API returns requested fields even when null, so a field missing from the first rows
+    means the file is from before that field was added (e.g. CBLRIND, IBA) and is stale.
+    """
+    wanted = set(fields)
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as fh:
+            for i, line in enumerate(fh):
+                if wanted <= set(json.loads(line)):
+                    return True
+                if i >= sample:
+                    break
+    except (OSError, ValueError):
+        return False
+    return False
+
+
 def split_cached_quarters(
     quarters: list[date], out_dir: Path, latest_available: date
 ) -> tuple[list[date], list[Path]]:
     """Separate quarters that must be downloaded from ones already complete on disk.
 
     The newest REFRESH_QUARTERS are always re-downloaded (amendments); older quarters
-    are reused if their file exists. Makes a retried or repeated run cheap and safe.
+    are reused if their file exists and has every requested field (files from before a
+    field was added are downloaded again). Makes a retried or repeated run cheap and safe.
     """
     refresh_from = quarter_ends(HISTORY_START, latest_available)[-REFRESH_QUARTERS:][0]
     to_fetch, cached = [], []
     for q in quarters:
         path = financials_path(out_dir, q)
-        if q < refresh_from and path.exists():
+        if q < refresh_from and path.exists() and has_all_fields(path):
             cached.append(path)
         else:
             to_fetch.append(q)
