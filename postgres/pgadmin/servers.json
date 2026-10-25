@@ -1,0 +1,14 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "bank_health (local mirror)",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "bank_health",
+      "Username": "viewer",
+      "SSLMode": "prefer",
+      "Comment": "Read-only. Password: POSTGRES_VIEWER_PASSWORD from .env (typed by you)."
+    }
+  }
+}
