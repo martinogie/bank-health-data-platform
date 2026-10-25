@@ -8,6 +8,7 @@ each item are in the [model card](model_card.md).
 |---|---|---|
 | **v5** | Live (`@champion` since 25 Oct 2026) | Fixes from the credibility review: no risk-based capital feature, foreign offices and new banks not scored, fixed-meaning bands, release checks |
 | **v6** | Planned | A sharper definition of distress and a time-to-distress model |
+| **v7** | Planned, after v6 | Test whether CFPB complaint features add predictive value |
 
 ## v5 (live)
 
@@ -39,6 +40,25 @@ each item are in the [model card](model_card.md).
 3. The hazard model comes next, once the definition is settled.
 4. Calibration is fitted on the final classifier.
 5. The separate outputs need the hazard model's failure-only variant.
+
+## v7: complaint features, tested
+
+- **What it tests:** whether CFPB complaint features add predictive value. They are adopted only
+  if a fair comparison shows a clear gain.
+- **When:** starts after v6 is released.
+
+| Order | Item |
+|---|---|
+| 1 | 7.1 Complaint features as a tested challenger |
+
+**7.1 in brief:**
+1. Back-fill complaints from late 2011, with the same entity resolution as today.
+2. Build features: complaints per $1bn of deposits, change over 4 quarters, share about account
+   management or fees, share with untimely responses.
+3. Normalise for database growth and for products added over time.
+4. Train a v6-based model with and without the features, on the same split.
+5. Report the results overall and for large banks, then record the adopt or reject decision.
+   Calibration must not get worse.
 
 ## How a version is released
 

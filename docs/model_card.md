@@ -213,14 +213,15 @@ compared with v5 on the same 2020–2024 test rows. The order of work is in
   classifier at 4 quarters on the same test rows.
 - It depends on 6.1 and 6.3, because the distress definition must be settled first.
 
-## v7 candidate: complaint features as a tested challenger (not implemented)
+## v7 candidate: complaint features as a tested challenger (planned, not implemented)
 
 v5 uses FDIC call-report features only; CFPB complaints are shown as context. v7 would test
-whether complaints add predictive value, as a challenger that is adopted only on evidence.
+whether complaints add predictive value, as a challenger that is adopted only on evidence. It
+starts after v6 is released; the order of work is in [ROADMAP.md](ROADMAP.md).
 
-**Data.** Ingest the CFPB complaint history back to its start in late 2011, so 2012–2019
-training rows can have complaint features. The current pipeline loads complaints only from
-October 2023, so today no training year has them.
+**Data.** Ingest the CFPB complaint history back to its start in late 2011, with the same entity
+resolution as today, so 2012–2019 training rows can have complaint features. The current pipeline
+loads complaints only from October 2023, so today no training year has them.
 
 **Candidate features** (per bank-quarter, for banks matched to a CFPB company):
 - complaints per $1bn of deposits;
@@ -245,4 +246,5 @@ October 2023, so today no training year has them.
   match need a "no match" flag rather than zero complaints.
 
 **Adoption rule.** Adopt only if the features clearly improve the results without hurting
-calibration. Otherwise complaints stay as context next to the scores.
+calibration, and record the adopt or reject decision. Otherwise complaints stay as context next to
+the scores.
