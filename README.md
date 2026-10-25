@@ -122,6 +122,10 @@ earlier years):
 | Watch | 0.036 – 0.163 | 10.0% (123,720) | 6.5% (23,853) |
 | Low | < 0.036 | 2.8% (188,966) | 1.2% (53,367) |
 
+"Distress" includes crossing the 3% non-current-loan line, so banks just under it score high: 32
+of v5's 50 riskiest banks in 2026 Q2 have non-current loans between 2% and 3%, against 7% of all
+scored banks.
+
 Banks under 3 years old (**New bank – not scored**) and US offices of foreign banks (**Office of a
 foreign bank – not scored**) get no probability. Scores for 2026 Q2 with v5 (4,257 banks): High
 150, Elevated 230, Watch 878, Low 2,618, Already in distress 346, New bank 20, Foreign office 15.

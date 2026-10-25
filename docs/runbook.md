@@ -39,7 +39,35 @@ as version tags. Scoring uses `@champion`. To promote after review:
 4. Run the pipeline (or `05_score` and the Snowflake load) so production scores use the new
    champion.
 
-Rolling back = moving `@champion` back to the previous version and re-scoring.
+## Roll back to v4
+
+Use this if v5 (or a later version) misbehaves after promotion. v4 was trained in serverless
+**environment 4** (numpy 2) and does not load in environment 2, and it needs the
+total risk-based capital feature that v5 code no longer builds. A rollback is therefore a code
+rollback plus a model rollback, not just an alias move.
+
+1. **Pause the DAG** (Airflow UI → `bank_health_weekly` → pause), so no run scores with a mix.
+2. **Code:** on a branch from `main`, revert the v5 merge commit
+   (`git revert -m 1 <merge commit>`). This restores v4's features (with total risk-based
+   capital), percentile bands and scoring. The revert also brings back the old gold rules, so
+   CBLR banks and foreign offices show 0% ratios again (the reason v5 exists).
+3. **Environment pin:** the revert also removes the pin (it came with v5), and the job would then
+   run in the workspace default. Don't rely on that: keep the pin and point it at v4's environment.
+   - `git checkout <v5 merge commit> -- ingestion/databricks_jobs.py scripts/databricks_run.py ingestion/tests/test_databricks_jobs.py`
+   - set `ENVIRONMENT_VERSION = "4"` in `ingestion/databricks_jobs.py` and the expected value in
+     `test_every_task_runs_in_the_pinned_environment`;
+   - run `pytest`, commit with the revert.
+   The v4 notebooks have no environment guard, so nothing else changes.
+4. **Alias:** move `@champion` back to version 4 (Catalog Explorer → `bank_health.ml.distress_model`
+   → version 4 → Aliases). Leave v5 registered; it keeps its `@candidate` alias for later.
+5. **Re-run** gold and scoring with the reverted code: merge the revert, then trigger the DAG with
+   `{"retrain_model": false}`. Gold, scores, Snowflake RAW, dbt marts and the watchlist file are all
+   rebuilt by that run.
+6. **Check:** `scripts/sanity_check_top20.py` (expect the v4 failures it was written to catch:
+   0% capital ratios in the top 20), Power BI refresh, and record the rollback and its reason in
+   the release notes.
+
+To return to v5 later, revert the revert, set the pin back to `"2"`, and move `@champion` to 5.
 
 ## Databricks environment
 
