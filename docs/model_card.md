@@ -199,3 +199,37 @@ it is adopted.
 | Young and recently merged banks keep start-up or merger effects | Genesis Bank, CA: 4.9 years old, merged June 2025 | Extend the not-scored rule to 5 years, or add a recent-merger flag from the FDIC structure-change history |
 | One list mixes credit risk and earnings risk | 32 of the top 50 have non-current loans of 2–3% | Separate outputs: asset-quality risk and failure risk (fits with the planned hazard model) |
 | Probabilities run slightly high | Riskiest 10%: 34.5% predicted, 29.0% observed | Calibrate on out-of-sample predictions from the training years |
+
+## v7 candidate: complaint features as a tested challenger (not implemented)
+
+v5 uses FDIC call-report features only; CFPB complaints are shown as context. v7 would test
+whether complaints add predictive value, as a challenger that is adopted only on evidence.
+
+**Data.** Ingest the CFPB complaint history back to its start in late 2011, so 2012–2019
+training rows can have complaint features. The current pipeline loads complaints only from
+October 2023, so today no training year has them.
+
+**Candidate features** (per bank-quarter, for banks matched to a CFPB company):
+- complaints per $1bn of deposits;
+- change over 4 quarters;
+- share of complaints about account management or fees;
+- share with untimely company responses.
+
+**Test of incremental value.**
+- Compare a v6-based model with and without the complaint features, using the same split and
+  the same test rows.
+- Report the results overall and separately for large banks, where complaints are dense enough
+  to carry a signal.
+- Use the usual measures: ROC-AUC, PR-AUC, riskiest-10% capture and calibration.
+
+**Limits to address.**
+- **Large banks dominate.** Complaints cluster at large banks; most small banks have few or none
+  in a quarter, so the features are close to empty for them.
+- **The database itself changed.** Products were added over time and complaint narratives start
+  in 2015, so raw counts grow with the database, not only with bank behaviour. Features must be
+  normalised for that growth, e.g. as a bank's share of all matched complaints that quarter.
+- **Matching is partial.** Only 30% of complaints are matched to an FDIC bank. Banks without a
+  match need a "no match" flag rather than zero complaints.
+
+**Adoption rule.** Adopt only if the features clearly improve the results without hurting
+calibration. Otherwise complaints stay as context next to the scores.
