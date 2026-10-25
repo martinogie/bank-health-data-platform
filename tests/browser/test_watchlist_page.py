@@ -86,14 +86,15 @@ def test_shared_link_renders_in_a_fresh_browser(browser, base_url_root):
 
 def test_cards_sorted_by_risk(page: Page, base_url_root):
     open_page(page, f"{base_url_root}/watchlist.html?certs=628,59362,27314")
-    order = {"D": 0, "H": 1, "E": 2, "W": 3, "L": 4}
+    order = {"D": 0, "H": 1, "E": 2, "W": 3, "L": 4, "N": 5, "F": 6}
     bands = page.locator("article.bank .score .badge").evaluate_all("els => els.map(e => e.classList[1])")
     assert [order[b] for b in bands] == sorted(order[b] for b in bands)
 
 
-def test_new_bank_label_shown(page: Page, base_url_root):
+def test_new_bank_is_not_scored(page: Page, base_url_root):
     open_page(page, f"{base_url_root}/watchlist.html?certs=59362")   # Solutions Plus Bank, opened 2025
-    expect(page.locator("article.bank .newbank")).to_contain_text("New bank: ratios distorted by start-up costs")
+    expect(page.locator("article.bank .score .badge.N")).to_have_text("New bank – not scored")
+    expect(page.locator("article.bank .score")).to_contain_text("Less than 3 years old")
 
 
 def test_unknown_certs_are_reported(page: Page, base_url_root):

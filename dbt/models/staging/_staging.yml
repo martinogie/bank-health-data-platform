@@ -12,6 +12,17 @@ models:
         tests: [not_null]
       - name: report_date
         tests: [not_null]
+      - name: cblr_indicator
+        description: 1 = Community Bank Leverage Ratio bank (from 2020); NULL before 2020.
+        tests:
+          - accepted_values:
+              arguments: {values: [0, 1], quote: false}
+      - name: iba_flag
+        description: 1 = International Banking Act entity (US office of a foreign bank).
+        tests:
+          - not_null
+          - accepted_values:
+              arguments: {values: [0, 1], quote: false}
 
   - name: stg_fdic__institutions
     description: FDIC institutions, one row per bank (cert).
@@ -43,7 +54,19 @@ models:
           - not_null
           - accepted_values:
               arguments:
-                values: [High, Elevated, Watch, Low, Already in distress]
+                values: [High, Elevated, Watch, Low, Already in distress,
+                         "New bank – not scored", "Office of a foreign bank – not scored"]
+      - name: distress_probability
+        description: NULL only for banks that are not scored (new banks, foreign-bank offices).
+        tests:
+          - not_null:
+              config:
+                where: "risk_band not in ('New bank – not scored', 'Office of a foreign bank – not scored')"
+      - name: reason_1
+        description: Reasons never cite total risk-based capital (not a model feature since v5).
+        tests:
+          - dbt_expectations.expect_column_values_to_not_match_like_pattern:
+              arguments: {like_pattern: "%total_risk_based%"}
 
   - name: stg_cfpb__complaints
     description: CFPB complaints with the matched FDIC cert.

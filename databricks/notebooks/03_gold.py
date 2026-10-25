@@ -7,7 +7,11 @@
 # MAGIC - `net_income_qtr_k`: FDIC income is **year-to-date**, so Q2 = YTD(Q2) − YTD(Q1), Q1 = YTD(Q1).
 # MAGIC - QoQ / YoY growth of loans, deposits, assets (only when the prior quarter exists exactly).
 # MAGIC - CRE concentration = construction + multifamily + non-farm non-residential loans,
-# MAGIC   as % of gross loans and % of equity.
+# MAGIC   as % of gross loans and % of equity (NULL if all three parts are missing).
+# MAGIC - `cblr_reporter`, `is_foreign_office` (IBA flag or FDIC class OI): capital ratios these
+# MAGIC   banks don't report are NULL here (FDIC files them as 0). Banks with both ratios 0 in 4+
+# MAGIC   quarters but no foreign flag go to `gold.capital_zero_review` (not excluded).
+# MAGIC   `bank_age_years` from the establishment date.
 # MAGIC - Complaint counts per bank-quarter, **only for quarters fully covered by complaint data**
 # MAGIC   (otherwise NULL, so a half-loaded quarter never looks artificially quiet).
 # MAGIC   Banks with no CFPB match get 0 and `has_cfpb_match = false`.
@@ -58,9 +62,12 @@ def safe_pct(num, den):
     return F.when(den > 0, F.round(num / den * 100, 4))
 
 
-cre_k = (F.coalesce(F.col("construction_loans_k"), F.lit(0.0))
-         + F.coalesce(F.col("multifamily_loans_k"), F.lit(0.0))
-         + F.coalesce(F.col("nonfarm_nonres_loans_k"), F.lit(0.0)))
+CRE_PARTS = ["construction_loans_k", "multifamily_loans_k", "nonfarm_nonres_loans_k"]
+# A missing part counts as 0 only if at least one part is reported; if all three are missing,
+# CRE is missing (NULL), not 0%.
+cre_k = F.when(F.coalesce(*[F.col(c) for c in CRE_PARTS]).isNotNull(),
+               sum(F.coalesce(F.col(c), F.lit(0.0)) for c in CRE_PARTS))
+
 
 bq = (
     fin.drop("_source_file", "_ingested_at")
@@ -123,10 +130,12 @@ covered = (quarter_start >= F.lit(cov["lo"])) & (F.col("report_date") <= F.lit(c
 # filers missing from it (flagged in 02_silver) are left out and counted below.
 gold = (
     bq.join(inst.select("cert", "bank_name", "city", "state_code", "bank_class", "primary_regulator",
-                        "holding_company", "specialization", "is_active"), "cert", "inner")
+                        "holding_company", "specialization", "is_active", "established_date"), "cert", "inner")
     .join(first_failure, "cert", "left")
     .join(matched_certs, "cert", "left")
     .join(complaints_q, ["cert", "report_date"], "left")
+    .withColumn("bank_age_years",
+                F.round(F.months_between("report_date", "established_date") / 12, 2))
     .withColumn("has_cfpb_match", F.coalesce("has_cfpb_match", F.lit(False)))
     .withColumn("complaint_data_covered", covered)
     .withColumn("complaints", F.when(covered, F.coalesce("complaints", F.lit(0))))
@@ -135,6 +144,51 @@ gold = (
     .withColumn("complaints_per_1b_deposits",
                 F.when(covered & (F.col("total_deposits_k") > 0),
                        F.round(F.col("complaints") / (F.col("total_deposits_k") / 1e6), 4)))
+)
+
+# COMMAND ----------
+
+# MAGIC %md ## Reporting framework: CBLR banks and US offices of foreign banks
+
+# COMMAND ----------
+
+# FDIC files a capital ratio as 0 when it is not reported:
+# - CBLR banks (cblr_indicator = 1, from 2020) file no risk-based capital ratio;
+# - US offices of foreign banks report no capital ratios. Identified by the IBA flag or the
+#   FDIC class OI (insured US branch of a foreign-chartered bank).
+# Those ratios become NULL here (silver keeps FDIC's 0), so "0.00%" is never shown or used.
+# Everyone else keeps their reported values, including real zero or negative capital at
+# insolvent banks.
+# Offices of foreign banks that neither the IBA flag nor class OI identify. Each entry was checked
+# by a person after appearing in gold.capital_zero_review; keep the evidence next to the entry.
+FOREIGN_OFFICE_OVERRIDES = {
+    # The Bank of East Asia Ltd., New York (Hong Kong bank). FDIC class NC, IBA flag 0, yet Tier 1
+    # leverage and total risk-based capital are both 0 in all 53 quarters it reports (2013 Q2 to
+    # 2026 Q2), the pattern of a foreign-bank office. FDIC also lists an OI branch with the same
+    # name (CERT 33646). Reviewed 2026-10-25.
+    26028: "The Bank of East Asia Ltd., NY",
+}
+override_certs = list(FOREIGN_OFFICE_OVERRIDES)
+
+both_zero = ((F.col("tier1_leverage_pct") == 0) & (F.col("total_risk_based_capital_pct") == 0)
+             & F.col("cblr_indicator").isNull())
+gold = (
+    gold.withColumn("cblr_reporter", F.coalesce(F.col("cblr_indicator") == 1, F.lit(False)))
+    .withColumn("is_foreign_office",
+                F.coalesce((F.col("iba_flag") == 1) | (F.col("bank_class") == "OI")
+                           | F.col("cert").isin(override_certs), F.lit(False)))
+    .withColumn("foreign_office_rule",
+                F.when(F.col("iba_flag") == 1, "IBA flag").when(F.col("bank_class") == "OI", "FDIC class OI")
+                 .when(F.col("cert").isin(override_certs), "reviewed override"))
+    # Possible foreign office not flagged by IBA or OI: both ratios 0 and no CBLR flag in 4+ quarters.
+    # Not excluded automatically; listed in gold.capital_zero_review for a person to check.
+    .withColumn("zero_capital_quarters",
+                F.sum(F.when(both_zero & ~F.col("is_foreign_office"), 1).otherwise(0)).over(Window.partitionBy("cert")))
+    .withColumn("capital_zero_review", both_zero & ~F.col("is_foreign_office") & (F.col("zero_capital_quarters") >= 4))
+    .withColumn("total_risk_based_capital_pct",
+                F.when(~F.col("cblr_reporter") & ~F.col("is_foreign_office"), F.col("total_risk_based_capital_pct")))
+    .withColumn("tier1_leverage_pct", F.when(~F.col("is_foreign_office"), F.col("tier1_leverage_pct")))
+    .drop("zero_capital_quarters")
 )
 
 gold.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{GOLD}.bank_quarter")
@@ -156,6 +210,36 @@ expected = (complaints_q.join(gold.filter("complaint_data_covered").select("cert
                               ["cert", "report_date"]).agg(F.sum("complaints")).first()[0] or 0)
 dq_check(T, "every complaint for a covered quarter counted", abs(counted - expected))
 dq_range(gold, T, "cre_to_loans_pct", low=0, high=100)
+dq_check(T, "no 0% total risk-based capital for CBLR banks or foreign offices",
+         gold.filter("(cblr_reporter or is_foreign_office) and total_risk_based_capital_pct is not null").count())
+kept = gold.select("cert", "report_date", "is_foreign_office", F.col("tier1_leverage_pct").alias("g_t1")).join(
+    fin.select("cert", "report_date", F.col("tier1_leverage_pct").alias("s_t1")), ["cert", "report_date"])
+dq_check(T, "Tier 1 leverage as reported for every bank that is not a foreign office (incl. real 0 / negative)",
+         kept.filter("not is_foreign_office and not (g_t1 <=> s_t1)").count())
+dq_check(T, "no Tier 1 leverage for foreign offices",
+         gold.filter("is_foreign_office and tier1_leverage_pct is not null").count())
+dq_check(T, "CRE NULL only when all three CRE parts are NULL",
+         gold.filter("cre_loans_k is null and coalesce(construction_loans_k, multifamily_loans_k, "
+                     "nonfarm_nonres_loans_k) is not null").count())
+foreign_by_rule = {r["foreign_office_rule"]: {"banks": r["banks"], "bank_quarters": r["bank_quarters"]}
+                   for r in gold.filter("is_foreign_office").groupBy("foreign_office_rule")
+                   .agg(F.countDistinct("cert").alias("banks"), F.count("*").alias("bank_quarters")).collect()}
+print("Foreign offices by rule:", foreign_by_rule)
+
+# Review list: possible foreign offices the flags missed (scored as normal banks until checked)
+review = (gold.filter("capital_zero_review")
+          .groupBy("cert", "bank_name", "state_code", "bank_class")
+          .agg(F.count("*").alias("zero_capital_quarters"), F.min("report_date").alias("first_quarter"),
+               F.max("report_date").alias("last_quarter"))
+          .withColumn("reviewed_at", F.lit(RUN_TS)))
+review.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{GOLD}.capital_zero_review")
+review_rows = [r.asDict() for r in review.orderBy("cert").collect()]
+dq_check(T, "banks with 4+ zero-capital quarters not flagged foreign (see gold.capital_zero_review)",
+         len(review_rows), level="warn")
+for r in review_rows:
+    print(f"REVIEW: CERT {r['cert']} {r['bank_name']} ({r['state_code']}, class {r['bank_class']}): "
+          f"both capital ratios 0 in {r['zero_capital_quarters']} quarters, "
+          f"{r['first_quarter']} to {r['last_quarter']}. Check whether it is a foreign-bank office.")
 
 display(gold.filter("complaint_data_covered").orderBy(F.col("complaints").desc())
         .select("report_date", "cert", "bank_name", "total_deposits_k", "complaints",
@@ -189,11 +273,14 @@ jpm = (gold.filter("cert = 628").orderBy(F.col("report_date").desc())
        .select("report_date", "total_assets_k", "net_income_qtr_k", "tier1_leverage_pct", "complaints").first())
 summary = {
     "bank_quarter_rows": n_gold,
-    "quarters": [str(r[0]) for r in gold.select("report_date").distinct().orderBy("report_date").collect()],
+    "quarters": gold.agg(F.countDistinct("report_date").alias("n"), F.min("report_date").cast("string").alias("first"),
+                         F.max("report_date").cast("string").alias("last")).first().asDict(),
+    "foreign_offices": foreign_by_rule,
+    "capital_zero_review": review_rows,
     "complaint_coverage": [str(cov["lo"]), str(cov["hi"])],
     "exports": exported,
     "spot_check_jpmorgan_628": {k: (str(v) if k == "report_date" else v) for k, v in jpm.asDict().items()} if jpm else None,
     "data_quality": dq_summary,
 }
-print(json.dumps(summary, indent=2))
-dbutils.notebook.exit(json.dumps(summary))
+print(json.dumps(summary, indent=2, default=str))
+dbutils.notebook.exit(json.dumps(summary, default=str))

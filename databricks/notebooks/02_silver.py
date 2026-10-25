@@ -72,6 +72,9 @@ fin = latest_per_key(fin_bronze, ["cert", "repdte"], ["_ingested_at", "_file_mod
     F.col("cert").cast("int").alias("cert"),
     F.to_date("repdte", "yyyyMMdd").alias("report_date"),
     *[F.col(src).cast("double").alias(dst) for src, dst in FINANCIAL_COLUMNS.items()],
+    # Reporting flags (0/1). CBLRIND is NULL before 2020, when the CBLR framework did not exist.
+    F.col("cblrind").cast("int").alias("cblr_indicator"),
+    F.col("iba").cast("int").alias("iba_flag"),
     "_source_file",
     "_ingested_at",
 )
@@ -90,6 +93,8 @@ dq_range(fin, T, "total_assets_k", low=0)
 dq_range(fin, T, "noncurrent_loans_pct", low=0, high=100)
 dq_range(fin, T, "tier1_leverage_pct", low=-50, high=100)
 dq_range(fin, T, "efficiency_ratio_pct", low=0, high=1000)
+dq_check(T, "cblr_indicator is 0, 1 or NULL", fin.filter("cblr_indicator not in (0, 1)").count())
+dq_check(T, "iba_flag is 0 or 1", fin.filter("iba_flag is null or iba_flag not in (0, 1)").count())
 display(fin.groupBy("report_date").agg(F.count("*").alias("banks"),
                                        F.round(F.sum("total_assets_k") / 1e9, 2).alias("total_assets_trillions"))
         .orderBy("report_date"))

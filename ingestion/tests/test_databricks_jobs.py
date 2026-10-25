@@ -25,6 +25,12 @@ def test_job_settings_chain_and_safety_flags():
     assert "new_cluster" not in str(s) and "existing_cluster_id" not in str(s)  # serverless
 
 
+def test_every_task_runs_in_the_pinned_environment():
+    s = dj.job_settings("/Users/me/bank-health-data-platform")
+    assert s["environments"] == [{"environment_key": "pinned", "spec": {"environment_version": "2"}}]
+    assert all(t["environment_key"] == "pinned" for t in s["tasks"])
+
+
 def test_create_job_when_missing():
     def handler(method, url, kw):
         if url.endswith("/jobs/list"):

@@ -68,7 +68,11 @@ sources:
           - name: cert
             tests: [unique, not_null]
           - name: distress_probability
-            tests: [not_null]
+            description: NULL for banks that are not scored (new banks, foreign-bank offices).
+            tests:
+              - not_null:
+                  config:
+                    where: "risk_band not in ('New bank – not scored', 'Office of a foreign bank – not scored')"
 
       - name: cfpb_complaints
         identifier: CFPB_COMPLAINTS

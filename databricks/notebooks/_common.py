@@ -22,6 +22,21 @@ BRONZE, SILVER, GOLD, ML = (f"{CATALOG}.{s}" for s in ("bronze", "silver", "gold
 RUN_TS = datetime.datetime.now(datetime.timezone.utc)
 print(f"catalog={CATALOG}  run_ts={RUN_TS:%Y-%m-%d %H:%M:%S} UTC")
 
+# Serverless environment the model is trained and scored in (ENVIRONMENT_VERSION in
+# ingestion/databricks_jobs.py). DATABRICKS_RUNTIME_VERSION looks like "client.2.5".
+EXPECTED_ENVIRONMENT = "2"
+
+
+def require_pinned_environment():
+    """Stop if this run is not in the pinned environment: a model pickled in one environment
+    may not load (or may behave differently) in another."""
+    import os
+    runtime = os.environ.get("DATABRICKS_RUNTIME_VERSION", "")
+    if runtime.split(".")[:2] != ["client", EXPECTED_ENVIRONMENT]:
+        raise RuntimeError(f"running in serverless environment {runtime!r}, expected version "
+                           f"{EXPECTED_ENVIRONMENT}; run via the job or scripts/databricks_run.py")
+    print(f"serverless environment {runtime} (pinned to version {EXPECTED_ENVIRONMENT})")
+
 # COMMAND ----------
 
 def latest_per_key(df, keys, order_cols):

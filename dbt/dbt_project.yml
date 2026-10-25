@@ -24,3 +24,10 @@ models:
 tests:
   bank_health:
     +store_failures: false
+
+vars:
+  # US offices of foreign banks that neither the FDIC IBA flag nor class OI identify. Same list as
+  # FOREIGN_OFFICE_OVERRIDES in databricks/notebooks/03_gold.py; evidence for each entry is there.
+  #   26028 The Bank of East Asia Ltd., NY: class NC, IBA 0, both capital ratios 0 in all 53
+  #         quarters it reports (2013 Q2 to 2026 Q2). Reviewed 2026-10-25.
+  foreign_office_overrides: [26028]

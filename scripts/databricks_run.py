@@ -5,19 +5,32 @@ Prints each notebook's exit summary, or its error.
 
 Usage (from the project folder):
     .venv\\Scripts\\python scripts/databricks_run.py 01_bronze 02_silver 03_gold
+    (add --local to run this checkout's notebooks, --param=name=value to pass a widget value)
+
+--local uploads databricks/notebooks/*.py from this checkout to a scratch workspace folder
+(/Users/<me>/bank-health-local-run) and runs them from there, so an unpushed branch can be
+tested. The notebooks still read and write the real catalog tables.
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import sys
 import time
 
+from pathlib import Path
+
 import requests
 
-from _env import load_env
+from _env import ROOT, load_env
+
+sys.path.insert(0, str(ROOT))
+from ingestion.databricks_jobs import ENVIRONMENTS  # noqa: E402
 
 REPO_NAME = "bank-health-data-platform"
+LOCAL_FOLDER = "bank-health-local-run"
+NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "databricks" / "notebooks"
 POLL_SECONDS = 15
 
 
@@ -51,11 +64,29 @@ def find_and_pull_repo(db: Databricks) -> str:
     return repo["path"]
 
 
+def upload_local_notebooks(db: Databricks) -> str:
+    """Copy this checkout's notebooks to a scratch workspace folder; returns its root path."""
+    me = db.call("GET", "/api/2.0/preview/scim/v2/Me")["userName"]
+    root = f"/Users/{me}/{LOCAL_FOLDER}"
+    target = f"{root}/databricks/notebooks"
+    db.call("POST", "/api/2.0/workspace/mkdirs", json={"path": target})
+    files = sorted(NOTEBOOK_DIR.glob("*.py"))
+    for f in files:
+        db.call("POST", "/api/2.0/workspace/import", json={
+            "path": f"{target}/{f.stem}", "format": "SOURCE", "language": "PYTHON", "overwrite": True,
+            "content": base64.b64encode(f.read_bytes()).decode(),
+        })
+    print(f"Uploaded {len(files)} local notebooks to {target}")
+    return root
+
+
 def run_notebook(db: Databricks, repo_path: str, notebook: str, params: dict) -> bool:
     run = db.call("POST", "/api/2.2/jobs/runs/submit", json={
         "run_name": f"bank_health {notebook} (manual)",
+        "environments": ENVIRONMENTS,          # same serverless environment as the scheduled job
         "tasks": [{
             "task_key": notebook,
+            "environment_key": "pinned",
             "notebook_task": {
                 "notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
                 "source": "WORKSPACE",
@@ -90,11 +121,16 @@ def run_notebook(db: Databricks, repo_path: str, notebook: str, params: dict) ->
 
 
 def main() -> None:
-    notebooks = sys.argv[1:] or ["01_bronze", "02_silver", "03_gold"]
+    args = sys.argv[1:]
+    notebooks = [a for a in args if not a.startswith("--")] or ["01_bronze", "02_silver", "03_gold"]
     load_env()
-    db = Databricks()
-    repo_path = find_and_pull_repo(db)
     params = {"catalog": os.environ.get("DATABRICKS_CATALOG") or "bank_health"}
+    for a in args:
+        if a.startswith("--param="):                       # --param=retrain=false
+            k, v = a.removeprefix("--param=").split("=", 1)
+            params[k] = v
+    db = Databricks()
+    repo_path = upload_local_notebooks(db) if "--local" in args else find_and_pull_repo(db)
     for nb in notebooks:
         if not run_notebook(db, repo_path, nb, params):
             raise SystemExit(f"{nb} failed; stopping.")

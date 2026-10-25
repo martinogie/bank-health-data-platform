@@ -101,6 +101,9 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(tasks["run_databricks_job"]["upstream"])
     assert tasks["decide_retrain"]["upstream"] == ["download_fdic"]
     assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
+    # release guardrail: no retries (a bad top 20 won't fix itself), runs before dbt publishes marts
+    assert tasks["sanity_check_top20"]["upstream"] == ["load_snowflake"]
+    assert tasks["sanity_check_top20"]["retries"] == 0 and tasks["sanity_check_top20"]["has_doc_md"]
     assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]   # final task
 
 
@@ -110,5 +113,5 @@ def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
     for model in ("stg_fdic__financials", "fct_bank_quarter", "mart_early_warning"):
         assert any(model in t for t in dbt_tasks), f"no Cosmos task for {model}"
     assert all(tasks[t]["retries"] == 1 for t in dbt_tasks)
-    assert any(t.endswith("load_snowflake") for t in
-               (u for t in dbt_tasks for u in tasks[t]["upstream"])), "dbt group must run after load_snowflake"
+    assert any(t.endswith("sanity_check_top20") for t in
+               (u for t in dbt_tasks for u in tasks[t]["upstream"])), "dbt group must run after the top-20 check"
