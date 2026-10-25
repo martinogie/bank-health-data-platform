@@ -273,13 +273,14 @@ class SnowflakeSource:
         finally:
             cur.close()
 
-    def credit_report(self) -> dict:
+    def credit_report(self, since: str | None = None) -> dict:
         """Estimate warehouse credits from this run's queries (XSMALL = 1 credit/hour, 60 s minimum
         per resume, 60 s idle before suspend). Exact figures: Snowsight > Admin > Cost Management."""
+        # The connector sends bound values as text, so convert to a timestamp in SQL
         self.cur.execute("""select start_time, end_time from table(information_schema.query_history_by_user(
-                              user_name => %s, end_time_range_start => %s, result_limit => 10000))
+                              user_name => %s, end_time_range_start => to_timestamp_ltz(%s), result_limit => 10000))
                             where warehouse_name is not null and execution_time > 0 and query_tag = 'postgres_mirror'
-                            order by start_time""", (os.environ["SNOWFLAKE_USER"], self.started))
+                            order by start_time""", (os.environ["SNOWFLAKE_USER"], since or self.started.isoformat()))
         blocks = []
         for s, e in self.cur.fetchall():
             if blocks and (s - blocks[-1][1]).total_seconds() <= 60:
@@ -342,6 +343,7 @@ def main() -> None:
     p.add_argument("--dbu-warn", type=float, default=float(os.environ.get("MIRROR_DBU_WARN", "4.0")),
                    help="stop if today's recorded Databricks DBUs are above this (default 4.0)")
     p.add_argument("--ignore-quota-warning", action="store_true")
+    p.add_argument("--credits-since", help="ISO time to count Snowflake mirror queries from (default: this run's start)")
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -394,13 +396,19 @@ def main() -> None:
 
         for desc in dbx.tables():
             run(desc, dbx, databricks_load)
-        reports["databricks"] = dbx.compute_report()
+        try:
+            reports["databricks"] = dbx.compute_report()
+        except Exception as exc:
+            reports["databricks"] = {"compute_report_error": str(exc)[:160]}
 
     if args.source in ("snowflake", "all"):
         sf = SnowflakeSource()
         for desc in sf.tables():
             run(desc, sf, lambda d: load_table(pg, d, sf.batches(d), "Snowflake, Arrow"))
-        reports["snowflake"] = sf.credit_report()
+        try:
+            reports["snowflake"] = sf.credit_report(args.credits_since)
+        except Exception as exc:                                   # a report problem must not fail the copy
+            reports["snowflake"] = {"credit_report_error": str(exc)[:160]}
         sf.close()
 
     if not args.skip_fdic_flags and args.source == "all":
