@@ -1,7 +1,9 @@
 # Runbook
 
 Short procedures for running and releasing the Bank Health pipeline. Commands run from the
-project folder on Windows; secrets come from `.env` and are never printed.
+production folder on Windows, whose `.env` has `BANK_HEALTH_ENV=prod` (in a dev checkout the
+same commands run against `BANK_HEALTH_DEV` / `bank_health_dev` and refuse to promote or
+publish; see [CONTRIBUTING.md](../CONTRIBUTING.md)). Secrets come from `.env` and are never printed.
 
 ## Review the top 20 before release
 

@@ -26,6 +26,9 @@ PLACEHOLDERS = {
     "SNOWFLAKE_WAREHOUSE": "placeholder",
     "SNOWFLAKE_PRIVATE_KEY_PATH": "/nonexistent.p8",
     "DBT_SEND_ANONYMOUS_USAGE_STATS": "false",
+    # Cosmos caches `dbt ls` in Airflow's metadata database, which this bare container doesn't
+    # have; without the cache it simply runs dbt ls each time (same DAG, slower parse).
+    "AIRFLOW__COSMOS__ENABLE_CACHE_DBT_LS": "False",
 }
 
 PARSE = r"""
@@ -33,14 +36,15 @@ import json, logging, warnings
 warnings.filterwarnings("ignore")
 logging.disable(logging.WARNING)
 from airflow.dag_processing.dagbag import DagBag
-bag = DagBag(DAGS, include_examples=False)
+bag = DagBag(DAGS)
 dag = bag.dags.get("bank_health_weekly")
 out = {"dag_ids": sorted(bag.dags), "import_errors": {k: str(v)[-600:] for k, v in bag.import_errors.items()}}
 if dag is not None:
     out["tasks"] = sorted(t.task_id for t in dag.tasks)
     run = dag.get_task("run_databricks_job")
     out["job_name"] = run.job_name
-    out["job_parameters"] = {k: v for k, v in run.json["job_parameters"].items() if k != "retrain"}
+    params = getattr(run, "job_parameters", None) or (getattr(run, "json", None) or {}).get("job_parameters") or {}
+    out["job_parameters"] = {k: v for k, v in params.items() if k != "retrain"}
     out["tags"] = sorted(dag.tags)
 print("RESULT=" + json.dumps(out))
 """.replace("DAGS", repr(DAGS))

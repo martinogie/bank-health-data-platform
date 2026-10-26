@@ -1,0 +1,268 @@
+# CI for every push and pull request. Nothing here deploys or writes prod: the only cloud
+# access is dbt slim CI, as SVC_BANK_CI / CI_ROLE (read-only on BANK_HEALTH, builds only in a
+# temporary BANK_HEALTH_DEV.CI_<run_id> schema that is dropped at the end).
+#
+# Required checks on main (branch protection): lint, types, unit, dag-import,
+# docker (linux/amd64), docker (linux/arm64), secrets, dbt-slim-ci.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A newer run on the same branch (and event) cancels the older one. Push and pull_request runs
+# are kept apart so one doesn't cancel the other.
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"   # Databricks serverless environment 2; the Airflow image has its own
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-lint.txt
+      - run: pip install -r requirements-lint.txt
+      - name: ruff check
+        run: ruff check --output-format=github .
+      - name: ruff format --check
+        run: ruff format --check .
+
+  types:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-lint.txt
+      - run: pip install -r requirements-lint.txt
+      - name: mypy ingestion/ and airflow/dags/
+        run: mypy   # files and settings: [tool.mypy] in pyproject.toml
+
+  unit:
+    runs-on: ubuntu-24.04
+    env:
+      REQUIRE_SPARK: "1"   # the label/feature tests must run here, never skip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - uses: actions/setup-java@v4   # for PySpark (local Spark in the feature tests)
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pip install -r requirements-dev.txt
+      - name: pytest with coverage (offline; fakes replace every network call)
+        run: pytest -ra --cov --cov-report=term --cov-report=xml --cov-report=html
+      - name: "coverage gate: ingestion/ >= 80%"
+        run: coverage report --include="ingestion/*" --fail-under=80
+      - name: "coverage gate: label, feature and exclusion logic >= 80%"
+        run: >-
+          coverage report --fail-under=80
+          --include="databricks/notebooks/_features.py,databricks/notebooks/_scoring_rules.py"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: ignore
+
+  dag-import:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the Airflow image (linux/amd64, reuses the docker job's cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: airflow
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: bank-health-airflow:ci
+          cache-from: type=gha,scope=airflow-linux-amd64
+      - name: Load every DAG as prod and dev; unset BANK_HEALTH_ENV must be refused
+        # Same mounts as docker-compose.yaml. dbt deps first, because Cosmos runs `dbt ls`.
+        # Placeholders only: nothing connects while a DAG is parsed.
+        run: |
+          docker run --rm --user "$(id -u):0" --entrypoint bash \
+            -e BANK_HEALTH_ENV=ci -e DBT_CI_SCHEMA=CI_DAG_IMPORT \
+            -e SNOWFLAKE_ACCOUNT=placeholder -e SNOWFLAKE_USER=placeholder \
+            -e SNOWFLAKE_ROLE=placeholder -e SNOWFLAKE_WAREHOUSE=placeholder \
+            -e SNOWFLAKE_PRIVATE_KEY_PATH=/nonexistent.p8 -e DBT_SEND_ANONYMOUS_USAGE_STATS=false \
+            -v "$PWD/airflow/dags:/opt/airflow/dags" \
+            -v "$PWD/ingestion:/opt/airflow/ingestion" \
+            -v "$PWD/dbt:/opt/airflow/dbt" \
+            -v "$PWD/tests:/opt/airflow/tests" \
+            bank-health-airflow:ci -c \
+            "cd /opt/airflow/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir . \
+             && cd /opt/airflow && python tests/smoke/check_dag_import.py"
+
+  docker:
+    name: docker (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64   # the Oracle Cloud Arm VM
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: airflow
+          platforms: ${{ matrix.platform }}
+          load: true
+          push: false
+          tags: bank-health-airflow:ci
+          cache-from: type=gha,scope=airflow-${{ matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64' }}
+          cache-to: type=gha,mode=max,scope=airflow-${{ matrix.platform == 'linux/amd64' && 'linux-amd64' || 'linux-arm64' }}
+      - name: Image refuses to start without BANK_HEALTH_ENV
+        run: |
+          if docker run --rm bank-health-airflow:ci airflow version > out.txt 2>&1; then
+            cat out.txt; echo "container started without BANK_HEALTH_ENV"; exit 1
+          fi
+          grep -q "BANK_HEALTH_ENV must be dev or prod" out.txt && cat out.txt
+      - name: Tools inside the image
+        run: |
+          docker run --rm --entrypoint bash bank-health-airflow:ci -c \
+            "uname -m && airflow version && /home/airflow/dbt_venv/bin/dbt --version"
+
+  secrets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # whole history
+      - name: gitleaks, every commit in the history
+        run: >-
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2
+          git /repo --redact --verbose --exit-code 1
+      - name: gitleaks, the files as they are in this commit
+        run: >-
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2
+          dir /repo --redact --verbose --exit-code 1
+
+  dbt-slim-ci:
+    runs-on: ubuntu-24.04
+    env:
+      BANK_HEALTH_ENV: ci
+      DBT_CI_SCHEMA: CI_${{ github.run_id }}
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      # Names, not secrets. The account and the private key are GitHub secrets.
+      SNOWFLAKE_USER: SVC_BANK_CI
+      SNOWFLAKE_ROLE: CI_ROLE
+      SNOWFLAKE_WAREHOUSE: BANK_DEV_WH
+      SNOWFLAKE_DATABASE: BANK_HEALTH_DEV
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+    steps:
+      - name: Snowflake secrets present? (forks and Dependabot have none; then skip, don't fail)
+        id: secrets
+        env:
+          HAS_KEY: ${{ secrets.SNOWFLAKE_CI_PRIVATE_KEY != '' }}
+        run: |
+          if [ -n "$SNOWFLAKE_ACCOUNT" ] && [ "$HAS_KEY" = "true" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Snowflake secrets are not available to this run; dbt slim CI skipped."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.secrets.outputs.enabled == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.secrets.outputs.enabled == 'true'
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dbt.txt
+      - name: Install dbt and the Snowflake client
+        if: steps.secrets.outputs.enabled == 'true'
+        run: pip install -r requirements-dbt.txt "snowflake-connector-python>=4.7" "pandas>=2.2" pyarrow requests pytest
+      - name: Write the CI private key to the runner's temp folder (never printed)
+        if: steps.secrets.outputs.enabled == 'true'
+        env:
+          KEY: ${{ secrets.SNOWFLAKE_CI_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/snowflake_ci_rsa_key.p8"
+          echo "SNOWFLAKE_PRIVATE_KEY_PATH=$RUNNER_TEMP/snowflake_ci_rsa_key.p8" >> "$GITHUB_ENV"
+      - name: Fetch the prod manifest (latest successful prod dbt run)
+        id: manifest
+        if: steps.secrets.outputs.enabled == 'true'
+        run: |
+          set +e
+          python -m ingestion.dbt_manifest fetch --out prod-manifest
+          code=$?
+          set -e
+          if [ "$code" = "0" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          elif [ "$code" = "3" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No prod manifest yet (no prod run since slim CI was added): full build into $DBT_CI_SCHEMA."
+          else
+            exit "$code"
+          fi
+      - name: dbt deps
+        if: steps.secrets.outputs.enabled == 'true'
+        working-directory: dbt
+        run: dbt deps --profiles-dir .
+      - name: dbt build (changed models and everything downstream) into BANK_HEALTH_DEV.${{ env.DBT_CI_SCHEMA }}
+        if: steps.secrets.outputs.enabled == 'true'
+        working-directory: dbt
+        run: |
+          if [ "${{ steps.manifest.outputs.found }}" = "true" ]; then
+            dbt build --profiles-dir . --select state:modified+ --defer --state ../prod-manifest
+          else
+            dbt build --profiles-dir .
+          fi
+      - name: CI identity cannot write prod (Snowflake grants)
+        if: steps.secrets.outputs.enabled == 'true'
+        run: pytest tests/integration/test_environment_safety.py -m integration -ra -p no:cacheprovider
+      - name: Drop the temporary CI schema
+        if: always() && steps.secrets.outputs.enabled == 'true'
+        run: |
+          python - <<'EOF'
+          import logging, os
+          logging.getLogger("snowflake").setLevel(logging.ERROR)
+          from ingestion.snowflake_load import connect_from_env
+          schema = os.environ["DBT_CI_SCHEMA"]
+          assert schema.startswith("CI_"), schema
+          conn = connect_from_env()
+          try:
+              conn.cursor().execute(f"drop schema if exists BANK_HEALTH_DEV.{schema}")
+              print(f"dropped BANK_HEALTH_DEV.{schema}")
+          finally:
+              conn.close()
+          EOF
+      - name: Upload dbt run results
+        if: always() && steps.secrets.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-run-results
+          path: dbt/target/run_results.json
+          if-no-files-found: ignore

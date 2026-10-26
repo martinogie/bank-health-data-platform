@@ -3,7 +3,8 @@
 build_model_frame() runs on a real local Spark session against small hand-made bank histories,
 so the tests exercise the same code 04_train_model and 05_score run on Databricks. The gold
 and failures tables are served from memory (no files, no Databricks). Skipped when PySpark or
-Java is not installed; CI installs both.
+Java is not installed, except when REQUIRE_SPARK=1 (set in CI): then a missing Spark fails, so
+the coverage gate can never pass with these tests silently skipped.
 
 Timeline: 20 quarters, 2015 Q1 to 2019 Q4. Labels are complete up to 2018 Q4 (4 quarters
 before the latest data).
@@ -19,9 +20,16 @@ from pathlib import Path
 
 import pytest
 
-pyspark = pytest.importorskip("pyspark")
-if shutil.which("java") is None:
-    pytest.skip("Java is not installed (needed by PySpark)", allow_module_level=True)
+try:
+    import pyspark  # noqa: F401
+
+    missing = None if shutil.which("java") else "Java is not installed (needed by PySpark)"
+except ImportError:
+    missing = "PySpark is not installed"
+if missing:
+    if os.environ.get("REQUIRE_SPARK") == "1":
+        raise RuntimeError(f"REQUIRE_SPARK=1 but {missing}")
+    pytest.skip(missing, allow_module_level=True)
 
 from pyspark.sql import SparkSession  # noqa: E402
 from pyspark.sql import types as T  # noqa: E402
