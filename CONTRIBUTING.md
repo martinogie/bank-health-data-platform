@@ -45,6 +45,25 @@ Then, in that folder:
 Never switch the production folder to a feature branch: its Airflow stack runs whatever is
 checked out there.
 
+### Run the dev pipeline
+
+The dev DAG stays paused. Run it once, on a small slice, without scheduling anything:
+
+```bash
+cd airflow
+docker compose up airflow-init        # first time only
+docker compose up -d --wait
+# small slice: only the last 2 FDIC quarters and about a month of complaints, no retraining
+docker compose exec airflow-scheduler airflow variables set fdic_last_repdte 2026-06-30
+docker compose exec airflow-scheduler airflow variables set cfpb_last_date_received 2026-09-25
+# `exec` starts a fresh shell, so build the connections first (the entrypoint does this for
+# the running services)
+docker compose exec airflow-scheduler bash -c 'eval "$(python /opt/airflow/include/connections_from_env.py)" && airflow dags test bank_health_weekly -c "{\"retrain_model\": false}"'
+docker compose down                   # free the memory; prod needs it
+```
+
+Dev uses the same Databricks daily quota as prod: never run it close to the Monday 06:00 run.
+
 ## Branches
 
 From an up-to-date `main`, one branch per change:

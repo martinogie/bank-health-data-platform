@@ -135,6 +135,9 @@ services:
       - -c
       - |
         mkdir -p /opt/airflow/logs /opt/airflow/data/raw
+        # init runs as root; hand the folders to the Airflow user so tasks can write downloads
+        # there (on a fresh machine they would otherwise be root-owned and read-only)
+        chown "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs /opt/airflow/data /opt/airflow/data/raw
         if [[ -z "$${AIRFLOW__CORE__FERNET_KEY:-}" || -z "$${AIRFLOW__API_AUTH__JWT_SECRET:-}" || -z "$${_AIRFLOW_WWW_USER_PASSWORD:-}" ]]; then
           echo "Missing AIRFLOW__CORE__FERNET_KEY, AIRFLOW__API_AUTH__JWT_SECRET or _AIRFLOW_WWW_USER_PASSWORD in .env"
           exit 1

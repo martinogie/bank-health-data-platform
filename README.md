@@ -1,5 +1,7 @@
 # Bank Health Data Platform
 
+[![CI](https://github.com/martinogie/bank-health-data-platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/martinogie/bank-health-data-platform/actions/workflows/ci.yml)
+
 **Which of the banks you depend on should you worry about this quarter, and why?**
 
 Regulators rate every US bank, but those ratings are confidential. Everyone else with money at
@@ -262,25 +264,66 @@ where s.total_assets_k is distinct from r.total_assets_k
    or s.tier1_leverage_pct is distinct from r.tier1_leverage_pct;
 ```
 
+## Environments
+
+Every component reads `BANK_HEALTH_ENV` (`dev`, `ci` or `prod`). It has no default: if it is
+missing or wrong, the DAG fails to load, containers refuse to start, and dbt and the scripts stop.
+
+| | dev | ci | prod |
+|---|---|---|---|
+| Runs | a separate dev checkout on the PC | GitHub Actions | the machine that runs the weekly schedule (the PC today, an Oracle Cloud Arm VM next) |
+| Snowflake | `BANK_HEALTH_DEV` (zero-copy clone of prod), role `DEV_ROLE` | temporary schema `BANK_HEALTH_DEV.CI_<run_id>`, role `CI_ROLE`; reads prod | `BANK_HEALTH`, role `BANK_PIPELINE_ROLE` |
+| Databricks | catalog `bank_health_dev`, job `bank_health_pipeline_dev` | none | catalog `bank_health`, job `bank_health_pipeline` |
+| Airflow | port 8081, own project and metadata database | DAG import check only | port 8080 |
+| Can write prod, publish the watchlist, move `@champion` | no | no | yes |
+
+Two independent layers keep dev and CI out of prod: the code checks every write, publish and
+model promotion (`ingestion/environment.py`), and Snowflake itself gives `DEV_ROLE` and
+`CI_ROLE` no write rights on `BANK_HEALTH` (`snowflake/setup_dev.sql`). Both layers are tested.
+Dev also has its own 1-credit monthly warehouse cap, inside the account-wide 5-credit cap.
+Details and the dev setup: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## How changes are tested
+
+Every change goes through a branch and a pull request; `main` only moves when all CI checks
+pass. On each push and pull request, [GitHub Actions](.github/workflows/ci.yml) runs:
+
+| Check | What it does |
+|---|---|
+| `lint` | `ruff check` and `ruff format --check` |
+| `types` | `mypy` on `ingestion/` and `airflow/dags/` |
+| `unit` | all unit tests with coverage; fails under 80% for `ingestion/` and for the label, feature and exclusion logic |
+| `dag-import` | builds the Airflow image and loads the DAG as prod and as dev (Cosmos renders the dbt project); a missing `BANK_HEALTH_ENV` must be refused |
+| `docker (linux/amd64)`, `docker (linux/arm64)` | builds the custom Airflow image for both platforms (arm64 is the VM); no push |
+| `secrets` | gitleaks over the whole git history and the current files |
+| `dbt-slim-ci` | builds only the dbt models a change touches, plus everything downstream, into a throwaway schema, reading unchanged models from prod (`--defer` against the manifest of the latest successful prod run); then checks that the CI login cannot write prod; the schema is dropped at the end |
+
+Locally, pre-commit runs ruff, whitespace fixes, a private-key check and gitleaks on every
+commit. Dependabot proposes dependency updates weekly; each goes through the same CI.
+
 ## Testing
 
-Five kinds of tests, each in code:
+Five kinds of tests, each in code, plus the checks above:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value) and the top-20 release check. | `ingestion/tests/` | 166 passed |
-| **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload and list, Snowflake key-pair login and a small `write_pandas` load. Skipped when credentials are missing. | `tests/integration/` (10 tests) | run on demand with credentials |
-| **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. | `tests/e2e/` | 17 passed (20 Oct 2026 run) |
-| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5) |
+| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value), the top-20 release check, the **label, feature and exclusion logic** (`_features.py` run on a local Spark session over hand-made bank histories) and **environment safety** (dev and ci can't write prod, publish or promote, in every code path that writes). | `ingestion/tests/` | 236 passed; coverage: `ingestion/` 92%, label/feature/exclusion logic 100% (26 Oct 2026) |
+| **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload, list and delete, Snowflake key-pair login and a small `write_pandas` load, and **environment safety at the grant level**: logged in as the dev (or CI) service user, every attempt to write `BANK_HEALTH` is refused by Snowflake. Skipped when credentials are missing. | `tests/integration/` (21 tests) | 19 passed, 2 skipped (CI-only checks, run in GitHub Actions); 26 Oct 2026, against dev |
+| **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. The DAG's own `verify_pipeline` task repeats the core checks on every run. | `tests/e2e/`, task `verify_pipeline` | 17 passed (20 Oct 2026 run). Prod run 26 Oct 2026: 53 tasks succeeded, 4,257 banks scored. Dev run 26 Oct 2026 (2 FDIC quarters, about a month of complaints, into `bank_health_dev` / `BANK_HEALTH_DEV`): 53 tasks succeeded, the 2 prod-only tasks (watchlist, dbt manifest) skipped, 4,257 banks scored with prod's `@champion` read-only |
+| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5); dev 26 Oct 2026: same result |
 | **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores in Databricks and in Snowflake RAW (25 Oct 2026) |
-| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (including the release check before dbt). | `tests/smoke/` | 7 passed |
+| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (the environment check first, the release check before dbt). In CI the DAG is also loaded as prod and as dev inside the built image, and must be refused without `BANK_HEALTH_ENV` (`tests/smoke/check_dag_import.py`). | `tests/smoke/` | 7 passed on the dev stack; DAG import check passed for prod and dev (26 Oct 2026) |
 | **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v5 data, 25 Oct 2026) |
+
+Unit tests use test doubles (fake HTTP sessions, fake Snowflake connections and cursors,
+in-memory tables for Spark), so they run offline and never touch a real service.
 
 How to run them:
 
 ```bash
 pytest                                        # unit tests (offline)
-pytest tests/integration -m integration       # needs .env credentials
+pytest --cov && coverage report --include="ingestion/*" --fail-under=80   # with the coverage gate
+pytest tests/integration -m integration       # needs .env credentials (run it in a dev checkout)
 pytest tests/smoke -m smoke                   # needs the Airflow stack running
 pytest tests/e2e -m e2e                       # after a full DAG run
 python -m playwright install chromium         # once
@@ -293,7 +336,8 @@ cd dbt && dbt build                           # models + data tests
 1. **Accounts:** Databricks Free Edition, a Snowflake trial and Docker Desktop. Copy `.env.example`
    to `.env` and fill it in. Secrets stay in `.env` and `keys/`, which git ignores.
 2. **Snowflake:** run `snowflake/setup.sql` as ACCOUNTADMIN, then attach your public key to
-   `SVC_BANK_PIPELINE`.
+   `SVC_BANK_PIPELINE`. For dev and CI, run `snowflake/setup_dev.sql` (see CONTRIBUTING.md).
+   Set `BANK_HEALTH_ENV=prod` in the production `.env`.
 3. **Databricks:** link this repo as a Git folder and run `00_setup` once.
 4. **Airflow:** `cd airflow && docker compose up -d`, open http://localhost:8080, then trigger
    `bank_health_weekly`. The first run loads the full history; later runs only add new data.
@@ -306,10 +350,11 @@ cd dbt && dbt build                           # models + data tests
 ## Repository layout
 
 ```
-airflow/      Docker Compose stack, custom image, DAG bank_health_weekly
+.github/      CI workflow (ci.yml) and Dependabot
+airflow/      Docker Compose stack (prod; docker-compose.dev.yaml adds dev), custom image, DAG bank_health_weekly
 ingestion/    FDIC + CFPB clients, Databricks upload, Snowflake load (+ unit tests)
 databricks/   notebooks 00_setup to 05_score (PySpark, MLflow)
-snowflake/    setup.sql, powerbi_user.sql
+snowflake/    setup.sql, setup_dev.sql, powerbi_user.sql
 dbt/          staging, intermediate and mart models with tests
 powerbi/      BankHealth.pbip (TMDL + PBIR), build_report.py, theme, screenshots
 watchlist.html  the watchlist page (plain HTML/CSS/JS); index.html is the project page
