@@ -19,11 +19,9 @@ import json
 import os
 import sys
 import time
-
 from pathlib import Path
 
 import requests
-
 from _env import ROOT, load_env
 
 sys.path.insert(0, str(ROOT))

@@ -45,7 +45,7 @@ class DatabricksAPI:
         self.session.headers["Authorization"] = f"Bearer {token}"
 
     @classmethod
-    def from_env(cls) -> "DatabricksAPI":
+    def from_env(cls) -> DatabricksAPI:
         return cls(os.environ.get("DATABRICKS_HOST", ""), os.environ.get("DATABRICKS_TOKEN", ""))
 
     def __repr__(self) -> str:

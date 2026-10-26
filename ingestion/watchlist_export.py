@@ -40,7 +40,13 @@ BAND_CODES = {
     "New bank – not scored": "N",
     "Office of a foreign bank – not scored": "F",
 }
-TIER_CODES = {"1: <$100M": 1, "2: $100M-$1B": 2, "3: $1B-$10B": 3, "4: $10B-$100B": 4, "5: >$100B": 5}
+TIER_CODES: dict[str | None, int] = {
+    "1: <$100M": 1,
+    "2: $100M-$1B": 2,
+    "3: $1B-$10B": 3,
+    "4: $10B-$100B": 4,
+    "5: >$100B": 5,
+}
 
 # Model feature -> plain-language label and unit, for the reasons (features from _features.py)
 FEATURE_LABELS = {
@@ -168,6 +174,8 @@ def bank_age_years(established, as_of) -> float | None:
 def quarter_ends(latest, n: int = HISTORY_QUARTERS) -> list[date]:
     """The n quarter-ends ending at `latest`, oldest first."""
     q = _as_date(latest)
+    if q is None:
+        raise ValueError("quarter_ends needs a latest quarter")
     out = []
     for _ in range(n):
         out.append(q)
@@ -214,6 +222,8 @@ def build_payload(
     if not bank_rows:
         raise ValueError("no scored banks: MART_EARLY_WARNING is empty")
     latest = _as_date(bank_rows[0]["report_date"])
+    if latest is None:
+        raise ValueError("MART_EARLY_WARNING has no report_date")
     quarters = quarter_ends(latest)
 
     hist_by_cert: dict[int, list[dict]] = {}

@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pyarrow as pa
 import pytest
@@ -87,9 +87,7 @@ def test_csv_handles_dates_timestamps_bools_newlines_and_nul():
     t = pa.table(
         {
             "d": [date(2026, 6, 30)],
-            "ts": pa.array(
-                [datetime(2026, 10, 20, 17, 34, 27, tzinfo=timezone.utc)], pa.timestamp("us", tz="UTC")
-            ),
+            "ts": pa.array([datetime(2026, 10, 20, 17, 34, 27, tzinfo=UTC)], pa.timestamp("us", tz="UTC")),
             "flag": [True],
             "txt": ["line1\nline2\x00"],
         }

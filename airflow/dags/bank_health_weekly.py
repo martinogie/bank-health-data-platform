@@ -103,7 +103,7 @@ def bank_health_weekly():
 
         requested = get_current_context()["params"].get("retrain_model", False)
         previous = _as_date(fdic_result["previous"])
-        latest = _as_date(fdic_result["watermark"])
+        latest = date.fromisoformat(fdic_result["watermark"])  # always set by download_fdic
         retrain = should_retrain(requested, previous, latest)
         print(
             f"retrain_model param={requested!r}, previous quarter={previous}, latest={latest} -> retrain={retrain}"

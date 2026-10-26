@@ -609,7 +609,9 @@ with mlflow.start_run(run_id=results[champion]["run_id"], nested=True):
     mlflow.log_table(importance, "feature_importance.json")
     mlflow.log_table(by_year, "test_metrics_by_year.json")
     mlflow.log_dict({"features": FEATURES}, "features.json")
-    import sklearn, sys
+    import sys
+
+    import sklearn
 
     mlflow.log_params({"sklearn_version": sklearn.__version__, "python_version": sys.version.split()[0]})
     example = X_tr.head(200)

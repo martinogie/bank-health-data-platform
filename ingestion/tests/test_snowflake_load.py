@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 import pytest
@@ -63,7 +63,7 @@ def test_parquet_parts_skips_markers_and_dirs():
 
 
 def test_prepare_frame_uppercases_and_stamps():
-    ts = datetime(2026, 10, 19, tzinfo=timezone.utc)
+    ts = datetime(2026, 10, 19, tzinfo=UTC)
     out = sl.prepare_frame(pd.DataFrame({"cert": [1], "repdte": ["20260630"]}), ts)
     assert list(out.columns) == ["CERT", "REPDTE", "_LOADED_AT"]
     assert out["_LOADED_AT"].iloc[0] == pd.Timestamp(ts)

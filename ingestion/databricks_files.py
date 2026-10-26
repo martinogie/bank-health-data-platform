@@ -13,8 +13,8 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Iterable, Iterator
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Iterator
 from urllib.parse import quote
 
 import requests
@@ -36,7 +36,7 @@ class DatabricksFiles:
         self.session.headers["Authorization"] = f"Bearer {token}"
 
     @classmethod
-    def from_env(cls) -> "DatabricksFiles":
+    def from_env(cls) -> DatabricksFiles:
         return cls(os.environ.get("DATABRICKS_HOST", ""), os.environ.get("DATABRICKS_TOKEN", ""))
 
     def __repr__(self) -> str:  # never show the token
@@ -54,9 +54,9 @@ class DatabricksFiles:
                 wait = 2**attempt
                 log.warning("Databricks %s %s -> %s, retrying in %ss", method, url, resp.status_code, wait)
                 # A streamed file body has been consumed; rewind it before retrying.
-                body = kwargs.get("data")
-                if hasattr(body, "seek"):
-                    body.seek(0)
+                seek = getattr(kwargs.get("data"), "seek", None)
+                if seek is not None:
+                    seek(0)
                 time.sleep(wait)
                 continue
             if resp.status_code >= 400:
@@ -105,7 +105,7 @@ class DatabricksFiles:
         Used for complete files reused from disk, so a re-run doesn't push (and bronze
         doesn't re-ingest) hundreds of unchanged files, while a fresh Volume still fills up.
         """
-        remote_sizes: dict[str, int] = {}
+        remote_sizes: dict[str, int | None] = {}
         listed: set[str] = set()
         uploaded = []
         for p in local_paths:
@@ -132,7 +132,7 @@ class DatabricksFiles:
         url = self._url("directories", volume_dir.rstrip("/"))
         token = None
         while True:
-            params = {"page_token": token} if token else {}
+            params: dict[str, str] = {"page_token": token} if token else {}
             payload = self._request("GET", url, params=params).json()
             yield from payload.get("contents", [])
             token = payload.get("next_page_token")

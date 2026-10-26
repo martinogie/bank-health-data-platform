@@ -95,7 +95,6 @@ def test_large_window_is_split_into_parts(tmp_path):
     # Jan 2025 had 123,553 complaints, too many for one CSV export.
     def handler(method, url, kw):
         params = dict(kw["params"])
-        first_half = params["date_received_max"] <= "2025-01-16"
         if params.get("format") == "csv":
             return FakeResponse(content=csv_bytes(2))
         whole = params["date_received_min"] == "2025-01-01" and params["date_received_max"] == "2025-01-31"

@@ -27,7 +27,7 @@ import os
 import sys
 import tempfile
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from _env import ROOT, load_env
@@ -35,8 +35,8 @@ from _env import ROOT, load_env
 sys.path.insert(0, str(ROOT))
 import psycopg  # noqa: E402
 import pyarrow as pa  # noqa: E402
-from psycopg import sql as psql  # noqa: E402
 import pyarrow.parquet as pq  # noqa: E402
+from psycopg import sql as psql  # noqa: E402
 
 from ingestion import fdic  # noqa: E402
 from ingestion import pg_mirror as pm  # noqa: E402
@@ -103,7 +103,7 @@ def load_table(pg, desc: dict, batches, method: str) -> int:
                     log.info("  %s: %s rows so far", full, f"{rows:,}")
         for stmt in pm.key_and_index_sql(schema, table, [n for n, _ in desc["columns"]]):
             cur.execute(stmt)
-        note = f"Mirror of {desc['source']} {desc['source_table']} ({method}), loaded {datetime.now(timezone.utc):%Y-%m-%d %H:%M} UTC"
+        note = f"Mirror of {desc['source']} {desc['source_table']} ({method}), loaded {datetime.now(UTC):%Y-%m-%d %H:%M} UTC"
         cur.execute(psql.SQL("comment on table {} is {}").format(psql.SQL(full), psql.Literal(note)))
         cur.execute(f"analyze {full}")
         pg_rows = cur.execute(f"select count(*) from {full}").fetchone()[0]
@@ -141,7 +141,6 @@ def selected(desc: dict, patterns: list[str] | None) -> bool:
 class DatabricksSource:
     def __init__(self):
         from databricks import sql as dbsql
-
         from ingestion.databricks_files import DatabricksFiles
         from ingestion.databricks_jobs import DatabricksAPI
 
@@ -334,7 +333,7 @@ class SnowflakeSource:
         self.conn = connect_from_env()
         self.cur = self.conn.cursor()
         self.cur.execute("alter session set query_tag = 'postgres_mirror'")
-        self.started = datetime.now(timezone.utc)
+        self.started = datetime.now(UTC)
 
     def tables(self) -> list[dict]:
         self.cur.execute("""select table_schema, table_name, column_name, data_type, numeric_precision, numeric_scale
@@ -371,8 +370,7 @@ class SnowflakeSource:
         cur = self.conn.cursor()
         try:
             cur.execute(f"select * from {desc['source_table']}")
-            for t in cur.fetch_arrow_batches():
-                yield t
+            yield from cur.fetch_arrow_batches()
         finally:
             cur.close()
 

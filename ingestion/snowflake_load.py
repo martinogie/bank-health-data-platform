@@ -14,9 +14,9 @@ from __future__ import annotations
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Callable
 
 import pandas as pd
 
@@ -99,14 +99,16 @@ def load_table(
 ) -> int:
     """Replace RAW.<table> with the contents of `export_dir`. Returns rows loaded."""
     if writer is None:
-        from snowflake.connector.pandas_tools import write_pandas as writer
+        from snowflake.connector.pandas_tools import write_pandas
+
+        writer = write_pandas
 
     parts = parquet_parts(dbx, export_dir)
     if not parts:
         raise FileNotFoundError(f"No parquet files found in {export_dir}")
 
     loading = f"{table}__LOADING"
-    loaded_at = datetime.now(timezone.utc)
+    loaded_at = datetime.now(UTC)
     total = 0
     with tempfile.TemporaryDirectory() as tmp:
         for i, part in enumerate(parts):

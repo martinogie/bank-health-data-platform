@@ -6,7 +6,7 @@
 # COMMAND ----------
 
 import datetime
-import json
+import json  # used by the notebooks that `%run ./_common`
 
 from pyspark.sql import Window
 from pyspark.sql import functions as F
@@ -19,7 +19,7 @@ CHECKPOINTS = f"/Volumes/{CATALOG}/bronze/checkpoints"
 EXPORTS = f"/Volumes/{CATALOG}/gold/exports"
 BRONZE, SILVER, GOLD, ML = (f"{CATALOG}.{s}" for s in ("bronze", "silver", "gold", "ml"))
 
-RUN_TS = datetime.datetime.now(datetime.timezone.utc)
+RUN_TS = datetime.datetime.now(datetime.UTC)
 print(f"catalog={CATALOG}  run_ts={RUN_TS:%Y-%m-%d %H:%M:%S} UTC")
 
 # Serverless environment the model is trained and scored in (ENVIRONMENT_VERSION in

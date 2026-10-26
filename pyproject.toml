@@ -8,12 +8,29 @@ extend-exclude = ["airflow/logs", "dbt/dbt_packages", "dbt/target", "data"]
 [tool.ruff.lint]
 # pycodestyle errors, pyflakes, warnings, import order, modern syntax, likely bugs
 select = ["E", "F", "W", "I", "UP", "B"]
-ignore = ["E501"]   # the formatter wraps code; long strings and SQL stay as written
+ignore = [
+    "E501",  # the formatter wraps code; long strings and SQL stay as written
+    "B905",  # zip(strict=...) would change runtime behaviour; not a lint-only fix
+    "E741",  # short names like `l` in list comprehensions are fine here
+]
 
 [tool.ruff.lint.per-file-ignores]
 # Databricks notebooks: spark, dbutils and display are provided by the runtime, other names
 # come from `%run ./_common`, and imports follow the %run cells.
 "databricks/notebooks/**" = ["F821", "E402", "F403", "F405"]
+# _common is loaded with %run: its imports (json, F, Window, ...) are used by the other notebooks.
+"databricks/notebooks/_common.py" = ["F821", "E402", "F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["ingestion"]
+
+[tool.mypy]
+python_version = "3.12"   # the Airflow image's Python
+files = ["ingestion", "airflow/dags"]
+exclude = ["ingestion/tests/"]
+# Airflow, Cosmos, pendulum and the Snowflake/Databricks clients are not installed in the
+# type-check job, so their imports are treated as untyped.
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true

@@ -49,7 +49,7 @@ def main() -> None:
             print(sanity_checks.run(cur, table))
         except ValueError as exc:
             print(exc)
-            raise SystemExit(1)
+            raise SystemExit(1) from None
         finally:
             cur.close()
     finally:

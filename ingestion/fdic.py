@@ -15,9 +15,9 @@ import gzip
 import json
 import logging
 import time
+from collections.abc import Iterable, Iterator
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Iterator
 
 import requests
 
