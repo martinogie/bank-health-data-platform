@@ -36,29 +36,50 @@
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
-NCL_THRESHOLD = 3.0      # non-current loans, % of loans
-TIER1_THRESHOLD = 5.0    # Tier 1 leverage ratio, %
-NEW_BANK_YEARS = 3.0     # younger banks are not scored
+NCL_THRESHOLD = 3.0  # non-current loans, % of loans
+TIER1_THRESHOLD = 5.0  # Tier 1 leverage ratio, %
+NEW_BANK_YEARS = 3.0  # younger banks are not scored
 
 FEATURES = [
     # capital
-    "tier1_leverage_pct", "equity_to_assets_pct",
+    "tier1_leverage_pct",
+    "equity_to_assets_pct",
     # asset quality
-    "noncurrent_loans_pct", "net_chargeoff_rate_pct", "past_due_30_89_to_loans_pct",
-    "past_due_90_to_loans_pct", "nonaccrual_to_assets_pct", "ore_to_assets_pct",
+    "noncurrent_loans_pct",
+    "net_chargeoff_rate_pct",
+    "past_due_30_89_to_loans_pct",
+    "past_due_90_to_loans_pct",
+    "nonaccrual_to_assets_pct",
+    "ore_to_assets_pct",
     # earnings
-    "roa_pct", "roe_pct", "net_interest_margin_pct", "efficiency_ratio_pct", "net_income_qtr_to_assets_pct",
+    "roa_pct",
+    "roe_pct",
+    "net_interest_margin_pct",
+    "efficiency_ratio_pct",
+    "net_income_qtr_to_assets_pct",
     # liquidity and funding
-    "loans_to_deposits_pct", "brokered_to_deposits_pct",
+    "loans_to_deposits_pct",
+    "brokered_to_deposits_pct",
     # growth
-    "loan_growth_qoq_pct", "loan_growth_yoy_pct", "deposit_growth_yoy_pct", "asset_growth_yoy_pct",
+    "loan_growth_qoq_pct",
+    "loan_growth_yoy_pct",
+    "deposit_growth_yoy_pct",
+    "asset_growth_yoy_pct",
     # loan mix / concentration
-    "cre_to_loans_pct", "cre_to_equity_pct", "construction_to_loans_pct", "ci_to_loans_pct",
-    "consumer_to_loans_pct", "residential_to_loans_pct", "ag_to_loans_pct",
+    "cre_to_loans_pct",
+    "cre_to_equity_pct",
+    "construction_to_loans_pct",
+    "ci_to_loans_pct",
+    "consumer_to_loans_pct",
+    "residential_to_loans_pct",
+    "ag_to_loans_pct",
     # size
     "log_total_assets",
     # changes
-    "noncurrent_change_1q_pp", "noncurrent_change_4q_pp", "tier1_change_4q_pp", "roa_change_4q_pp",
+    "noncurrent_change_1q_pp",
+    "noncurrent_change_4q_pp",
+    "tier1_change_4q_pp",
+    "roa_change_4q_pp",
 ]
 
 # Capital ratios built on risk-weighted assets: CBLR banks (from 2020) don't report them, so
@@ -94,31 +115,45 @@ def build_model_frame():
     )
 
     # Values from exactly 1 and 4 quarters earlier (NULL if that quarter is missing)
-    prior = df.select(
-        "cert", "q_idx", "noncurrent_loans_pct", "tier1_leverage_pct", "roa_pct", "is_loss_qtr"
-    )
+    prior = df.select("cert", "q_idx", "noncurrent_loans_pct", "tier1_leverage_pct", "roa_pct", "is_loss_qtr")
+
     def lagged(k):
         return prior.select(
-            "cert", (F.col("q_idx") + k).alias("q_idx"),
-            *[F.col(c).alias(f"{c}_lag{k}") for c in ("noncurrent_loans_pct", "tier1_leverage_pct", "roa_pct", "is_loss_qtr")]
+            "cert",
+            (F.col("q_idx") + k).alias("q_idx"),
+            *[
+                F.col(c).alias(f"{c}_lag{k}")
+                for c in ("noncurrent_loans_pct", "tier1_leverage_pct", "roa_pct", "is_loss_qtr")
+            ],
         )
+
     df = (
         df.join(lagged(1), ["cert", "q_idx"], "left")
         .join(lagged(4), ["cert", "q_idx"], "left")
-        .withColumn("noncurrent_change_1q_pp", F.col("noncurrent_loans_pct") - F.col("noncurrent_loans_pct_lag1"))
-        .withColumn("noncurrent_change_4q_pp", F.col("noncurrent_loans_pct") - F.col("noncurrent_loans_pct_lag4"))
+        .withColumn(
+            "noncurrent_change_1q_pp", F.col("noncurrent_loans_pct") - F.col("noncurrent_loans_pct_lag1")
+        )
+        .withColumn(
+            "noncurrent_change_4q_pp", F.col("noncurrent_loans_pct") - F.col("noncurrent_loans_pct_lag4")
+        )
         .withColumn("tier1_change_4q_pp", F.col("tier1_leverage_pct") - F.col("tier1_leverage_pct_lag4"))
         .withColumn("roa_change_4q_pp", F.col("roa_pct") - F.col("roa_pct_lag4"))
         # Distress at this quarter (NULL metrics count as "no breach")
-        .withColumn("is_distressed",
-                    F.coalesce(F.col("noncurrent_loans_pct") > NCL_THRESHOLD, F.lit(False))
-                    | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False))
-                    | (F.coalesce(F.col("is_loss_qtr"), F.lit(False))
-                       & F.coalesce(F.col("is_loss_qtr_lag1"), F.lit(False))))
+        .withColumn(
+            "is_distressed",
+            F.coalesce(F.col("noncurrent_loans_pct") > NCL_THRESHOLD, F.lit(False))
+            | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False))
+            | (
+                F.coalesce(F.col("is_loss_qtr"), F.lit(False))
+                & F.coalesce(F.col("is_loss_qtr_lag1"), F.lit(False))
+            ),
+        )
         # Challenger: capital or asset-quality breach only
-        .withColumn("is_distressed_strict",
-                    F.coalesce(F.col("noncurrent_loans_pct") > NCL_THRESHOLD, F.lit(False))
-                    | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False)))
+        .withColumn(
+            "is_distressed_strict",
+            F.coalesce(F.col("noncurrent_loans_pct") > NCL_THRESHOLD, F.lit(False))
+            | F.coalesce(F.col("tier1_leverage_pct") < TIER1_THRESHOLD, F.lit(False)),
+        )
     )
 
     # Future window t+1..t+4 (by quarter index, so gaps are handled)
@@ -132,30 +167,64 @@ def build_model_frame():
     # Failures within 12 months after t (all failure records, not just the first)
     failures = spark.table(f"{SILVER}.fdic_failures").filter("cert is not null").select("cert", "fail_date")
     failed_soon = (
-        df.select("cert", "report_date").join(failures, "cert")
-        .filter((F.col("fail_date") > F.col("report_date"))
-                & (F.col("fail_date") <= F.last_day(F.add_months("report_date", 12))))
-        .select("cert", "report_date").distinct().withColumn("fails_within_12m", F.lit(1))
+        df.select("cert", "report_date")
+        .join(failures, "cert")
+        .filter(
+            (F.col("fail_date") > F.col("report_date"))
+            & (F.col("fail_date") <= F.last_day(F.add_months("report_date", 12)))
+        )
+        .select("cert", "report_date")
+        .distinct()
+        .withColumn("fails_within_12m", F.lit(1))
     )
     df = df.join(failed_soon, ["cert", "report_date"], "left").fillna({"fails_within_12m": 0})
 
     latest_idx = latest.year * 4 + (latest.month - 1) // 3 + 1
     df = (
-        df.withColumn("distress_next_4q",
-                      F.greatest(F.coalesce("distress_in_next_4q", F.lit(0)), F.col("fails_within_12m")))
-        .withColumn("distress_strict_next_4q",
-                    F.greatest(F.coalesce("strict_in_next_4q", F.lit(0)), F.col("fails_within_12m")))
-        .withColumn("outcome_observed",
-                    F.coalesce(F.col("last_future_q") == F.col("q_idx") + 4, F.lit(False))
-                    | (F.col("fails_within_12m") == 1))
+        df.withColumn(
+            "distress_next_4q",
+            F.greatest(F.coalesce("distress_in_next_4q", F.lit(0)), F.col("fails_within_12m")),
+        )
+        .withColumn(
+            "distress_strict_next_4q",
+            F.greatest(F.coalesce("strict_in_next_4q", F.lit(0)), F.col("fails_within_12m")),
+        )
+        .withColumn(
+            "outcome_observed",
+            F.coalesce(F.col("last_future_q") == F.col("q_idx") + 4, F.lit(False))
+            | (F.col("fails_within_12m") == 1),
+        )
         .withColumn("label_complete", F.col("q_idx") <= F.lit(latest_idx - 4))
-        .withColumn("is_model_row",
-                    ~F.col("is_distressed") & F.col("outcome_observed") & F.col("label_complete")
-                    & (F.col("total_assets_k") > 0) & ~F.col("is_foreign_office") & ~F.col("is_new_bank"))
+        .withColumn(
+            "is_model_row",
+            ~F.col("is_distressed")
+            & F.col("outcome_observed")
+            & F.col("label_complete")
+            & (F.col("total_assets_k") > 0)
+            & ~F.col("is_foreign_office")
+            & ~F.col("is_new_bank"),
+        )
     )
     return df.select(
-        "cert", "report_date", "bank_name", "state_code", "asset_size_tier", "total_assets_k",
-        *FEATURES, "cblr_reporter_flag", "cblr_reporter", "is_foreign_office", "foreign_office_rule",
-        "bank_age_years", "is_new_bank", "capital_zero_review", "outcome_observed", "label_complete",
-        "is_distressed", "fails_within_12m", "distress_next_4q", "distress_strict_next_4q", "is_model_row",
+        "cert",
+        "report_date",
+        "bank_name",
+        "state_code",
+        "asset_size_tier",
+        "total_assets_k",
+        *FEATURES,
+        "cblr_reporter_flag",
+        "cblr_reporter",
+        "is_foreign_office",
+        "foreign_office_rule",
+        "bank_age_years",
+        "is_new_bank",
+        "capital_zero_review",
+        "outcome_observed",
+        "label_complete",
+        "is_distressed",
+        "fails_within_12m",
+        "distress_next_4q",
+        "distress_strict_next_4q",
+        "is_model_row",
     )

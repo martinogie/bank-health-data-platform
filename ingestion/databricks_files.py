@@ -7,6 +7,7 @@ there. The same client later pulls gold exports back out for Snowflake.
 API reference: PUT/GET /api/2.0/fs/files{path}, GET /api/2.0/fs/directories{path}
 The access token comes from the environment and is never logged.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,7 @@ class DatabricksFiles:
         for attempt in range(retries + 1):
             resp = self.session.request(method, url, timeout=600, **kwargs)
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 log.warning("Databricks %s %s -> %s, retrying in %ss", method, url, resp.status_code, wait)
                 # A streamed file body has been consumed; rewind it before retrying.
                 body = kwargs.get("data")
@@ -72,7 +73,9 @@ class DatabricksFiles:
         url = self._url("files", volume_path)
         with open(local_path, "rb") as fh:
             self._request(
-                "PUT", url, data=fh,
+                "PUT",
+                url,
+                data=fh,
                 params={"overwrite": str(overwrite).lower()},
                 headers={"Content-Type": "application/octet-stream"},
             )

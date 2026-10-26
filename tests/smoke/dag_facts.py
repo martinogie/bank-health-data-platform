@@ -3,6 +3,7 @@
 Parses the dags/ folder exactly as Airflow does and prints the facts the smoke
 test checks, as JSON. Needs no connections or secrets.
 """
+
 import json
 import logging
 import warnings
@@ -13,7 +14,10 @@ logging.disable(logging.WARNING)
 from airflow.dag_processing.dagbag import DagBag  # noqa: E402
 
 bag = DagBag("/opt/airflow/dags")
-facts = {"dag_ids": sorted(bag.dags), "import_errors": {k: str(v)[:500] for k, v in bag.import_errors.items()}}
+facts = {
+    "dag_ids": sorted(bag.dags),
+    "import_errors": {k: str(v)[:500] for k, v in bag.import_errors.items()},
+}
 
 dag = bag.dags.get("bank_health_weekly")
 if dag is not None:

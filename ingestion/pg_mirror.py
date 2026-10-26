@@ -3,6 +3,7 @@
 Type mapping (Databricks / Snowflake -> PostgreSQL), keys and indexes per table, and turning
 Arrow batches into CSV for COPY.
 """
+
 from __future__ import annotations
 
 import io
@@ -93,7 +94,7 @@ def pg_type_snowflake(data_type: str, precision=None, scale=None, column: str = 
     t = (data_type or "").upper()
     if t in ("NUMBER", "DECIMAL", "NUMERIC"):
         if not scale:
-            return "bigint"            # whole numbers (CERT, counts, ids) fit in bigint
+            return "bigint"  # whole numbers (CERT, counts, ids) fit in bigint
         return f"numeric({precision or 38},{scale})"
     if t in ("FLOAT", "DOUBLE", "REAL", "DOUBLE PRECISION"):
         return "double precision"
@@ -129,16 +130,18 @@ def key_and_index_sql(pg_schema: str, table: str, column_names: list[str]) -> li
     if pk and all(c in names for c in pk):
         stmts.append(f"alter table {pg_schema}.{pg_ident(table)} add primary key ({', '.join(pk)})")
     for c in INDEX_COLUMNS:
-        if c in names and (not pk or pk[0] != c):          # the PK already indexes its first column
+        if c in names and (not pk or pk[0] != c):  # the PK already indexes its first column
             stmts.append(f"create index on {pg_schema}.{pg_ident(table)} ({c})")
-    if "cert" in names and "repdte" in names:               # bronze FDIC: join key as delivered
+    if "cert" in names and "repdte" in names:  # bronze FDIC: join key as delivered
         stmts.append(f"create index on {pg_schema}.{pg_ident(table)} (cert, repdte)")
     return stmts
 
 
 # ------------------------------------------------------------------ data
 def _jsonify(arr: pa.Array) -> pa.Array:
-    return pa.array([None if v is None else json.dumps(v, default=str) for v in arr.to_pylist()], type=pa.string())
+    return pa.array(
+        [None if v is None else json.dumps(v, default=str) for v in arr.to_pylist()], type=pa.string()
+    )
 
 
 def to_csv_bytes(batch: pa.Table | pa.RecordBatch, json_columns: set[str] | None = None) -> bytes:
@@ -163,6 +166,9 @@ def to_csv_bytes(batch: pa.Table | pa.RecordBatch, json_columns: set[str] | None
                 arr = pc.if_else(pc.equal(arr, ""), pa.scalar(None, pa.string()), arr)
         cols.append(arr)
     out = io.BytesIO()
-    pacsv.write_csv(pa.table(cols, names=table.column_names), out,
-                    write_options=pacsv.WriteOptions(include_header=False, quoting_style="all_valid"))
+    pacsv.write_csv(
+        pa.table(cols, names=table.column_names),
+        out,
+        write_options=pacsv.WriteOptions(include_header=False, quoting_style="all_valid"),
+    )
     return out.getvalue()

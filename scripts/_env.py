@@ -1,4 +1,5 @@
 """Read KEY=VALUE lines from the project's .env into os.environ (values never printed)."""
+
 import os
 from pathlib import Path
 

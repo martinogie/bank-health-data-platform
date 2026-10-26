@@ -11,6 +11,7 @@ Usage (from the project folder):
 (/Users/<me>/bank-health-local-run) and runs them from there, so an unpushed branch can be
 tested. The notebooks still read and write the real catalog tables.
 """
+
 from __future__ import annotations
 
 import base64
@@ -72,28 +73,41 @@ def upload_local_notebooks(db: Databricks) -> str:
     db.call("POST", "/api/2.0/workspace/mkdirs", json={"path": target})
     files = sorted(NOTEBOOK_DIR.glob("*.py"))
     for f in files:
-        db.call("POST", "/api/2.0/workspace/import", json={
-            "path": f"{target}/{f.stem}", "format": "SOURCE", "language": "PYTHON", "overwrite": True,
-            "content": base64.b64encode(f.read_bytes()).decode(),
-        })
+        db.call(
+            "POST",
+            "/api/2.0/workspace/import",
+            json={
+                "path": f"{target}/{f.stem}",
+                "format": "SOURCE",
+                "language": "PYTHON",
+                "overwrite": True,
+                "content": base64.b64encode(f.read_bytes()).decode(),
+            },
+        )
     print(f"Uploaded {len(files)} local notebooks to {target}")
     return root
 
 
 def run_notebook(db: Databricks, repo_path: str, notebook: str, params: dict) -> bool:
-    run = db.call("POST", "/api/2.2/jobs/runs/submit", json={
-        "run_name": f"bank_health {notebook} (manual)",
-        "environments": ENVIRONMENTS,          # same serverless environment as the scheduled job
-        "tasks": [{
-            "task_key": notebook,
-            "environment_key": "pinned",
-            "notebook_task": {
-                "notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
-                "source": "WORKSPACE",
-                "base_parameters": params,
-            },
-        }],
-    })
+    run = db.call(
+        "POST",
+        "/api/2.2/jobs/runs/submit",
+        json={
+            "run_name": f"bank_health {notebook} (manual)",
+            "environments": ENVIRONMENTS,  # same serverless environment as the scheduled job
+            "tasks": [
+                {
+                    "task_key": notebook,
+                    "environment_key": "pinned",
+                    "notebook_task": {
+                        "notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
+                        "source": "WORKSPACE",
+                        "base_parameters": params,
+                    },
+                }
+            ],
+        },
+    )
     run_id = run["run_id"]
     print(f"\n=== {notebook}: run {run_id} started")
     started = time.time()
@@ -126,7 +140,7 @@ def main() -> None:
     load_env()
     params = {"catalog": os.environ.get("DATABRICKS_CATALOG") or "bank_health"}
     for a in args:
-        if a.startswith("--param="):                       # --param=retrain=false
+        if a.startswith("--param="):  # --param=retrain=false
             k, v = a.removeprefix("--param=").split("=", 1)
             params[k] = v
     db = Databricks()

@@ -8,6 +8,7 @@ Run from the project folder on your PC, with the stack running
 They talk to the running containers, so they are not part of the default
 offline `pytest` run (pytest.ini testpaths = ingestion/tests).
 """
+
 from __future__ import annotations
 
 import json
@@ -26,9 +27,7 @@ EXPECTED_SERVICES = {"postgres", "airflow-apiserver", "airflow-scheduler", "airf
 
 
 def compose(*args: str, stdin: str | None = None) -> str:
-    result = subprocess.run(
-        [*COMPOSE, *args], input=stdin, capture_output=True, text=True, timeout=180
-    )
+    result = subprocess.run([*COMPOSE, *args], input=stdin, capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, f"docker compose {' '.join(args)} failed:\n{result.stderr[-2000:]}"
     return result.stdout
 
@@ -75,22 +74,33 @@ def test_dags_import_without_errors(dag_facts):
 
 def test_dag_schedule_and_settings(dag_facts):
     dag = dag_facts["bank_health_weekly"]
-    assert dag["timetable"]["expression"] == "0 6 * * 1"         # Mondays 06:00
+    assert dag["timetable"]["expression"] == "0 6 * * 1"  # Mondays 06:00
     assert dag["timetable"]["timezone"] == "America/Chicago"
     assert dag["catchup"] is False
     assert dag["max_active_runs"] == 1
     assert dag["has_doc_md"]
 
 
-CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "decide_retrain", "sync_databricks_job",
-              "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline", "export_watchlist"}
+CORE_TASKS = {
+    "download_fdic",
+    "download_cfpb",
+    "upload_raw",
+    "save_watermarks",
+    "decide_retrain",
+    "sync_databricks_job",
+    "run_databricks_job",
+    "load_snowflake",
+    "dbt_docs_generate",
+    "verify_pipeline",
+    "export_watchlist",
+}
 
 
 def test_dag_tasks_retries_docs_and_order(dag_facts):
     tasks = dag_facts["bank_health_weekly"]["tasks"]
     assert CORE_TASKS <= set(tasks)
     for task_id in CORE_TASKS:
-        expected = 1 if task_id == "run_databricks_job" else 2   # 1 retry protects the Databricks quota
+        expected = 1 if task_id == "run_databricks_job" else 2  # 1 retry protects the Databricks quota
         assert tasks[task_id]["retries"] == expected, task_id
         assert tasks[task_id]["has_doc_md"], f"{task_id} has no task docs"
     assert tasks["download_fdic"]["upstream"] == []
@@ -98,13 +108,15 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert tasks["upload_raw"]["upstream"] == ["download_cfpb", "download_fdic"]
     # watermarks only move after the upload succeeded
     assert "upload_raw" in tasks["save_watermarks"]["upstream"]
-    assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(tasks["run_databricks_job"]["upstream"])
+    assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(
+        tasks["run_databricks_job"]["upstream"]
+    )
     assert tasks["decide_retrain"]["upstream"] == ["download_fdic"]
     assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
     # release guardrail: no retries (a bad top 20 won't fix itself), runs before dbt publishes marts
     assert tasks["sanity_check_top20"]["upstream"] == ["load_snowflake"]
     assert tasks["sanity_check_top20"]["retries"] == 0 and tasks["sanity_check_top20"]["has_doc_md"]
-    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]   # final task
+    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]  # final task
 
 
 def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
@@ -113,5 +125,6 @@ def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
     for model in ("stg_fdic__financials", "fct_bank_quarter", "mart_early_warning"):
         assert any(model in t for t in dbt_tasks), f"no Cosmos task for {model}"
     assert all(tasks[t]["retries"] == 1 for t in dbt_tasks)
-    assert any(t.endswith("sanity_check_top20") for t in
-               (u for t in dbt_tasks for u in tasks[t]["upstream"])), "dbt group must run after the top-20 check"
+    assert any(
+        t.endswith("sanity_check_top20") for t in (u for t in dbt_tasks for u in tasks[t]["upstream"])
+    ), "dbt group must run after the top-20 check"

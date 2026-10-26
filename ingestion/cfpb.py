@@ -7,6 +7,7 @@ complaints and are not banks.
 Files are saved as gzipped CSV exactly as the API delivers them, one file per
 date window: <out_dir>/complaints/complaints_<start>_<end>.csv.gz
 """
+
 from __future__ import annotations
 
 import csv
@@ -85,7 +86,10 @@ def _get(session: requests.Session, params, stream: bool = False, retries: int =
     for attempt in range(retries + 1):
         try:
             resp = session.get(
-                API_URL, params=params, stream=stream, timeout=300,
+                API_URL,
+                params=params,
+                stream=stream,
+                timeout=300,
                 headers={"User-Agent": USER_AGENT},
             )
             if resp.status_code == 429 or resp.status_code >= 500:
@@ -97,7 +101,7 @@ def _get(session: requests.Session, params, stream: bool = False, retries: int =
             retryable = status is None or status == 429 or status >= 500
             if attempt == retries or not retryable:
                 raise
-            wait = 2 ** attempt
+            wait = 2**attempt
             log.warning("CFPB request failed (%s), retrying in %ss", exc, wait)
             time.sleep(wait)
     raise AssertionError("unreachable")
@@ -137,7 +141,7 @@ def download_window_parts(
         path = download_window(start, end, out_dir, session, expected=expected)
     except requests.HTTPError as exc:
         status = getattr(exc.response, "status_code", None)
-        if status == 400 and start < end:   # export refused as too large: split and retry
+        if status == 400 and start < end:  # export refused as too large: split and retry
             log.info("CFPB %s..%s: export refused (400), splitting", start, end)
             return [p for a, b in _halves(start, end) for p in download_window_parts(a, b, out_dir, session)]
         raise
@@ -153,7 +157,7 @@ def existing_parts(out_dir: Path, start: date, end: date) -> list[Path] | None:
     parts = []
     for p in folder.glob("complaints_*_*.csv.gz"):
         try:
-            a, b = (date.fromisoformat(x) for x in p.name[len("complaints_"):-len(".csv.gz")].split("_"))
+            a, b = (date.fromisoformat(x) for x in p.name[len("complaints_") : -len(".csv.gz")].split("_"))
         except ValueError:
             continue
         if start <= a and b <= end:
@@ -172,7 +176,10 @@ def existing_parts(out_dir: Path, start: date, end: date) -> list[Path] | None:
 
 
 def download_window(
-    start: date, end: date, out_dir: Path, session: requests.Session | None = None,
+    start: date,
+    end: date,
+    out_dir: Path,
+    session: requests.Session | None = None,
     expected: int | None = None,
 ) -> Path | None:
     """Download one window to a gzipped CSV. Returns None if the window is empty."""
@@ -196,8 +203,7 @@ def download_window(
     if rows < expected * MIN_COMPLETENESS:
         tmp.unlink(missing_ok=True)
         raise RuntimeError(
-            f"CFPB {start}..{end}: CSV has {rows} rows but API reports {expected}; "
-            "export looks truncated"
+            f"CFPB {start}..{end}: CSV has {rows} rows but API reports {expected}; export looks truncated"
         )
     tmp.replace(path)
     log.info("CFPB %s..%s: %s rows (API total %s) -> %s", start, end, rows, expected, path)

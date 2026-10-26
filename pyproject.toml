@@ -1,0 +1,19 @@
+# Tool settings only (lint, format, types, coverage). The project is not a package.
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"   # Databricks serverless environment 2 runs Python 3.11
+extend-exclude = ["airflow/logs", "dbt/dbt_packages", "dbt/target", "data"]
+
+[tool.ruff.lint]
+# pycodestyle errors, pyflakes, warnings, import order, modern syntax, likely bugs
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]   # the formatter wraps code; long strings and SQL stay as written
+
+[tool.ruff.lint.per-file-ignores]
+# Databricks notebooks: spark, dbutils and display are provided by the runtime, other names
+# come from `%run ./_common`, and imports follow the %run cells.
+"databricks/notebooks/**" = ["F821", "E402", "F403", "F405"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ingestion"]

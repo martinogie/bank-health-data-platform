@@ -31,13 +31,18 @@ def require_pinned_environment():
     """Stop if this run is not in the pinned environment: a model pickled in one environment
     may not load (or may behave differently) in another."""
     import os
+
     runtime = os.environ.get("DATABRICKS_RUNTIME_VERSION", "")
     if runtime.split(".")[:2] != ["client", EXPECTED_ENVIRONMENT]:
-        raise RuntimeError(f"running in serverless environment {runtime!r}, expected version "
-                           f"{EXPECTED_ENVIRONMENT}; run via the job or scripts/databricks_run.py")
+        raise RuntimeError(
+            f"running in serverless environment {runtime!r}, expected version "
+            f"{EXPECTED_ENVIRONMENT}; run via the job or scripts/databricks_run.py"
+        )
     print(f"serverless environment {runtime} (pinned to version {EXPECTED_ENVIRONMENT})")
 
+
 # COMMAND ----------
+
 
 def latest_per_key(df, keys, order_cols):
     """Keep one row per key: the first by `order_cols` descending (e.g. newest load)."""
@@ -49,6 +54,7 @@ def clean_str(col_name):
     """Trim, and turn '', 'None' and 'N/A' (used as blanks in the raw files) into NULL."""
     c = F.trim(F.col(col_name))
     return F.when(c.isin("", "None", "N/A"), None).otherwise(c)
+
 
 # COMMAND ----------
 
@@ -85,8 +91,10 @@ def dq_range(df, table, col_name, low=None, high=None, level="warn"):
 
 def dq_finish():
     """Save results; raise if any error-level check failed."""
-    schema = ("run_ts timestamp, notebook string, table_name string, check_name string, "
-              "level string, failed_rows long, passed boolean, detail string")
+    schema = (
+        "run_ts timestamp, notebook string, table_name string, check_name string, "
+        "level string, failed_rows long, passed boolean, detail string"
+    )
     spark.createDataFrame(_dq_results, schema).write.mode("append").saveAsTable(f"{SILVER}.dq_results")
     errors = [r for r in _dq_results if r[4] == "error" and not r[6]]
     warns = [r for r in _dq_results if r[4] == "warn" and not r[6]]

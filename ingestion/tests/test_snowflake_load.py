@@ -46,13 +46,16 @@ def parquet_bytes(df, tmp_path, name):
 
 
 def test_parquet_parts_skips_markers_and_dirs():
-    dbx = FakeDbx([
-        {"path": "/Volumes/e/t/_SUCCESS", "is_directory": False},
-        {"path": "/Volumes/e/t/_committed_123", "is_directory": False},
-        {"path": "/Volumes/e/t/part-0001.snappy.parquet", "is_directory": False},
-        {"path": "/Volumes/e/t/part-0000.snappy.parquet", "is_directory": False},
-        {"path": "/Volumes/e/t/sub", "is_directory": True},
-    ], {})
+    dbx = FakeDbx(
+        [
+            {"path": "/Volumes/e/t/_SUCCESS", "is_directory": False},
+            {"path": "/Volumes/e/t/_committed_123", "is_directory": False},
+            {"path": "/Volumes/e/t/part-0001.snappy.parquet", "is_directory": False},
+            {"path": "/Volumes/e/t/part-0000.snappy.parquet", "is_directory": False},
+            {"path": "/Volumes/e/t/sub", "is_directory": True},
+        ],
+        {},
+    )
     assert sl.parquet_parts(dbx, "/Volumes/e/t") == [
         "/Volumes/e/t/part-0000.snappy.parquet",
         "/Volumes/e/t/part-0001.snappy.parquet",

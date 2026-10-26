@@ -36,7 +36,9 @@ def cutoffs_from_tags(tags: dict) -> dict:
     return cuts
 
 
-def assign_band(probability, is_foreign_office: bool, is_new_bank: bool, is_distressed: bool, cutoffs: dict) -> str:
+def assign_band(
+    probability, is_foreign_office: bool, is_new_bank: bool, is_distressed: bool, cutoffs: dict
+) -> str:
     """Not-scored groups first, then 'already in distress', then the probability bands."""
     if is_foreign_office:
         return FOREIGN_OFFICE
@@ -68,8 +70,7 @@ def reason_texts(values: pd.Series, drops: pd.Series, medians: pd.Series, k: int
     that raise the risk (drop > 0) and that the bank actually reports (value not missing) qualify,
     so a reason never shows a value that isn't reported.
     """
-    usable = [f for f in drops.index
-              if drops[f] > 0 and pd.notna(values.get(f)) and pd.notna(medians.get(f))]
+    usable = [f for f in drops.index if drops[f] > 0 and pd.notna(values.get(f)) and pd.notna(medians.get(f))]
     top = drops[usable].sort_values(ascending=False).head(k)
     texts = [f"{f} = {_fmt(values[f])} (median {_fmt(medians[f])})" for f in top.index]
     return texts + [None] * (k - len(texts))

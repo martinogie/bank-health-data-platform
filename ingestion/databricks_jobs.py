@@ -8,6 +8,7 @@ idempotent: an existing job with the same name is reset to these settings.
 `retrain` defaults to "false": weekly runs score with the current @champion model;
 04_train_model only retrains when run with retrain=true.
 """
+
 from __future__ import annotations
 
 import logging
@@ -54,7 +55,8 @@ class DatabricksAPI:
         resp = self.session.request(method, self.host + path, timeout=60, **kwargs)
         if resp.status_code >= 400:
             raise requests.HTTPError(
-                f"Databricks {method} {path} failed: {resp.status_code} {resp.text[:300]}", response=resp)
+                f"Databricks {method} {path} failed: {resp.status_code} {resp.text[:300]}", response=resp
+            )
         return resp.json() if resp.text else {}
 
 
@@ -84,8 +86,10 @@ def job_settings(repo_path: str, catalog: str = "bank_health") -> dict:
     for key, notebook, timeout in NOTEBOOK_TASKS:
         task = {
             "task_key": key,
-            "notebook_task": {"notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
-                              "source": "WORKSPACE"},
+            "notebook_task": {
+                "notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
+                "source": "WORKSPACE",
+            },
             "timeout_seconds": timeout,
             "max_retries": 0,  # retries are Airflow's job; avoids silent double compute
             "environment_key": "pinned",
@@ -97,7 +101,7 @@ def job_settings(repo_path: str, catalog: str = "bank_health") -> dict:
     return {
         "name": JOB_NAME,
         "description": "Bank Health: bronze -> silver -> gold -> train (only if retrain=true) -> score",
-        "max_concurrent_runs": 1,          # an Airflow retry can never start a parallel copy
+        "max_concurrent_runs": 1,  # an Airflow retry can never start a parallel copy
         "queue": {"enabled": True},
         "timeout_seconds": 3 * 3600,
         "parameters": [
@@ -137,5 +141,7 @@ if __name__ == "__main__":
     load_env()
     api = DatabricksAPI.from_env()
     repo = pull_git_folder(api)
-    job_id = create_or_update_job(api, job_settings(repo["path"], os.environ.get("DATABRICKS_CATALOG") or "bank_health"))
+    job_id = create_or_update_job(
+        api, job_settings(repo["path"], os.environ.get("DATABRICKS_CATALOG") or "bank_health")
+    )
     print(f"job {JOB_NAME}: id {job_id}")

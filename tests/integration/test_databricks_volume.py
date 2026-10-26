@@ -3,6 +3,7 @@
 Uploads a small probe file under _integration_test/, lists it, downloads it,
 compares bytes, then deletes it. Needs DATABRICKS_HOST and DATABRICKS_TOKEN in .env.
 """
+
 from __future__ import annotations
 
 import uuid

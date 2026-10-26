@@ -8,6 +8,7 @@ Step 3 is a single atomic metadata change, so readers never see a half-loaded ta
 
 Auth is key-pair: the private key file path comes from SNOWFLAKE_PRIVATE_KEY_PATH.
 """
+
 from __future__ import annotations
 
 import logging
@@ -72,7 +73,8 @@ def connect_from_env():
 def parquet_parts(dbx: DatabricksFiles, export_dir: str) -> list[str]:
     """Parquet data files in a Spark output folder (skips _SUCCESS, _committed_*, etc.)."""
     parts = [
-        e["path"] for e in dbx.list_directory(export_dir)
+        e["path"]
+        for e in dbx.list_directory(export_dir)
         if not e.get("is_directory")
         and e["path"].endswith(".parquet")
         and not PurePosixPath(e["path"]).name.startswith(("_", "."))
@@ -111,11 +113,13 @@ def load_table(
             local = dbx.download_file(part, Path(tmp) / f"part_{i}.parquet")
             df = prepare_frame(pd.read_parquet(local), loaded_at)
             ok, _, nrows, _ = writer(
-                conn, df, loading,
+                conn,
+                df,
+                loading,
                 schema=RAW_SCHEMA,
                 auto_create_table=True,
-                overwrite=(i == 0),       # first part (re)creates the loading table
-                use_logical_type=True,    # keep timestamps as timestamps
+                overwrite=(i == 0),  # first part (re)creates the loading table
+                use_logical_type=True,  # keep timestamps as timestamps
                 quote_identifiers=False,
             )
             if not ok:

@@ -83,18 +83,22 @@ def test_upload_if_missing_skips_files_already_in_volume(tmp_path):
 
     def handler(method, url, kw):
         if method == "GET" and url.endswith(fin_dir):
-            return FakeResponse(payload={"contents": [
-                {"path": f"{fin_dir}/a.jsonl.gz", "is_directory": False, "file_size": 5},
-                {"path": f"{fin_dir}/b.jsonl.gz", "is_directory": False, "file_size": 999},
-            ]})
+            return FakeResponse(
+                payload={
+                    "contents": [
+                        {"path": f"{fin_dir}/a.jsonl.gz", "is_directory": False, "file_size": 5},
+                        {"path": f"{fin_dir}/b.jsonl.gz", "is_directory": False, "file_size": 999},
+                    ]
+                }
+            )
         if method == "GET":
-            return FakeResponse(404, content=b"NOT_FOUND")   # cfpb folder not created yet
+            return FakeResponse(404, content=b"NOT_FOUND")  # cfpb folder not created yet
         return FakeResponse(204)
 
     dbx, session = client(handler)
     uploaded = dbx.upload_if_missing([same, changed, new], root)
     assert uploaded == [f"{fin_dir}/b.jsonl.gz", f"{RAW_VOLUME}/cfpb/complaints/c.csv.gz"]
-    assert sum(1 for c in session.calls if c[0] == "GET") == 2   # one listing per folder
+    assert sum(1 for c in session.calls if c[0] == "GET") == 2  # one listing per folder
 
 
 def test_delete_file():

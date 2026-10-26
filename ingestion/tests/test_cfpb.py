@@ -9,7 +9,7 @@ HEADER = "Date received,Product,Company,Complaint ID\n"
 
 
 def csv_bytes(n_rows, with_multiline=False):
-    rows = [f'2026-09-0{1 + i % 9},Mortgage,BANK {i},{1000 + i}\n' for i in range(n_rows)]
+    rows = [f"2026-09-0{1 + i % 9},Mortgage,BANK {i},{1000 + i}\n" for i in range(n_rows)]
     if with_multiline and rows:
         rows[0] = '2026-09-01,"Checking\nor savings",BANK 0,1000\n'
     return (HEADER + "".join(rows)).encode()
@@ -21,6 +21,7 @@ def handler_for(expected, body):
         if params.get("format") == "csv":
             return FakeResponse(content=body)
         return FakeResponse(payload={"hits": {"total": {"value": expected}}})
+
     return handler
 
 
@@ -101,8 +102,10 @@ def test_large_window_is_split_into_parts(tmp_path):
         return FakeResponse(payload={"hits": {"total": {"value": 123_553 if whole else 2}}})
 
     paths = cfpb.download_window_parts(date(2025, 1, 1), date(2025, 1, 31), tmp_path, FakeSession(handler))
-    assert [p.name for p in paths] == ["complaints_2025-01-01_2025-01-16.csv.gz",
-                                       "complaints_2025-01-17_2025-01-31.csv.gz"]
+    assert [p.name for p in paths] == [
+        "complaints_2025-01-01_2025-01-16.csv.gz",
+        "complaints_2025-01-17_2025-01-31.csv.gz",
+    ]
 
 
 def test_export_refused_with_400_is_split_and_retried(tmp_path):
@@ -123,7 +126,7 @@ def test_existing_parts_requires_full_day_by_day_coverage(tmp_path):
     for name in ("complaints_2025-01-01_2025-01-16.csv.gz", "complaints_2025-01-17_2025-01-31.csv.gz"):
         (folder / name).write_bytes(b"x")
     assert len(cfpb.existing_parts(tmp_path, date(2025, 1, 1), date(2025, 1, 31))) == 2
-    (folder / "complaints_2025-02-01_2025-02-10.csv.gz").write_bytes(b"x")   # Feb 11-28 missing
+    (folder / "complaints_2025-02-01_2025-02-10.csv.gz").write_bytes(b"x")  # Feb 11-28 missing
     assert cfpb.existing_parts(tmp_path, date(2025, 2, 1), date(2025, 2, 28)) is None
 
 
@@ -144,7 +147,9 @@ def test_download_complaints_reuses_complete_months_on_disk(tmp_path):
     # watermark Aug 31 -> look-back starts Aug 1, so the first window is exactly Aug 1-31
     result = cfpb.download_complaints(date(2026, 8, 31), date(2026, 10, 19), tmp_path, FakeSession(handler))
     assert result["cached"] == [old]
-    assert old.read_bytes() == b"cached"                  # untouched
+    assert old.read_bytes() == b"cached"  # untouched
     assert "2026-08-01" not in requested
     assert [p.name for p in result["fresh"]] == [
-        "complaints_2026-09-01_2026-09-30.csv.gz", "complaints_2026-10-01_2026-10-18.csv.gz"]
+        "complaints_2026-09-01_2026-09-30.csv.gz",
+        "complaints_2026-10-01_2026-10-18.csv.gz",
+    ]
