@@ -34,3 +34,15 @@ ignore_missing_imports = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
+
+[tool.coverage.run]
+# The notebooks are measured too: the tests execute _features.py and _scoring_rules.py directly.
+source = ["ingestion", "databricks/notebooks"]
+omit = ["ingestion/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+# Two gates, both 80% (run by CI after `pytest --cov`):
+#   coverage report --include="ingestion/*" --fail-under=80
+#   coverage report --include="databricks/notebooks/_features.py,databricks/notebooks/_scoring_rules.py" --fail-under=80

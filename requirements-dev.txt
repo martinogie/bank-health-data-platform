@@ -8,3 +8,6 @@ playwright>=1.48
 pytest-playwright>=0.5
 databricks-sql-connector[pyarrow]==4.8.0
 psycopg[binary]==3.3.6
+pytest-cov>=7
+# label/feature tests run _features.py on local Spark (needs Java 8/11/17)
+pyspark==3.5.5
