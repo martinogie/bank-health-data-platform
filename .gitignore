@@ -7,6 +7,7 @@ keys/
 __pycache__/
 *.pyc
 .venv/
+.venv-dbt/
 venv/
 # airflow
 logs/
@@ -26,3 +27,7 @@ dbt/.user.yml
 # Power BI project: local caches and per-user settings
 **/.pbi/localSettings.json
 **/.pbi/cache.abf
+# coverage output
+.coverage
+coverage.xml
+htmlcov/

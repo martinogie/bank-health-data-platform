@@ -26,8 +26,9 @@
 import re
 
 NOTEBOOK = "01_bronze"
-spark.sql(f"CREATE VOLUME IF NOT EXISTS {BRONZE}.checkpoints "
-          "COMMENT 'Auto Loader checkpoints and inferred schemas'")
+spark.sql(
+    f"CREATE VOLUME IF NOT EXISTS {BRONZE}.checkpoints COMMENT 'Auto Loader checkpoints and inferred schemas'"
+)
 
 
 def snake(name: str) -> str:
@@ -43,10 +44,10 @@ def ingest(subdir: str, fmt: str, table: str, **reader_options) -> dict:
         spark.readStream.format("cloudFiles")
         .option("cloudFiles.format", fmt)
         .option("cloudFiles.schemaLocation", f"{checkpoint}/_schema")
-        .option("cloudFiles.inferColumnTypes", "false")   # keep every value as text
-        .option("cloudFiles.allowOverwrites", "true")     # re-read files that were re-uploaded
+        .option("cloudFiles.inferColumnTypes", "false")  # keep every value as text
+        .option("cloudFiles.allowOverwrites", "true")  # re-read files that were re-uploaded
         .option("cloudFiles.schemaEvolutionMode", "addNewColumns")
-        .option("pathGlobFilter", "*.gz")                 # skip any half-written .tmp files
+        .option("pathGlobFilter", "*.gz")  # skip any half-written .tmp files
     )
     for key, value in reader_options.items():
         reader = reader.option(key, value)
@@ -60,7 +61,7 @@ def ingest(subdir: str, fmt: str, table: str, **reader_options) -> dict:
     query = (
         df.writeStream.option("checkpointLocation", checkpoint)
         .option("mergeSchema", "true")
-        .trigger(availableNow=True)                       # process what's there, then stop
+        .trigger(availableNow=True)  # process what's there, then stop
         .toTable(target)
     )
     query.awaitTermination()
@@ -82,6 +83,7 @@ def ingest_with_retry(*args, **kwargs) -> dict:
         print("New column detected, schema updated; re-running once")
         return ingest(*args, **kwargs)
 
+
 # COMMAND ----------
 
 summary = {
@@ -89,8 +91,12 @@ summary = {
     "fdic_institutions": ingest_with_retry("fdic/institutions", "json", "fdic_institutions"),
     "fdic_failures": ingest_with_retry("fdic/failures", "json", "fdic_failures"),
     "cfpb_complaints": ingest_with_retry(
-        "cfpb/complaints", "csv", "cfpb_complaints",
-        header="true", multiLine="true", escape='"',
+        "cfpb/complaints",
+        "csv",
+        "cfpb_complaints",
+        header="true",
+        multiLine="true",
+        escape='"',
     ),
 }
 

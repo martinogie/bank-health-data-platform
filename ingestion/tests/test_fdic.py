@@ -59,7 +59,7 @@ def write_cached(path, fields):
 def test_cached_file_without_new_fields_is_downloaded_again(tmp_path):
     latest = date(2026, 6, 30)
     old = [f for f in fdic.FINANCIAL_FIELDS if f not in ("CBLRIND", "IBA")]
-    write_cached(fdic.financials_path(tmp_path, date(2025, 9, 30)), old)               # before the change
+    write_cached(fdic.financials_path(tmp_path, date(2025, 9, 30)), old)  # before the change
     write_cached(fdic.financials_path(tmp_path, date(2025, 12, 31)), fdic.FINANCIAL_FIELDS)
     to_fetch, cached = fdic.split_cached_quarters([date(2025, 9, 30), date(2025, 12, 31)], tmp_path, latest)
     assert to_fetch == [date(2025, 9, 30)]
@@ -89,7 +89,7 @@ def test_fetch_all_follows_offsets(monkeypatch):
 
     def handler(method, url, kw):
         off = kw["params"]["offset"]
-        return FakeResponse(payload=page(records[off:off + 2], total=5))
+        return FakeResponse(payload=page(records[off : off + 2], total=5))
 
     session = FakeSession(handler)
     out = list(fdic.fetch_all(session, "financials", ["CERT"], filters="REPDTE:20260630"))
@@ -125,15 +125,11 @@ def test_download_financials_writes_one_file_per_quarter(tmp_path):
         rows = [] if repdte == "20260331" else [{"CERT": 1, "REPDTE": repdte, "ASSET": 100}]
         return FakeResponse(payload=page(rows, len(rows)))
 
-    paths = fdic.download_financials(
-        [date(2026, 3, 31), date(2026, 6, 30)], tmp_path, FakeSession(handler)
-    )
+    paths = fdic.download_financials([date(2026, 3, 31), date(2026, 6, 30)], tmp_path, FakeSession(handler))
     assert [p.name for p in paths] == ["financials_20260630.jsonl.gz"]  # empty quarter skipped
     assert not (tmp_path / "financials" / "financials_20260331.jsonl.gz").exists()
     with gzip.open(paths[0], "rt") as fh:
-        assert [json.loads(line) for line in fh] == [
-            {"CERT": 1, "REPDTE": "20260630", "ASSET": 100}
-        ]
+        assert [json.loads(line) for line in fh] == [{"CERT": 1, "REPDTE": "20260630", "ASSET": 100}]
 
 
 def test_download_institutions_and_failures_named_by_load_date(tmp_path):

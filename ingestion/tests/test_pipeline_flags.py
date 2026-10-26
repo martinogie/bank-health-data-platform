@@ -5,7 +5,9 @@ import pytest
 from ingestion.pipeline_flags import parse_bool, should_retrain
 
 
-@pytest.mark.parametrize("value", [False, "False", "false", "FALSE", " false ", "0", 0, "no", "off", "", None])
+@pytest.mark.parametrize(
+    "value", [False, "False", "false", "FALSE", " false ", "0", 0, "no", "off", "", None]
+)
 def test_false_values(value):
     assert parse_bool(value) is False
 

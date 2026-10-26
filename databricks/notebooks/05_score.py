@@ -49,25 +49,26 @@ import pandas as pd
 from mlflow.tracking import MlflowClient
 
 NOTEBOOK = "05_score"
-MODEL_NAME = f"{CATALOG}.ml.distress_model"
 require_pinned_environment()
 mlflow.set_registry_uri("databricks-uc")
 
 dbutils.widgets.text("model_alias", "champion", "Model alias to score with")
 ALIAS = dbutils.widgets.get("model_alias").strip() or "champion"
 PRODUCTION = ALIAS == "champion"
+# @champion is always prod's model (dev reads it, read-only); other aliases are this environment's.
+SCORING_MODEL = CHAMPION_MODEL if PRODUCTION else MODEL_NAME
 SCORES_TABLE = f"{ML}.risk_scores" if PRODUCTION else f"{ML}.risk_scores_{ALIAS}"
 
 client = MlflowClient()
-mv = client.get_model_version_by_alias(MODEL_NAME, ALIAS)
+mv = client.get_model_version_by_alias(SCORING_MODEL, ALIAS)
 version = mv.version
-model = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}@{ALIAS}")
+model = mlflow.sklearn.load_model(f"models:/{SCORING_MODEL}@{ALIAS}")
 cutoffs = cutoffs_from_tags(mv.tags)
 model_features = list(getattr(model, "feature_names_in_", FEATURES))
 unknown = sorted(set(model_features) - set(FEATURES))
 if unknown:
     raise ValueError(f"v{version} expects features this code no longer builds: {unknown}")
-print(f"Scoring with {MODEL_NAME} v{version} (@{ALIAS}); band cut-offs {cutoffs}; writing {SCORES_TABLE}")
+print(f"Scoring with {SCORING_MODEL} v{version} (@{ALIAS}); band cut-offs {cutoffs}; writing {SCORES_TABLE}")
 
 # COMMAND ----------
 
@@ -90,7 +91,9 @@ print(f"Latest quarter {latest}: {len(cur):,} banks")
 
 cur["risk_band"] = [
     assign_band(p, fo, nb, d, cutoffs)
-    for p, fo, nb, d in zip(cur["distress_probability"], cur["is_foreign_office"], cur["is_new_bank"], cur["is_distressed"])
+    for p, fo, nb, d in zip(
+        cur["distress_probability"], cur["is_foreign_office"], cur["is_new_bank"], cur["is_distressed"]
+    )
 ]
 ranked = cur["risk_band"].isin(SCORED_BANDS)
 cur["risk_percentile"] = np.nan
@@ -114,13 +117,32 @@ cur[["reason_1", "reason_2", "reason_3"]] = reasons
 
 # COMMAND ----------
 
-out_cols = ["cert", "report_date", "bank_name", "state_code", "asset_size_tier", "total_assets_k",
-            "distress_probability", "risk_percentile", "risk_rank", "risk_band", "is_distressed",
-            "is_new_bank", "is_foreign_office", "cblr_reporter", "bank_age_years",
-            "reason_1", "reason_2", "reason_3",
-            "tier1_leverage_pct", "noncurrent_loans_pct", "roa_pct", "cre_to_equity_pct"]
+out_cols = [
+    "cert",
+    "report_date",
+    "bank_name",
+    "state_code",
+    "asset_size_tier",
+    "total_assets_k",
+    "distress_probability",
+    "risk_percentile",
+    "risk_rank",
+    "risk_band",
+    "is_distressed",
+    "is_new_bank",
+    "is_foreign_office",
+    "cblr_reporter",
+    "bank_age_years",
+    "reason_1",
+    "reason_2",
+    "reason_3",
+    "tier1_leverage_pct",
+    "noncurrent_loans_pct",
+    "roa_pct",
+    "cre_to_equity_pct",
+]
 scores = cur[out_cols].copy()
-scores["model_name"] = MODEL_NAME
+scores["model_name"] = SCORING_MODEL
 scores["model_version"] = int(version)
 scores["scored_at"] = pd.Timestamp(RUN_TS).tz_localize(None)
 
@@ -133,22 +155,53 @@ if PRODUCTION:
 T = SCORES_TABLE.split(".", 1)[1]
 dq_unique(sdf, T, ["cert"])
 dq_not_null(sdf, T, ["cert", "risk_band"])
-dq_check(T, "every scored bank has a probability",
-         sdf.filter(F.col("risk_band").isin(SCORED_BANDS + [ALREADY_IN_DISTRESS])
-                    & F.col("distress_probability").isNull()).count())
-dq_check(T, "not-scored banks have no probability",
-         sdf.filter(F.col("risk_band").isin(NEW_BANK, FOREIGN_OFFICE) & F.col("distress_probability").isNotNull()).count())
+dq_check(
+    T,
+    "every scored bank has a probability",
+    sdf.filter(
+        F.col("risk_band").isin(SCORED_BANDS + [ALREADY_IN_DISTRESS]) & F.col("distress_probability").isNull()
+    ).count(),
+)
+dq_check(
+    T,
+    "not-scored banks have no probability",
+    sdf.filter(
+        F.col("risk_band").isin(NEW_BANK, FOREIGN_OFFICE) & F.col("distress_probability").isNotNull()
+    ).count(),
+)
 dq_check(T, "risk_band is a known band", sdf.filter(~F.col("risk_band").isin(ALL_BANDS)).count())
 dq_range(sdf, T, "distress_probability", low=0, high=1, level="error")
-dq_check(T, "no reason mentions total risk-based capital",
-         sdf.filter(F.concat_ws(" ", "reason_1", "reason_2", "reason_3").contains("total_risk_based")).count())
+dq_check(
+    T,
+    "no reason mentions total risk-based capital",
+    sdf.filter(F.concat_ws(" ", "reason_1", "reason_2", "reason_3").contains("total_risk_based")).count(),
+)
 if PRODUCTION:
-    dq_check(T, "export row count matches table",
-             abs(spark.read.parquet(f"{EXPORTS}/ml_risk_scores").count() - sdf.count()))
+    dq_check(
+        T,
+        "export row count matches table",
+        abs(spark.read.parquet(f"{EXPORTS}/ml_risk_scores").count() - sdf.count()),
+    )
 
-top20 = (scores[ranked].sort_values("distress_probability", ascending=False).head(20)
-         [["cert", "bank_name", "state_code", "asset_size_tier", "bank_age_years", "distress_probability",
-           "risk_band", "tier1_leverage_pct", "reason_1", "reason_2", "reason_3"]])
+top20 = (
+    scores[ranked]
+    .sort_values("distress_probability", ascending=False)
+    .head(20)[
+        [
+            "cert",
+            "bank_name",
+            "state_code",
+            "asset_size_tier",
+            "bank_age_years",
+            "distress_probability",
+            "risk_band",
+            "tier1_leverage_pct",
+            "reason_1",
+            "reason_2",
+            "reason_3",
+        ]
+    ]
+)
 display(top20)
 
 # COMMAND ----------
@@ -158,12 +211,14 @@ band_counts = scores["risk_band"].value_counts().reindex(ALL_BANDS, fill_value=0
 summary = {
     "report_date": str(latest),
     "banks": len(scores),
-    "model": f"{MODEL_NAME} v{version} (@{ALIAS})",
+    "model": f"{SCORING_MODEL} v{version} (@{ALIAS})",
     "table": SCORES_TABLE,
     "band_cutoffs": cutoffs,
     "risk_bands": {k: int(v) for k, v in band_counts.items()},
-    "probability_quantiles": {q: round(float(scores.loc[ranked, "distress_probability"].quantile(q)), 4)
-                              for q in (0.5, 0.85, 0.95, 0.99)},
+    "probability_quantiles": {
+        q: round(float(scores.loc[ranked, "distress_probability"].quantile(q)), 4)
+        for q in (0.5, 0.85, 0.95, 0.99)
+    },
     "top20": top20.round(4).to_dict("records"),
     "data_quality": dq_summary,
 }

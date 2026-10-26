@@ -1,13 +1,16 @@
 """Smoke tests: is the local Airflow stack up, healthy and able to load the DAG?
 
-Run from the project folder on your PC, with the stack running
-(`docker compose up -d` in airflow/):
+Run from the project folder, with the stack running (`docker compose up -d` in airflow/).
+They test the stack that belongs to this folder: plain `docker compose` in airflow/ means prod
+in the main checkout and dev in a dev checkout (whose airflow/.env selects
+docker-compose.dev.yaml). The UI port is read from the running container (prod 8080, dev 8081).
 
     .venv\\Scripts\\python -m pytest tests/smoke -m smoke
 
 They talk to the running containers, so they are not part of the default
 offline `pytest` run (pytest.ini testpaths = ingestion/tests).
 """
+
 from __future__ import annotations
 
 import json
@@ -20,17 +23,28 @@ import requests
 pytestmark = pytest.mark.smoke
 
 ROOT = Path(__file__).resolve().parents[2]
-COMPOSE = ["docker", "compose", "-f", str(ROOT / "airflow" / "docker-compose.yaml")]
-BASE_URL = "http://localhost:8080"
+AIRFLOW_DIR = ROOT / "airflow"
 EXPECTED_SERVICES = {"postgres", "airflow-apiserver", "airflow-scheduler", "airflow-dag-processor"}
 
 
 def compose(*args: str, stdin: str | None = None) -> str:
     result = subprocess.run(
-        [*COMPOSE, *args], input=stdin, capture_output=True, text=True, timeout=180
+        ["docker", "compose", *args],
+        cwd=AIRFLOW_DIR,
+        input=stdin,
+        capture_output=True,
+        text=True,
+        timeout=180,
     )
     assert result.returncode == 0, f"docker compose {' '.join(args)} failed:\n{result.stderr[-2000:]}"
     return result.stdout
+
+
+@pytest.fixture(scope="module")
+def base_url() -> str:
+    """http://localhost:<port> of this stack's API server (docker compose port)."""
+    host_port = compose("port", "airflow-apiserver", "8080").strip().rsplit(":", 1)[1]
+    return f"http://localhost:{host_port}"
 
 
 # ---------------------------------------------------------------- containers
@@ -44,16 +58,16 @@ def test_all_containers_running_and_healthy():
 
 
 # ------------------------------------------------------------------- web/API
-def test_health_endpoint_reports_all_components_healthy():
-    resp = requests.get(f"{BASE_URL}/api/v2/monitor/health", timeout=15)
+def test_health_endpoint_reports_all_components_healthy(base_url):
+    resp = requests.get(f"{base_url}/api/v2/monitor/health", timeout=15)
     assert resp.status_code == 200
     body = resp.json()
     for component in ("metadatabase", "scheduler", "dag_processor"):
         assert body[component]["status"] == "healthy", f"{component}: {body[component]}"
 
 
-def test_ui_page_loads():
-    resp = requests.get(BASE_URL + "/", timeout=15)
+def test_ui_page_loads(base_url):
+    resp = requests.get(base_url + "/", timeout=15)
     assert resp.status_code == 200
     assert "<html" in resp.text.lower()
 
@@ -75,36 +89,55 @@ def test_dags_import_without_errors(dag_facts):
 
 def test_dag_schedule_and_settings(dag_facts):
     dag = dag_facts["bank_health_weekly"]
-    assert dag["timetable"]["expression"] == "0 6 * * 1"         # Mondays 06:00
+    assert dag["timetable"]["expression"] == "0 6 * * 1"  # Mondays 06:00
     assert dag["timetable"]["timezone"] == "America/Chicago"
     assert dag["catchup"] is False
     assert dag["max_active_runs"] == 1
     assert dag["has_doc_md"]
 
 
-CORE_TASKS = {"download_fdic", "download_cfpb", "upload_raw", "save_watermarks", "decide_retrain", "sync_databricks_job",
-              "run_databricks_job", "load_snowflake", "dbt_docs_generate", "verify_pipeline", "export_watchlist"}
+CORE_TASKS = {
+    "download_fdic",
+    "download_cfpb",
+    "upload_raw",
+    "save_watermarks",
+    "decide_retrain",
+    "sync_databricks_job",
+    "run_databricks_job",
+    "load_snowflake",
+    "dbt_docs_generate",
+    "verify_pipeline",
+    "export_watchlist",
+}
 
 
 def test_dag_tasks_retries_docs_and_order(dag_facts):
     tasks = dag_facts["bank_health_weekly"]["tasks"]
     assert CORE_TASKS <= set(tasks)
     for task_id in CORE_TASKS:
-        expected = 1 if task_id == "run_databricks_job" else 2   # 1 retry protects the Databricks quota
+        expected = 1 if task_id == "run_databricks_job" else 2  # 1 retry protects the Databricks quota
         assert tasks[task_id]["retries"] == expected, task_id
         assert tasks[task_id]["has_doc_md"], f"{task_id} has no task docs"
-    assert tasks["download_fdic"]["upstream"] == []
-    assert tasks["download_cfpb"]["upstream"] == []
+    # every run starts by logging and checking the environment (read-only, no retries)
+    assert tasks["check_environment"]["upstream"] == []
+    assert tasks["check_environment"]["retries"] == 0 and tasks["check_environment"]["has_doc_md"]
+    assert tasks["download_fdic"]["upstream"] == ["check_environment"]
+    assert tasks["download_cfpb"]["upstream"] == ["check_environment"]
+    assert tasks["sync_databricks_job"]["upstream"] == ["check_environment"]
     assert tasks["upload_raw"]["upstream"] == ["download_cfpb", "download_fdic"]
     # watermarks only move after the upload succeeded
     assert "upload_raw" in tasks["save_watermarks"]["upstream"]
-    assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(tasks["run_databricks_job"]["upstream"])
+    assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(
+        tasks["run_databricks_job"]["upstream"]
+    )
     assert tasks["decide_retrain"]["upstream"] == ["download_fdic"]
     assert tasks["load_snowflake"]["upstream"] == ["run_databricks_job"]
     # release guardrail: no retries (a bad top 20 won't fix itself), runs before dbt publishes marts
     assert tasks["sanity_check_top20"]["upstream"] == ["load_snowflake"]
     assert tasks["sanity_check_top20"]["retries"] == 0 and tasks["sanity_check_top20"]["has_doc_md"]
-    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]   # final task
+    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]  # final task
+    # prod-only publish of the dbt manifest for slim CI, after the docs (full manifest) are built
+    assert tasks["publish_dbt_manifest"]["upstream"] == ["dbt_docs_generate"]
 
 
 def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
@@ -113,5 +146,6 @@ def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
     for model in ("stg_fdic__financials", "fct_bank_quarter", "mart_early_warning"):
         assert any(model in t for t in dbt_tasks), f"no Cosmos task for {model}"
     assert all(tasks[t]["retries"] == 1 for t in dbt_tasks)
-    assert any(t.endswith("sanity_check_top20") for t in
-               (u for t in dbt_tasks for u in tasks[t]["upstream"])), "dbt group must run after the top-20 check"
+    assert any(
+        t.endswith("sanity_check_top20") for t in (u for t in dbt_tasks for u in tasks[t]["upstream"])
+    ), "dbt group must run after the top-20 check"

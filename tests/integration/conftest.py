@@ -3,6 +3,7 @@
 Tests that need credentials skip themselves when those values are missing,
 so this folder is safe to run on any machine.
 """
+
 from __future__ import annotations
 
 import os

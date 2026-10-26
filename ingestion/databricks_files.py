@@ -7,23 +7,26 @@ there. The same client later pulls gold exports back out for Snowflake.
 API reference: PUT/GET /api/2.0/fs/files{path}, GET /api/2.0/fs/directories{path}
 The access token comes from the environment and is never logged.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import time
+from collections.abc import Iterable, Iterator
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Iterator
 from urllib.parse import quote
 
 import requests
 
+from ingestion.environment import assert_can_write, databricks_catalog
+
 log = logging.getLogger(__name__)
 
-# Unity Catalog catalog holding the project. "bank_health" by default; set
-# DATABRICKS_CATALOG=workspace in .env if Free Edition won't allow a new catalog.
-CATALOG = os.environ.get("DATABRICKS_CATALOG") or "bank_health"
-RAW_VOLUME = f"/Volumes/{CATALOG}/bronze/raw_files"
+
+def raw_volume() -> str:
+    """Raw-files Volume in the current environment's catalog (BANK_HEALTH_ENV decides which)."""
+    return f"/Volumes/{databricks_catalog()}/bronze/raw_files"
 
 
 class DatabricksFiles:
@@ -35,7 +38,7 @@ class DatabricksFiles:
         self.session.headers["Authorization"] = f"Bearer {token}"
 
     @classmethod
-    def from_env(cls) -> "DatabricksFiles":
+    def from_env(cls) -> DatabricksFiles:
         return cls(os.environ.get("DATABRICKS_HOST", ""), os.environ.get("DATABRICKS_TOKEN", ""))
 
     def __repr__(self) -> str:  # never show the token
@@ -50,12 +53,12 @@ class DatabricksFiles:
         for attempt in range(retries + 1):
             resp = self.session.request(method, url, timeout=600, **kwargs)
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 log.warning("Databricks %s %s -> %s, retrying in %ss", method, url, resp.status_code, wait)
                 # A streamed file body has been consumed; rewind it before retrying.
-                body = kwargs.get("data")
-                if hasattr(body, "seek"):
-                    body.seek(0)
+                seek = getattr(kwargs.get("data"), "seek", None)
+                if seek is not None:
+                    seek(0)
                 time.sleep(wait)
                 continue
             if resp.status_code >= 400:
@@ -69,23 +72,27 @@ class DatabricksFiles:
     # ------------------------------------------------------------------ upload
     def upload_file(self, local_path: Path, volume_path: str, overwrite: bool = True) -> None:
         """Upload one file (streamed, so large files don't fill memory)."""
+        assert_can_write(volume_path)
         url = self._url("files", volume_path)
         with open(local_path, "rb") as fh:
             self._request(
-                "PUT", url, data=fh,
+                "PUT",
+                url,
+                data=fh,
                 params={"overwrite": str(overwrite).lower()},
                 headers={"Content-Type": "application/octet-stream"},
             )
         log.info("uploaded %s -> %s", local_path, volume_path)
 
     def upload_files(
-        self, local_paths: Iterable[Path], local_root: Path, volume_root: str = RAW_VOLUME
+        self, local_paths: Iterable[Path], local_root: Path, volume_root: str | None = None
     ) -> list[str]:
-        """Upload files, keeping their path relative to `local_root`.
+        """Upload files, keeping their path relative to `local_root` (default: the raw Volume).
 
         data/raw/fdic/financials/x.jsonl.gz with local_root=data/raw becomes
         /Volumes/bank_health/bronze/raw_files/fdic/financials/x.jsonl.gz
         """
+        volume_root = volume_root or raw_volume()
         uploaded = []
         for p in local_paths:
             rel = Path(p).resolve().relative_to(Path(local_root).resolve())
@@ -95,14 +102,15 @@ class DatabricksFiles:
         return uploaded
 
     def upload_if_missing(
-        self, local_paths: Iterable[Path], local_root: Path, volume_root: str = RAW_VOLUME
+        self, local_paths: Iterable[Path], local_root: Path, volume_root: str | None = None
     ) -> list[str]:
         """Upload only files the Volume doesn't have yet (or has with a different size).
 
         Used for complete files reused from disk, so a re-run doesn't push (and bronze
         doesn't re-ingest) hundreds of unchanged files, while a fresh Volume still fills up.
         """
-        remote_sizes: dict[str, int] = {}
+        volume_root = volume_root or raw_volume()
+        remote_sizes: dict[str, int | None] = {}
         listed: set[str] = set()
         uploaded = []
         for p in local_paths:
@@ -129,7 +137,7 @@ class DatabricksFiles:
         url = self._url("directories", volume_dir.rstrip("/"))
         token = None
         while True:
-            params = {"page_token": token} if token else {}
+            params: dict[str, str] = {"page_token": token} if token else {}
             payload = self._request("GET", url, params=params).json()
             yield from payload.get("contents", [])
             token = payload.get("next_page_token")
@@ -138,6 +146,7 @@ class DatabricksFiles:
 
     def delete_file(self, volume_path: str) -> None:
         """Delete one file (used by tests to clean up their probe files)."""
+        assert_can_write(volume_path)
         self._request("DELETE", self._url("files", volume_path))
 
     def download_file(self, volume_path: str, local_path: Path) -> Path:

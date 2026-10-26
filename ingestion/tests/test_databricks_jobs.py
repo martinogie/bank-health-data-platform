@@ -17,9 +17,11 @@ def test_job_settings_chain_and_safety_flags():
     assert keys == ["bronze", "silver", "gold", "train_model", "score"]
     for prev, task in zip(s["tasks"], s["tasks"][1:]):
         assert task["depends_on"] == [{"task_key": prev["task_key"]}]
-    assert s["tasks"][0]["notebook_task"]["notebook_path"] == \
-        "/Users/me/bank-health-data-platform/databricks/notebooks/01_bronze"
-    assert s["max_concurrent_runs"] == 1                       # retries can't run in parallel
+    assert (
+        s["tasks"][0]["notebook_task"]["notebook_path"]
+        == "/Users/me/bank-health-data-platform/databricks/notebooks/01_bronze"
+    )
+    assert s["max_concurrent_runs"] == 1  # retries can't run in parallel
     assert {"name": "retrain", "default": "false"} in s["parameters"]
     assert all(t["max_retries"] == 0 for t in s["tasks"])
     assert "new_cluster" not in str(s) and "existing_cluster_id" not in str(s)  # serverless
@@ -64,7 +66,7 @@ def test_refuses_when_job_name_is_ambiguous():
 def test_find_git_folder_falls_back_to_path_lookup():
     def handler(method, url, kw):
         if url.endswith("/api/2.0/repos"):
-            return FakeResponse(payload={})                       # empty list (Free Edition)
+            return FakeResponse(payload={})  # empty list (Free Edition)
         if url.endswith("/scim/v2/Me"):
             return FakeResponse(payload={"userName": "me@example.com"})
         if url.endswith("/workspace/get-status"):
@@ -75,7 +77,7 @@ def test_find_git_folder_falls_back_to_path_lookup():
         raise AssertionError(url)
 
     api, _ = api_with(handler)
-    assert dj.find_git_folder(api)["id"] == 99
+    assert dj.find_git_folder(api, "bank-health-data-platform")["id"] == 99
 
 
 def test_repr_hides_token():

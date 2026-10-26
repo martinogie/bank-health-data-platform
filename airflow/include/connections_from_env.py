@@ -4,6 +4,7 @@ entrypoint.sh evals the output, so Airflow sees connections `databricks_default`
 and `snowflake_default` without secrets being typed twice or stored in the
 Airflow database. Output goes only to the shell's eval, never to logs.
 """
+
 import json
 import os
 import shlex

@@ -8,6 +8,7 @@ problems found in the v4 review (docs/investigations/model_credibility.md).
 Used by the Airflow task `sanity_check_top20` (after scoring, before dbt) and by
 scripts/sanity_check_top20.py for a manual check, e.g. of a candidate model before promotion.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,15 +16,29 @@ import re
 TOP_N = 20
 NEW_BANK_YEARS = 3.0
 SCORED_BANDS = ("High", "Elevated", "Watch", "Low")
-COLUMNS = ("cert", "bank_name", "state_code", "bank_age_years", "distress_probability", "risk_band",
-           "is_new_bank", "is_foreign_office", "tier1_leverage_pct", "reason_1", "reason_2", "reason_3")
+COLUMNS = (
+    "cert",
+    "bank_name",
+    "state_code",
+    "bank_age_years",
+    "distress_probability",
+    "risk_band",
+    "is_new_bank",
+    "is_foreign_office",
+    "tier1_leverage_pct",
+    "reason_1",
+    "reason_2",
+    "reason_3",
+)
 _ZERO_CAPITAL_REASON = re.compile(r"(tier1_leverage_pct|total_risk_based_capital_pct)\s*=\s*-?0(\.0+)?\s*\(")
 
 
 def top_sql(table: str, n: int = TOP_N) -> str:
     bands = ", ".join(f"'{b}'" for b in SCORED_BANDS)
-    return (f"select {', '.join(COLUMNS)} from {table} "
-            f"where risk_band in ({bands}) order by distress_probability desc, cert limit {int(n)}")
+    return (
+        f"select {', '.join(COLUMNS)} from {table} "
+        f"where risk_band in ({bands}) order by distress_probability desc, cert limit {int(n)}"
+    )
 
 
 def problems_in_top(rows: list[dict]) -> list[str]:
@@ -49,13 +64,17 @@ def problems_in_top(rows: list[dict]) -> list[str]:
 
 
 def format_table(rows: list[dict]) -> str:
-    lines = [f"{'#':>2}  {'CERT':>6}  {'bank':<40} {'st':<2} {'age':>5} {'prob':>6}  {'band':<8} {'T1 %':>6}  top reason"]
+    lines = [
+        f"{'#':>2}  {'CERT':>6}  {'bank':<40} {'st':<2} {'age':>5} {'prob':>6}  {'band':<8} {'T1 %':>6}  top reason"
+    ]
     for i, r in enumerate(rows, 1):
         age = r.get("bank_age_years")
         t1 = r.get("tier1_leverage_pct")
-        lines.append(f"{i:>2}  {r['cert']:>6}  {str(r.get('bank_name'))[:40]:<40} {r.get('state_code') or '':<2} "
-                     f"{'' if age is None else f'{age:.1f}':>5} {r['distress_probability']:>6.3f}  "
-                     f"{r['risk_band']:<8} {'' if t1 is None else f'{t1:.2f}':>6}  {r.get('reason_1') or ''}")
+        lines.append(
+            f"{i:>2}  {r['cert']:>6}  {str(r.get('bank_name'))[:40]:<40} {r.get('state_code') or '':<2} "
+            f"{'' if age is None else f'{age:.1f}':>5} {r['distress_probability']:>6.3f}  "
+            f"{r['risk_band']:<8} {'' if t1 is None else f'{t1:.2f}':>6}  {r.get('reason_1') or ''}"
+        )
     return "\n".join(lines)
 
 
@@ -69,5 +88,7 @@ def run(cursor, table: str) -> dict:
     print(format_table(rows))
     problems = problems_in_top(rows)
     if problems:
-        raise ValueError(f"top-{TOP_N} sanity check failed ({len(problems)} problems):\n  " + "\n  ".join(problems))
+        raise ValueError(
+            f"top-{TOP_N} sanity check failed ({len(problems)} problems):\n  " + "\n  ".join(problems)
+        )
     return {"table": table, "checked": len(rows), "problems": 0, "top_cert": rows[0]["cert"]}

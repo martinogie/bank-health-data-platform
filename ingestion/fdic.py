@@ -8,15 +8,16 @@ Three datasets:
 Each dataset is saved as gzipped JSON Lines: one bank row per line, exactly as
 the API returned it. Cleaning happens later in Databricks (bronze keeps raw).
 """
+
 from __future__ import annotations
 
 import gzip
 import json
 import logging
 import time
+from collections.abc import Iterable, Iterator
 from datetime import date
 from pathlib import Path
-from typing import Iterable, Iterator
 
 import requests
 
@@ -30,28 +31,75 @@ HISTORY_START = date(2000, 3, 31)
 REFRESH_QUARTERS = 2
 
 FINANCIAL_FIELDS = [
-    "CERT", "REPDTE",
+    "CERT",
+    "REPDTE",
     # size and balance sheet
-    "ASSET", "DEP", "DEPDOM", "BRO", "LNLSNET", "LNLSGR", "EQ", "ORE",
+    "ASSET",
+    "DEP",
+    "DEPDOM",
+    "BRO",
+    "LNLSNET",
+    "LNLSGR",
+    "EQ",
+    "ORE",
     # earnings
-    "NETINC", "ROA", "ROE", "NIMY", "EEFFR",
+    "NETINC",
+    "ROA",
+    "ROE",
+    "NIMY",
+    "EEFFR",
     # asset quality
-    "NCLNLSR", "NTLNLSR", "ELNATR", "P3ASSET", "P9ASSET", "NAASSET",
+    "NCLNLSR",
+    "NTLNLSR",
+    "ELNATR",
+    "P3ASSET",
+    "P9ASSET",
+    "NAASSET",
     # capital
-    "RBC1AAJ", "RBCRWAJ",
+    "RBC1AAJ",
+    "RBCRWAJ",
     # loan mix (CRE concentration = construction + multifamily + nonfarm nonresidential)
-    "LNRE", "LNRECONS", "LNREMULT", "LNRENRES", "LNRERES", "LNCI", "LNCON", "LNAG",
+    "LNRE",
+    "LNRECONS",
+    "LNREMULT",
+    "LNRENRES",
+    "LNRERES",
+    "LNCI",
+    "LNCON",
+    "LNAG",
     # reporting framework flags (see docs/investigations/model_credibility.md):
     # CBLRIND = 1: Community Bank Leverage Ratio bank, reports no risk-based capital (from 2020)
     # IBA = 1: International Banking Act entity, i.e. a US office of a foreign bank
-    "CBLRIND", "IBA",
+    "CBLRIND",
+    "IBA",
 ]
 
 INSTITUTION_FIELDS = [
-    "CERT", "NAME", "CITY", "STALP", "STNAME", "ZIP", "ACTIVE", "INACTIVE",
-    "BKCLASS", "CHARTER", "REGAGNT", "SPECGRP", "SPECGRPN", "NAMEHCR", "RSSDHCR",
-    "FED_RSSD", "ESTYMD", "INSDATE", "ENDEFYMD", "CHANGEC1", "ASSET", "DEP",
-    "OFFICES", "WEBADDR", "REPDTE",
+    "CERT",
+    "NAME",
+    "CITY",
+    "STALP",
+    "STNAME",
+    "ZIP",
+    "ACTIVE",
+    "INACTIVE",
+    "BKCLASS",
+    "CHARTER",
+    "REGAGNT",
+    "SPECGRP",
+    "SPECGRPN",
+    "NAMEHCR",
+    "RSSDHCR",
+    "FED_RSSD",
+    "ESTYMD",
+    "INSDATE",
+    "ENDEFYMD",
+    "CHANGEC1",
+    "ASSET",
+    "DEP",
+    "OFFICES",
+    "WEBADDR",
+    "REPDTE",
 ]
 
 
@@ -118,7 +166,7 @@ def _get(session: requests.Session, endpoint: str, params: dict, retries: int = 
             retryable = status is None or status == 429 or status >= 500
             if attempt == retries or not retryable:
                 raise
-            wait = 2 ** attempt
+            wait = 2**attempt
             log.warning("FDIC %s failed (%s), retrying in %ss", endpoint, exc, wait)
             time.sleep(wait)
     raise AssertionError("unreachable")
@@ -158,9 +206,17 @@ def fetch_all(
 
 def latest_financials_quarter(session: requests.Session | None = None) -> date:
     """The newest REPDTE the FDIC has published."""
-    payload = _get(session or requests.Session(), "financials", {
-        "fields": "REPDTE", "sort_by": "REPDTE", "sort_order": "DESC", "limit": 1, "format": "json",
-    })
+    payload = _get(
+        session or requests.Session(),
+        "financials",
+        {
+            "fields": "REPDTE",
+            "sort_by": "REPDTE",
+            "sort_order": "DESC",
+            "limit": 1,
+            "format": "json",
+        },
+    )
     repdte = payload["data"][0]["data"]["REPDTE"]
     return date(int(repdte[:4]), int(repdte[4:6]), int(repdte[6:]))
 
@@ -251,9 +307,7 @@ def download_financials(
     return paths
 
 
-def download_institutions(
-    out_dir: Path, load_date: date, session: requests.Session | None = None
-) -> Path:
+def download_institutions(out_dir: Path, load_date: date, session: requests.Session | None = None) -> Path:
     """All institutions, active and inactive (inactive ones matter for history)."""
     session = session or requests.Session()
     path = Path(out_dir) / "institutions" / f"institutions_{load_date.isoformat()}.jsonl.gz"
@@ -262,9 +316,7 @@ def download_institutions(
     return path
 
 
-def download_failures(
-    out_dir: Path, load_date: date, session: requests.Session | None = None
-) -> Path:
+def download_failures(out_dir: Path, load_date: date, session: requests.Session | None = None) -> Path:
     """Full failed-bank list, all fields (about 4k rows, one page)."""
     session = session or requests.Session()
     path = Path(out_dir) / "failures" / f"failures_{load_date.isoformat()}.jsonl.gz"

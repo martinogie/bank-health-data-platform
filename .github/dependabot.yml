@@ -1,0 +1,24 @@
+# Weekly dependency updates as pull requests. Each one runs the full CI before anyone merges it.
+# Dependabot PRs get no Snowflake secrets, so their dbt-slim-ci job skips cleanly.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /             # requirements-dev.txt, requirements-lint.txt, requirements-dbt.txt
+    schedule: {interval: weekly, day: monday, time: "09:00", timezone: America/Chicago}
+    open-pull-requests-limit: 5
+    groups:
+      python-dev-tools:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /airflow      # the Airflow image (versions also bounded by Airflow's constraints file)
+    schedule: {interval: weekly, day: monday, time: "09:00", timezone: America/Chicago}
+    open-pull-requests-limit: 5
+  - package-ecosystem: docker
+    directory: /airflow      # the apache/airflow base image
+    schedule: {interval: weekly, day: monday, time: "09:00", timezone: America/Chicago}
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: {interval: weekly, day: monday, time: "09:00", timezone: America/Chicago}
+    groups:
+      actions:
+        patterns: ["*"]

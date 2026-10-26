@@ -7,6 +7,7 @@ overwrites these files. Airflow's watermarks are not touched.
 Usage (from the project folder):
     .venv\\Scripts\\python scripts/ingest_sample.py --quarters 2 --cfpb-month 2026-09
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,11 @@ RAW_DIR = ROOT / "data" / "raw"
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quarters", type=int, default=2, help="latest N FDIC quarters")
-    parser.add_argument("--all-history", action="store_true",
-                        help="every FDIC quarter from 2000 Q1 (the model's label history)")
+    parser.add_argument(
+        "--all-history",
+        action="store_true",
+        help="every FDIC quarter from 2000 Q1 (the model's label history)",
+    )
     parser.add_argument("--cfpb-month", default=None, help="YYYY-MM of complaints (default: last full month)")
     parser.add_argument("--no-cfpb", action="store_true", help="skip complaints")
     parser.add_argument("--no-upload", action="store_true", help="download only")
@@ -40,7 +44,7 @@ def main() -> None:
     latest = fdic.latest_financials_quarter()
     quarters = fdic.quarter_ends(fdic.HISTORY_START, latest)
     if not args.all_history:
-        quarters = quarters[-args.quarters:]
+        quarters = quarters[-args.quarters :]
     paths = fdic.download_financials(quarters, RAW_DIR / "fdic")
     paths.append(fdic.download_institutions(RAW_DIR / "fdic", today))
     paths.append(fdic.download_failures(RAW_DIR / "fdic", today))

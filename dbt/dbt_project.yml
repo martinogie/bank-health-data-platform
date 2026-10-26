@@ -9,6 +9,10 @@ macro-paths: ["macros"]
 target-path: "target"
 clean-targets: ["target", "dbt_packages"]
 
+# Stops every run unless the target matches BANK_HEALTH_ENV (macros/assert_environment.sql).
+on-run-start:
+  - "{{ environment_check_sql() }}"
+
 models:
   bank_health:
     staging:

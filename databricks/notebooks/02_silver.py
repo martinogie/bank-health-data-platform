@@ -28,6 +28,7 @@ def save(df, table):
     print(f"{SILVER}.{table}: {n} rows")
     return n
 
+
 # COMMAND ----------
 
 # MAGIC %md ## FDIC financials
@@ -85,19 +86,31 @@ T = "silver.fdic_financials"
 dq_check(T, "row_count > 0", int(n_fin == 0))
 dq_not_null(fin, T, ["cert", "report_date"])
 dq_unique(fin, T, ["cert", "report_date"])
-dq_check(T, "report_date is a quarter-end",
-         fin.filter(~((F.month("report_date") % 3 == 0) & (F.col("report_date") == F.last_day("report_date")))).count())
-dq_check(T, "bronze rows de-duplicated, none lost",
-         abs(fin_bronze.select("cert", "repdte").distinct().count() - n_fin))
+dq_check(
+    T,
+    "report_date is a quarter-end",
+    fin.filter(
+        ~((F.month("report_date") % 3 == 0) & (F.col("report_date") == F.last_day("report_date")))
+    ).count(),
+)
+dq_check(
+    T,
+    "bronze rows de-duplicated, none lost",
+    abs(fin_bronze.select("cert", "repdte").distinct().count() - n_fin),
+)
 dq_range(fin, T, "total_assets_k", low=0)
 dq_range(fin, T, "noncurrent_loans_pct", low=0, high=100)
 dq_range(fin, T, "tier1_leverage_pct", low=-50, high=100)
 dq_range(fin, T, "efficiency_ratio_pct", low=0, high=1000)
 dq_check(T, "cblr_indicator is 0, 1 or NULL", fin.filter("cblr_indicator not in (0, 1)").count())
 dq_check(T, "iba_flag is 0 or 1", fin.filter("iba_flag is null or iba_flag not in (0, 1)").count())
-display(fin.groupBy("report_date").agg(F.count("*").alias("banks"),
-                                       F.round(F.sum("total_assets_k") / 1e9, 2).alias("total_assets_trillions"))
-        .orderBy("report_date"))
+display(
+    fin.groupBy("report_date")
+    .agg(
+        F.count("*").alias("banks"), F.round(F.sum("total_assets_k") / 1e9, 2).alias("total_assets_trillions")
+    )
+    .orderBy("report_date")
+)
 
 # COMMAND ----------
 
@@ -105,12 +118,15 @@ display(fin.groupBy("report_date").agg(F.count("*").alias("banks"),
 
 # COMMAND ----------
 
+
 def mdy(col_name):
     """FDIC 'MM/dd/yyyy' text -> date; '12/31/9999' means 'no end date' -> NULL."""
     return F.when(F.col(col_name) == "12/31/9999", None).otherwise(F.to_date(col_name, "MM/dd/yyyy"))
 
 
-inst = latest_per_key(spark.table(f"{BRONZE}.fdic_institutions"), ["cert"], ["_source_file", "_ingested_at"]).select(
+inst = latest_per_key(
+    spark.table(f"{BRONZE}.fdic_institutions"), ["cert"], ["_source_file", "_ingested_at"]
+).select(
     F.col("cert").cast("int").alias("cert"),
     clean_str("name").alias("bank_name"),
     clean_str("city").alias("city"),
@@ -146,8 +162,12 @@ dq_unique(inst, T, ["cert"])
 # A few call-report filers are not in the institutions dataset at all (FDIC's API returns
 # nothing for them; most report zero deposits, e.g. uninsured trust companies). They stay in
 # silver as reported and are left out of gold, so this is a warning, not an error.
-dq_check(T, "financials certs missing from institutions (excluded from gold)",
-         fin.select("cert").distinct().join(inst, "cert", "left_anti").count(), level="warn")
+dq_check(
+    T,
+    "financials certs missing from institutions (excluded from gold)",
+    fin.select("cert").distinct().join(inst, "cert", "left_anti").count(),
+    level="warn",
+)
 
 # COMMAND ----------
 
@@ -159,8 +179,9 @@ fail_bronze = spark.table(f"{BRONZE}.fdic_failures")
 latest_file = fail_bronze.agg(F.max("_source_file")).first()[0]
 # The same file can be ingested more than once (re-uploaded under the same name), so also
 # keep only the newest load of each failure record.
-fail = latest_per_key(fail_bronze.filter(F.col("_source_file") == latest_file),
-                      ["id"], ["_ingested_at", "_file_modified_at"]).select(
+fail = latest_per_key(
+    fail_bronze.filter(F.col("_source_file") == latest_file), ["id"], ["_ingested_at", "_file_modified_at"]
+).select(
     F.col("id").cast("int").alias("failure_id"),
     F.col("cert").cast("int").alias("cert"),
     clean_str("name").alias("bank_name"),
@@ -182,8 +203,12 @@ fail = spark.table(f"{SILVER}.fdic_failures")
 T = "silver.fdic_failures"
 dq_not_null(fail, T, ["failure_id", "fail_date"])
 dq_unique(fail, T, ["failure_id"])
-dq_check(T, "cert appears in more than one failure", fail.filter("cert is not null")
-         .groupBy("cert").count().filter("count > 1").count(), level="warn")
+dq_check(
+    T,
+    "cert appears in more than one failure",
+    fail.filter("cert is not null").groupBy("cert").count().filter("count > 1").count(),
+    level="warn",
+)
 display(fail.orderBy(F.col("fail_date").desc()).limit(5))
 
 # COMMAND ----------
@@ -192,8 +217,9 @@ display(fail.orderBy(F.col("fail_date").desc()).limit(5))
 
 # COMMAND ----------
 
-comp = latest_per_key(spark.table(f"{BRONZE}.cfpb_complaints"), ["complaint_id"],
-                      ["_ingested_at", "_file_modified_at"]).select(
+comp = latest_per_key(
+    spark.table(f"{BRONZE}.cfpb_complaints"), ["complaint_id"], ["_ingested_at", "_file_modified_at"]
+).select(
     F.col("complaint_id").cast("bigint").alias("complaint_id"),
     F.to_date(F.to_timestamp("date_received")).alias("date_received"),
     F.to_date(F.to_timestamp("date_sent_to_company")).alias("date_sent_to_company"),
@@ -205,7 +231,8 @@ comp = latest_per_key(spark.table(f"{BRONZE}.cfpb_complaints"), ["complaint_id"]
     clean_str("company_response_to_consumer").alias("company_response"),
     clean_str("company_public_response").alias("company_public_response"),
     F.when(F.col("timely_response") == "Yes", True)
-     .when(F.col("timely_response") == "No", False).alias("timely_response"),
+    .when(F.col("timely_response") == "No", False)
+    .alias("timely_response"),
     clean_str("submitted_via").alias("submitted_via"),
     clean_str("state").alias("state_code"),
     clean_str("zip_code").alias("zip_code"),
@@ -237,14 +264,25 @@ comp = latest_per_key(spark.table(f"{BRONZE}.cfpb_complaints"), ["complaint_id"]
 
 MANUAL_OVERRIDES = [
     # (CFPB company, FDIC cert, why)
-    ("TD BANK US HOLDING COMPANY", 18409, "FDIC HC name is TORONTO-DOMINION BANK THE; lead bank TD Bank, N.A."),
+    (
+        "TD BANK US HOLDING COMPANY",
+        18409,
+        "FDIC HC name is TORONTO-DOMINION BANK THE; lead bank TD Bank, N.A.",
+    ),
     ("FIFTH THIRD FINANCIAL CORPORATION", 6672, "FDIC HC name is FIFTH THIRD BCORP"),
     ("NEW YORK COMMUNITY BANCORP INC", 32541, "Renamed Flagstar Financial; FDIC record has no HC name"),
     ("SANTANDER HOLDINGS USA, INC.", 29950, "FDIC HC name is BANCO SANTANDER SA"),
 ]
-ABBREVIATIONS = [("FINL", "FINANCIAL"), ("SVCS", "SERVICES"), ("BANCORPORATION", "BANCORP"), ("BCORP", "BANCORP")]
-LEGAL_SUFFIXES = (r"\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LLC|L L C|LP|L P|LTD|THE|"
-                  r"NATIONAL ASSOCIATION|N A|NA|FSB|F S B|SSB|HOLDINGS|HOLDING)\b")
+ABBREVIATIONS = [
+    ("FINL", "FINANCIAL"),
+    ("SVCS", "SERVICES"),
+    ("BANCORPORATION", "BANCORP"),
+    ("BCORP", "BANCORP"),
+]
+LEGAL_SUFFIXES = (
+    r"\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LLC|L L C|LP|L P|LTD|THE|"
+    r"NATIONAL ASSOCIATION|N A|NA|FSB|F S B|SSB|HOLDINGS|HOLDING)\b"
+)
 
 
 def normalise(col_name):
@@ -261,44 +299,62 @@ def normalise(col_name):
 complaint_start = comp.agg(F.min("date_received")).first()[0]
 candidates = inst.filter(F.col("is_active") | (F.col("end_date") >= F.lit(complaint_start)))
 
-by_bank_name = latest_per_key(candidates.withColumn("company_key", normalise("bank_name")),
-                              ["company_key"], ["total_assets_k"]).select("company_key", F.col("cert").alias("cert_by_name"))
-by_holding_co = latest_per_key(candidates.filter("holding_company is not null")
-                               .withColumn("company_key", normalise("holding_company")),
-                               ["company_key"], ["total_assets_k"]).select("company_key", F.col("cert").alias("cert_by_hc"))
+by_bank_name = latest_per_key(
+    candidates.withColumn("company_key", normalise("bank_name")), ["company_key"], ["total_assets_k"]
+).select("company_key", F.col("cert").alias("cert_by_name"))
+by_holding_co = latest_per_key(
+    candidates.filter("holding_company is not null").withColumn("company_key", normalise("holding_company")),
+    ["company_key"],
+    ["total_assets_k"],
+).select("company_key", F.col("cert").alias("cert_by_hc"))
 overrides = spark.createDataFrame(MANUAL_OVERRIDES, "company string, cert_override int, override_note string")
 
-companies = (comp.groupBy("company").agg(F.count("*").alias("complaints"))
-             .withColumn("company_key", normalise("company"))
-             .withColumn("is_llc_or_lp", F.upper("company").rlike(r"\b(LLC|L\.L\.C|LP|L\.P)\b")))
+companies = (
+    comp.groupBy("company")
+    .agg(F.count("*").alias("complaints"))
+    .withColumn("company_key", normalise("company"))
+    .withColumn("is_llc_or_lp", F.upper("company").rlike(r"\b(LLC|L\.L\.C|LP|L\.P)\b"))
+)
 company_map = (
     companies.join(overrides, "company", "left")
     .join(by_bank_name, "company_key", "left")
     .join(by_holding_co, "company_key", "left")
     .withColumn("cert_by_hc", F.when(~F.col("is_llc_or_lp"), F.col("cert_by_hc")))
     .withColumn("cert", F.coalesce("cert_override", "cert_by_name", "cert_by_hc"))
-    .withColumn("match_method",
-                F.when(F.col("cert_override").isNotNull(), "manual_override")
-                 .when(F.col("cert_by_name").isNotNull(), "bank_name")
-                 .when(F.col("cert_by_hc").isNotNull(), "holding_company")
-                 .otherwise("unmatched"))
+    .withColumn(
+        "match_method",
+        F.when(F.col("cert_override").isNotNull(), "manual_override")
+        .when(F.col("cert_by_name").isNotNull(), "bank_name")
+        .when(F.col("cert_by_hc").isNotNull(), "holding_company")
+        .otherwise("unmatched"),
+    )
     .join(inst.select("cert", F.col("bank_name").alias("matched_bank_name")), "cert", "left")
-    .select("company", "company_key", "cert", "matched_bank_name", "match_method",
-            "override_note", "complaints")
+    .select(
+        "company", "company_key", "cert", "matched_bank_name", "match_method", "override_note", "complaints"
+    )
 )
 save(company_map, "company_bank_map")
 company_map = spark.table(f"{SILVER}.company_bank_map")
 
 T = "silver.company_bank_map"
 dq_unique(company_map, T, ["company"])
-dq_check(T, "manual override certs exist in FDIC institutions",
-         overrides.join(inst, overrides.cert_override == inst.cert, "left_anti").count())
-dq_check(T, "manual override companies present in complaints",
-         overrides.join(companies, "company", "left_anti").count(), level="warn")
+dq_check(
+    T,
+    "manual override certs exist in FDIC institutions",
+    overrides.join(inst, overrides.cert_override == inst.cert, "left_anti").count(),
+)
+dq_check(
+    T,
+    "manual override companies present in complaints",
+    overrides.join(companies, "company", "left_anti").count(),
+    level="warn",
+)
 
-display(company_map.groupBy("match_method")
-        .agg(F.count("*").alias("companies"), F.sum("complaints").alias("complaints"))
-        .orderBy(F.col("complaints").desc()))
+display(
+    company_map.groupBy("match_method")
+    .agg(F.count("*").alias("companies"), F.sum("complaints").alias("complaints"))
+    .orderBy(F.col("complaints").desc())
+)
 display(company_map.orderBy(F.col("complaints").desc()).limit(40))
 
 # COMMAND ----------
@@ -310,12 +366,23 @@ comp = spark.table(f"{SILVER}.cfpb_complaints")
 T = "silver.cfpb_complaints"
 dq_not_null(comp, T, ["complaint_id", "date_received", "company"])
 dq_unique(comp, T, ["complaint_id"])
-dq_check(T, "no complaints lost in de-dup/join",
-         abs(spark.table(f"{BRONZE}.cfpb_complaints").select("complaint_id").distinct().count() - n_comp))
-dq_check(T, "credit bureaus excluded",
-         comp.filter(F.upper("company").rlike("EQUIFAX|TRANSUNION|EXPERIAN INFORMATION")).count())
-dq_check(T, "date_received in 2011-12-01..today",
-         comp.filter((F.col("date_received") < "2011-12-01") | (F.col("date_received") > F.current_date())).count())
+dq_check(
+    T,
+    "no complaints lost in de-dup/join",
+    abs(spark.table(f"{BRONZE}.cfpb_complaints").select("complaint_id").distinct().count() - n_comp),
+)
+dq_check(
+    T,
+    "credit bureaus excluded",
+    comp.filter(F.upper("company").rlike("EQUIFAX|TRANSUNION|EXPERIAN INFORMATION")).count(),
+)
+dq_check(
+    T,
+    "date_received in 2011-12-01..today",
+    comp.filter(
+        (F.col("date_received") < "2011-12-01") | (F.col("date_received") > F.current_date())
+    ).count(),
+)
 dq_check(T, "timely_response is Yes/No", comp.filter("timely_response is null").count(), level="warn")
 
 # COMMAND ----------
@@ -323,8 +390,16 @@ dq_check(T, "timely_response is Yes/No", comp.filter("timely_response is null").
 dq_summary = dq_finish()
 matched = comp.filter("cert is not null").count()
 summary = {
-    "rows": {t: spark.table(f"{SILVER}.{t}").count() for t in
-             ("fdic_financials", "fdic_institutions", "fdic_failures", "company_bank_map", "cfpb_complaints")},
+    "rows": {
+        t: spark.table(f"{SILVER}.{t}").count()
+        for t in (
+            "fdic_financials",
+            "fdic_institutions",
+            "fdic_failures",
+            "company_bank_map",
+            "cfpb_complaints",
+        )
+    },
     "complaints_matched_to_bank_pct": round(100 * matched / n_comp, 1) if n_comp else None,
     "companies_matched": company_map.filter("cert is not null").count(),
     "data_quality": dq_summary,

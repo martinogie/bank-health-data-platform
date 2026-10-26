@@ -7,6 +7,7 @@ The Airflow DAG runs the same export as its final task (export_watchlist).
 Usage (from the project folder):
     .venv\\Scripts\\python scripts/export_watchlist_data.py [--out site/data/watchlist.json]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,8 +36,10 @@ def main() -> None:
         summary = watchlist_export.export(conn, args.out)
     finally:
         conn.close()
-    print(f"wrote {summary['path']}: {summary['bytes']:,} bytes, {summary['banks']:,} banks, "
-          f"data quarter {summary['quarter']}, model v{summary['model_version']}")
+    print(
+        f"wrote {summary['path']}: {summary['bytes']:,} bytes, {summary['banks']:,} banks, "
+        f"data quarter {summary['quarter']}, model v{summary['model_version']}"
+    )
 
 
 if __name__ == "__main__":

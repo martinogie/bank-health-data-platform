@@ -8,6 +8,7 @@ values are left alone, so it is safe to run again.
 
 Usage (from the project folder):  python scripts/generate_airflow_secrets.py
 """
+
 import base64
 import os
 import re

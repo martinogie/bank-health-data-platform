@@ -6,6 +6,7 @@
 - should_retrain: retrain only when asked to, or when a new FDIC quarter has arrived
   (about once a quarter); other weeks just re-score with the current @champion model.
 """
+
 from __future__ import annotations
 
 from datetime import date

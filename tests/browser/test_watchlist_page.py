@@ -6,6 +6,7 @@ site/data/watchlist.json. Run:
     .venv\\Scripts\\python -m playwright install chromium     # once
     .venv\\Scripts\\python -m pytest tests/browser -m browser
 """
+
 from __future__ import annotations
 
 import functools
@@ -38,7 +39,7 @@ def base_url_root():
 
 def open_page(page: Page, url: str) -> None:
     page.goto(url)
-    expect(page.locator("#q")).to_be_enabled(timeout=15_000)      # data loaded
+    expect(page.locator("#q")).to_be_enabled(timeout=15_000)  # data loaded
 
 
 def add_by_search(page: Page, query: str, cert: int) -> None:
@@ -54,7 +55,7 @@ def card_certs(page: Page) -> list[int]:
 def test_add_three_banks_and_list_survives_reload(page: Page, base_url_root):
     open_page(page, f"{base_url_root}/watchlist.html")
     add_by_search(page, "JPMorgan Chase", 628)
-    add_by_search(page, "3511", 3511)                 # by CERT
+    add_by_search(page, "3511", 3511)  # by CERT
     add_by_search(page, "Synchrony", 27314)
     assert sorted(card_certs(page)) == [628, 3511, 27314]
     assert "certs=" in page.url
@@ -64,13 +65,13 @@ def test_add_three_banks_and_list_survives_reload(page: Page, base_url_root):
     assert sorted(card_certs(page)) == [628, 3511, 27314]
     expect(page.locator("#strip")).to_contain_text("3banks watched")
 
-    page.goto(f"{base_url_root}/watchlist.html")       # no ?certs=: comes back from localStorage
+    page.goto(f"{base_url_root}/watchlist.html")  # no ?certs=: comes back from localStorage
     expect(page.locator("#q")).to_be_enabled(timeout=15_000)
     assert sorted(card_certs(page)) == [628, 3511, 27314]
 
 
 def test_shared_link_renders_in_a_fresh_browser(browser, base_url_root):
-    context = browser.new_context()                    # empty localStorage
+    context = browser.new_context()  # empty localStorage
     page = context.new_page()
     open_page(page, f"{base_url_root}/watchlist.html?certs=628,3511")
     assert sorted(card_certs(page)) == [628, 3511]
@@ -92,7 +93,7 @@ def test_cards_sorted_by_risk(page: Page, base_url_root):
 
 
 def test_new_bank_is_not_scored(page: Page, base_url_root):
-    open_page(page, f"{base_url_root}/watchlist.html?certs=59362")   # Solutions Plus Bank, opened 2025
+    open_page(page, f"{base_url_root}/watchlist.html?certs=59362")  # Solutions Plus Bank, opened 2025
     expect(page.locator("article.bank .score .badge.N")).to_have_text("New bank – not scored")
     expect(page.locator("article.bank .score")).to_contain_text("Less than 3 years old")
 
@@ -111,7 +112,7 @@ def test_page_works_when_localstorage_is_blocked(browser, base_url_root):
     open_page(page, f"{base_url_root}/watchlist.html?certs=628")
     add_by_search(page, "3511", 3511)
     assert sorted(card_certs(page)) == [628, 3511]
-    assert "certs=628,3511" in page.url               # the URL still carries the list
+    assert "certs=628,3511" in page.url  # the URL still carries the list
     context.close()
 
 
@@ -124,10 +125,12 @@ def worst_case_certs() -> list[int]:
     def move(b):
         return max(abs((v[-1] or 0) - (v[-2] or 0)) for v in b["h"].values())
 
-    picks = (sorted(banks, key=lambda b: -max([len(r) for r in b["r"]] or [0]))[:6]
-             + sorted([b for b in banks if "cx" in b], key=lambda b: -b["cx"])[:3]
-             + sorted(banks, key=move, reverse=True)[:3]
-             + sorted(banks, key=lambda b: -len(b["n"]))[:2])
+    picks = (
+        sorted(banks, key=lambda b: -max([len(r) for r in b["r"]] or [0]))[:6]
+        + sorted([b for b in banks if "cx" in b], key=lambda b: -b["cx"])[:3]
+        + sorted(banks, key=move, reverse=True)[:3]
+        + sorted(banks, key=lambda b: -len(b["n"]))[:2]
+    )
     certs = []
     for b in picks:
         if b["c"] not in certs:

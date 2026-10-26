@@ -9,6 +9,7 @@ The file uses short keys and rounded numbers to stay small; the schema is docume
 site/data/README.md. Everything except `fetch_rows` is a pure function, so it is unit-tested
 offline (ingestion/tests/test_watchlist_export.py).
 """
+
 from __future__ import annotations
 
 import json
@@ -17,7 +18,9 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
-SCHEMA_VERSION = 2            # 2: bands N and F (not scored) replace the old "nb" new-bank flag
+from ingestion.environment import assert_can_publish
+
+SCHEMA_VERSION = 2  # 2: bands N and F (not scored) replace the old "nb" new-bank flag
 HISTORY_QUARTERS = 8
 MAX_BYTES = 3 * 1024 * 1024
 
@@ -30,9 +33,22 @@ METRICS = {
     "dep": ("deposit_growth_yoy_pct", "Deposit growth (year on year)", "%", None),
 }
 
-BAND_CODES = {"High": "H", "Elevated": "E", "Watch": "W", "Low": "L", "Already in distress": "D",
-              "New bank – not scored": "N", "Office of a foreign bank – not scored": "F"}
-TIER_CODES = {"1: <$100M": 1, "2: $100M-$1B": 2, "3: $1B-$10B": 3, "4: $10B-$100B": 4, "5: >$100B": 5}
+BAND_CODES = {
+    "High": "H",
+    "Elevated": "E",
+    "Watch": "W",
+    "Low": "L",
+    "Already in distress": "D",
+    "New bank – not scored": "N",
+    "Office of a foreign bank – not scored": "F",
+}
+TIER_CODES: dict[str | None, int] = {
+    "1: <$100M": 1,
+    "2: $100M-$1B": 2,
+    "3: $1B-$10B": 3,
+    "4: $10B-$100B": 4,
+    "5: >$100B": 5,
+}
 
 # Model feature -> plain-language label and unit, for the reasons (features from _features.py)
 FEATURE_LABELS = {
@@ -68,10 +84,17 @@ FEATURE_LABELS = {
     "tier1_change_4q_pp": ("Change in Tier 1 leverage over the year", "pp"),
     "roa_change_4q_pp": ("Change in return on assets over the year", "pp"),
 }
-_UNIT_SUFFIX = {"pct": "%", "pct_loans": "% of loans", "pct_assets": "% of assets",
-                "pct_deposits": "% of deposits", "pct_equity": "% of equity"}
+_UNIT_SUFFIX = {
+    "pct": "%",
+    "pct_loans": "% of loans",
+    "pct_assets": "% of assets",
+    "pct_deposits": "% of deposits",
+    "pct_equity": "% of equity",
+}
 # reason text written by 05_score: "<feature> = <value> (median <value>)", values like 1,234.56 or n/a
-_REASON_RE = re.compile(r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\(median\s+(n/a|-?[\d,]*\.?\d+)\)\s*$")
+_REASON_RE = re.compile(
+    r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\(median\s+(n/a|-?[\d,]*\.?\d+)\)\s*$"
+)
 
 
 # --------------------------------------------------------------- formatting
@@ -125,7 +148,7 @@ def plain_reason(raw: str | None) -> str | None:
         return None
     m = _REASON_RE.match(raw)
     if not m:
-        return raw.strip()                    # unknown format: show as-is rather than drop it
+        return raw.strip()  # unknown format: show as-is rather than drop it
     feature, value, median = m.group(1), _parse_number(m.group(2)), _parse_number(m.group(3))
     label, unit = FEATURE_LABELS.get(feature, (feature.replace("_", " ").capitalize(), "num"))
     return f"{label}: {_fmt_value(value, unit)} (median of all US banks: {_fmt_value(median, unit)})"
@@ -153,6 +176,8 @@ def bank_age_years(established, as_of) -> float | None:
 def quarter_ends(latest, n: int = HISTORY_QUARTERS) -> list[date]:
     """The n quarter-ends ending at `latest`, oldest first."""
     q = _as_date(latest)
+    if q is None:
+        raise ValueError("quarter_ends needs a latest quarter")
     out = []
     for _ in range(n):
         out.append(q)
@@ -192,12 +217,15 @@ def build_history(rows: list[dict], quarters: list[date], digits: int = 2) -> di
 
 
 # --------------------------------------------------------------- payload
-def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: list[dict],
-                  exported_on: date) -> dict:
+def build_payload(
+    bank_rows: list[dict], history_rows: list[dict], peer_rows: list[dict], exported_on: date
+) -> dict:
     """Assemble the watchlist JSON from the three query results (lower-case column names)."""
     if not bank_rows:
         raise ValueError("no scored banks: MART_EARLY_WARNING is empty")
     latest = _as_date(bank_rows[0]["report_date"])
+    if latest is None:
+        raise ValueError("MART_EARLY_WARNING has no report_date")
     quarters = quarter_ends(latest)
 
     hist_by_cert: dict[int, list[dict]] = {}
@@ -222,7 +250,7 @@ def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: li
             "n": r["bank_name"],
             "ci": r.get("city"),
             "st": r.get("state_code"),
-            "a": round_or_none((r.get("total_assets_k") or 0) / 1000, 1),     # $ millions
+            "a": round_or_none((r.get("total_assets_k") or 0) / 1000, 1),  # $ millions
             "age": age,
             "t": TIER_CODES.get(r.get("asset_size_tier")),
             "p": round_or_none(r.get("distress_probability"), 3),
@@ -236,7 +264,7 @@ def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: li
             rec["cr"] = round_or_none(r.get("complaints_per_1b_deposits"), 2)
         banks.append(rec)
 
-    banks.sort(key=lambda b: (b["p"] is None, -(b["p"] or 0), b["c"]))     # not scored last
+    banks.sort(key=lambda b: (b["p"] is None, -(b["p"] or 0), b["c"]))  # not scored last
     first = bank_rows[0]
     return {
         "meta": {
@@ -258,21 +286,34 @@ def build_payload(bank_rows: list[dict], history_rows: list[dict], peer_rows: li
 
 def validate_payload(payload: dict) -> None:
     """Raise ValueError if the payload doesn't match the documented schema."""
+
     def need(cond, msg):
         if not cond:
             raise ValueError(f"watchlist.json schema: {msg}")
 
     need(set(payload) == {"meta", "peers", "banks"}, "top-level keys must be meta, peers, banks")
     meta = payload["meta"]
-    for k in ("schema", "quarter", "quarterLabel", "exported", "model", "modelVersion", "banks", "history", "metrics"):
+    for k in (
+        "schema",
+        "quarter",
+        "quarterLabel",
+        "exported",
+        "model",
+        "modelVersion",
+        "banks",
+        "history",
+        "metrics",
+    ):
         need(k in meta, f"meta.{k} missing")
     n_hist = len(meta["history"])
     need(n_hist == HISTORY_QUARTERS, f"meta.history must have {HISTORY_QUARTERS} quarters")
     need(meta["banks"] == len(payload["banks"]), "meta.banks must equal number of banks")
     for tier, series in payload["peers"].items():
         need(tier in {"1", "2", "3", "4", "5"}, f"unknown peer tier {tier}")
-        need(set(series) == set(METRICS) and all(len(v) == n_hist for v in series.values()),
-             f"peers.{tier} must have every metric with {n_hist} values")
+        need(
+            set(series) == set(METRICS) and all(len(v) == n_hist for v in series.values()),
+            f"peers.{tier} must have every metric with {n_hist} values",
+        )
     seen = set()
     for b in payload["banks"]:
         need(isinstance(b.get("c"), int) and b["c"] not in seen, "bank CERT missing or duplicated")
@@ -283,10 +324,14 @@ def validate_payload(payload: dict) -> None:
         need(b["p"] is None or 0 <= b["p"] <= 1, f"bank {b['c']}: probability out of range")
         need(b.get("pp") is None or 0 <= b["pp"] <= 100, f"bank {b['c']}: percentile out of range")
         need(len(b["r"]) <= 3, f"bank {b['c']}: more than 3 reasons")
-        need(set(b["h"]) == set(METRICS) and all(len(v) == n_hist for v in b["h"].values()),
-             f"bank {b['c']}: history must have every metric with {n_hist} values")
-        need((b["p"] is None) == (b["b"] in ("N", "F")),
-             f"bank {b['c']}: only not-scored banks (N, F) have no probability")
+        need(
+            set(b["h"]) == set(METRICS) and all(len(v) == n_hist for v in b["h"].values()),
+            f"bank {b['c']}: history must have every metric with {n_hist} values",
+        )
+        need(
+            (b["p"] is None) == (b["b"] in ("N", "F")),
+            f"bank {b['c']}: only not-scored banks (N, F) have no probability",
+        )
 
 
 def write_payload(payload: dict, path: Path) -> int:
@@ -364,10 +409,18 @@ def fetch_rows(conn) -> tuple[list[dict], list[dict], list[dict]]:
 
 
 def export(conn, out_path: Path, today: date | None = None) -> dict:
-    """Fetch, build, validate and write. Returns a small summary for logs (no secrets)."""
+    """Fetch, build, validate and write. Returns a small summary for logs (no secrets).
+
+    Only prod publishes the watchlist (the file is what the public page shows)."""
+    assert_can_publish("the watchlist (site/data/watchlist.json)")
     banks, history, peers = fetch_rows(conn)
     payload = build_payload(banks, history, peers, today or date.today())
     size = write_payload(payload, out_path)
     meta = payload["meta"]
-    return {"path": str(out_path), "bytes": size, "banks": meta["banks"],
-            "quarter": meta["quarterLabel"], "model_version": meta["modelVersion"]}
+    return {
+        "path": str(out_path),
+        "bytes": size,
+        "banks": meta["banks"],
+        "quarter": meta["quarterLabel"],
+        "model_version": meta["modelVersion"],
+    }

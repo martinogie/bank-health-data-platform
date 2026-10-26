@@ -3,6 +3,7 @@
 Small requests only (one bank, a few days of complaints). No credentials needed.
     .venv\\Scripts\\python -m pytest tests/integration -m integration
 """
+
 from __future__ import annotations
 
 import csv
@@ -34,19 +35,29 @@ def test_fdic_latest_quarter_is_recent(session):
 def test_fdic_all_requested_fields_exist(session):
     """Every field we ask for comes back, i.e. none were renamed or retired."""
     latest = fdic.latest_financials_quarter(session)
-    rows = list(fdic.fetch_all(
-        session, "financials", fdic.FINANCIAL_FIELDS,
-        filters=f"CERT:628 AND REPDTE:{fdic.to_repdte(latest)}",
-    ))
+    rows = list(
+        fdic.fetch_all(
+            session,
+            "financials",
+            fdic.FINANCIAL_FIELDS,
+            filters=f"CERT:628 AND REPDTE:{fdic.to_repdte(latest)}",
+        )
+    )
     assert len(rows) == 1
     missing = set(fdic.FINANCIAL_FIELDS) - set(rows[0])
     assert not missing, f"FDIC no longer returns: {sorted(missing)}"
 
 
 def test_fdic_institutions_fields_exist(session):
-    payload = fdic._get(session, "institutions", {
-        "filters": "CERT:628", "fields": ",".join(fdic.INSTITUTION_FIELDS), "format": "json",
-    })
+    payload = fdic._get(
+        session,
+        "institutions",
+        {
+            "filters": "CERT:628",
+            "fields": ",".join(fdic.INSTITUTION_FIELDS),
+            "format": "json",
+        },
+    )
     missing = set(fdic.INSTITUTION_FIELDS) - set(payload["data"][0]["data"])
     assert not missing, f"FDIC institutions no longer returns: {sorted(missing)}"
 
@@ -56,7 +67,7 @@ def test_fdic_download_writes_real_quarter(tmp_path, session):
     [path] = fdic.download_financials([latest], tmp_path, session)
     with gzip.open(path, "rt") as fh:
         rows = [json.loads(line) for line in fh]
-    assert len(rows) > 3000                       # ~4,300 banks in 2026
+    assert len(rows) > 3000  # ~4,300 banks in 2026
     assert len({r["CERT"] for r in rows}) == len(rows)  # one row per bank
 
 

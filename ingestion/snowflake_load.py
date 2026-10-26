@@ -1,30 +1,62 @@
-"""Load Databricks exports (Parquet in a UC Volume) into Snowflake BANK_HEALTH.RAW.
+"""Load Databricks exports (Parquet in a UC Volume) into Snowflake RAW.
+
+The catalog and database follow BANK_HEALTH_ENV (prod: bank_health -> BANK_HEALTH,
+dev: bank_health_dev -> BANK_HEALTH_DEV); load_all refuses to start if the connection's
+database doesn't match, or if a non-prod environment is connected to BANK_HEALTH.
 
 Flow per table:
-  1. list   /Volumes/bank_health/gold/exports/<folder>/*.parquet
+  1. list   /Volumes/<catalog>/gold/exports/<folder>/*.parquet
   2. download each part file, write it into RAW.<TABLE>__LOADING (write_pandas)
   3. ALTER TABLE <TABLE> SWAP WITH <TABLE>__LOADING, then drop the loading copy
 Step 3 is a single atomic metadata change, so readers never see a half-loaded table.
 
 Auth is key-pair: the private key file path comes from SNOWFLAKE_PRIVATE_KEY_PATH.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Callable
 
 import pandas as pd
 
-from ingestion.databricks_files import CATALOG, DatabricksFiles
+from ingestion.databricks_files import DatabricksFiles
+from ingestion.environment import EnvironmentMismatch, assert_can_write, databricks_catalog, settings
 
 log = logging.getLogger(__name__)
 
-EXPORT_ROOT = f"/Volumes/{CATALOG}/gold/exports"
 RAW_SCHEMA = "RAW"
+
+
+def export_root() -> str:
+    """Gold exports Volume in the current environment's catalog."""
+    return f"/Volumes/{databricks_catalog()}/gold/exports"
+
+
+def check_target_database(conn) -> str:
+    """The database this connection really writes to, checked against BANK_HEALTH_ENV.
+
+    Raises EnvironmentMismatch if it is not the environment's database, and ProdWriteRefused if
+    a non-prod environment is connected to the prod database. Called before any write."""
+    cur = conn.cursor()
+    try:
+        cur.execute("select current_database()")
+        row = cur.fetchone()
+    finally:
+        cur.close()
+    actual = (row[0] if row else None) or ""
+    expected = settings().snowflake_database
+    if actual.upper() != expected:
+        raise EnvironmentMismatch(
+            f"Snowflake session is in database {actual or '(none)'}, expected {expected}"
+        )
+    assert_can_write(actual)
+    return actual
+
 
 # Snowflake RAW table  ->  export folder written by the Databricks notebooks
 EXPORT_TABLES = {
@@ -72,7 +104,8 @@ def connect_from_env():
 def parquet_parts(dbx: DatabricksFiles, export_dir: str) -> list[str]:
     """Parquet data files in a Spark output folder (skips _SUCCESS, _committed_*, etc.)."""
     parts = [
-        e["path"] for e in dbx.list_directory(export_dir)
+        e["path"]
+        for e in dbx.list_directory(export_dir)
         if not e.get("is_directory")
         and e["path"].endswith(".parquet")
         and not PurePosixPath(e["path"]).name.startswith(("_", "."))
@@ -97,25 +130,29 @@ def load_table(
 ) -> int:
     """Replace RAW.<table> with the contents of `export_dir`. Returns rows loaded."""
     if writer is None:
-        from snowflake.connector.pandas_tools import write_pandas as writer
+        from snowflake.connector.pandas_tools import write_pandas
+
+        writer = write_pandas
 
     parts = parquet_parts(dbx, export_dir)
     if not parts:
         raise FileNotFoundError(f"No parquet files found in {export_dir}")
 
     loading = f"{table}__LOADING"
-    loaded_at = datetime.now(timezone.utc)
+    loaded_at = datetime.now(UTC)
     total = 0
     with tempfile.TemporaryDirectory() as tmp:
         for i, part in enumerate(parts):
             local = dbx.download_file(part, Path(tmp) / f"part_{i}.parquet")
             df = prepare_frame(pd.read_parquet(local), loaded_at)
             ok, _, nrows, _ = writer(
-                conn, df, loading,
+                conn,
+                df,
+                loading,
                 schema=RAW_SCHEMA,
                 auto_create_table=True,
-                overwrite=(i == 0),       # first part (re)creates the loading table
-                use_logical_type=True,    # keep timestamps as timestamps
+                overwrite=(i == 0),  # first part (re)creates the loading table
+                use_logical_type=True,  # keep timestamps as timestamps
                 quote_identifiers=False,
             )
             if not ok:
@@ -145,13 +182,16 @@ def load_all(conn, dbx: DatabricksFiles, tables: dict[str, str] | None = None) -
     A missing export fails the load, except for OPTIONAL_TABLES, which are skipped.
     """
     tables = tables or EXPORT_TABLES
+    database = check_target_database(conn)
+    root = export_root()
+    log.info("loading %s exports into %s.%s", root, database, RAW_SCHEMA)
     loaded = {}
     for table, folder in tables.items():
         try:
-            loaded[table] = load_table(conn, dbx, table, f"{EXPORT_ROOT}/{folder}")
+            loaded[table] = load_table(conn, dbx, table, f"{root}/{folder}")
         except Exception as exc:
             if table in OPTIONAL_TABLES and _is_missing(exc):
-                log.info("RAW.%s skipped: no export at %s/%s yet", table, EXPORT_ROOT, folder)
+                log.info("RAW.%s skipped: no export at %s/%s yet", table, root, folder)
                 continue
             raise
     return loaded

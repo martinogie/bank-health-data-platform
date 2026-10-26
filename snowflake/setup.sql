@@ -4,7 +4,7 @@
 --
 -- Creates:
 --   * BANK_WH            XSMALL warehouse that sleeps after 60 s idle
---   * BANK_WH_MONITOR    credit cap so the trial credit can't be burnt by accident
+--   * ACCOUNT_MONTHLY_CAP account-level credit cap (if it does not exist yet)
 --   * BANK_HEALTH        database with schemas RAW, STAGING, MARTS
 --   * BANK_PIPELINE_ROLE role used by Airflow (loading) and dbt (transforming)
 --   * SVC_BANK_PIPELINE  service user, key-pair login only (no password)
@@ -24,16 +24,21 @@ CREATE WAREHOUSE IF NOT EXISTS BANK_WH
   INITIALLY_SUSPENDED = TRUE
   COMMENT = 'Bank Health pipeline: loads, dbt and Power BI refresh';
 
--- Spending guard: notify at 75 %, suspend at 100 % of 20 credits per month.
--- An XSMALL warehouse uses 1 credit/hour, so 20 credits is far above normal use.
-CREATE OR REPLACE RESOURCE MONITOR BANK_WH_MONITOR
-  WITH CREDIT_QUOTA = 20
+-- Spending guard for the whole account (every warehouse, BANK_WH included), so a fresh
+-- setup is never uncapped: 5 credits/month, notify at 50 % and 80 %, suspend at 100 %
+-- (running queries finish), suspend immediately at 110 % (running queries are cancelled).
+-- IF NOT EXISTS: an existing cap is left exactly as it is (settings and credits used).
+-- It replaced BANK_WH_MONITOR (20 credits on BANK_WH only), which setup_dev.sql drops.
+CREATE RESOURCE MONITOR IF NOT EXISTS ACCOUNT_MONTHLY_CAP
+  WITH CREDIT_QUOTA = 5
        FREQUENCY = MONTHLY
        START_TIMESTAMP = IMMEDIATELY
-  TRIGGERS ON 75 PERCENT DO NOTIFY
-           ON 100 PERCENT DO SUSPEND;
+  TRIGGERS ON 50 PERCENT DO NOTIFY
+           ON 80 PERCENT DO NOTIFY
+           ON 100 PERCENT DO SUSPEND
+           ON 110 PERCENT DO SUSPEND_IMMEDIATE;
 
-ALTER WAREHOUSE BANK_WH SET RESOURCE_MONITOR = BANK_WH_MONITOR;
+ALTER ACCOUNT SET RESOURCE_MONITOR = ACCOUNT_MONTHLY_CAP;
 
 -- -----------------------------------------------------------------------------
 -- 2. Storage: database and the three layers
@@ -100,6 +105,7 @@ GRANT ROLE BANK_PIPELINE_ROLE TO USER SVC_BANK_PIPELINE;
 -- -----------------------------------------------------------------------------
 -- 6. Checks — run these to confirm everything is in place
 -- -----------------------------------------------------------------------------
+SHOW RESOURCE MONITORS;   -- ACCOUNT_MONTHLY_CAP with level ACCOUNT
 SHOW WAREHOUSES LIKE 'BANK_WH';
 SHOW SCHEMAS IN DATABASE BANK_HEALTH;
 SHOW GRANTS TO ROLE BANK_PIPELINE_ROLE;
