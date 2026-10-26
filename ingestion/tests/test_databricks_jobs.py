@@ -77,7 +77,7 @@ def test_find_git_folder_falls_back_to_path_lookup():
         raise AssertionError(url)
 
     api, _ = api_with(handler)
-    assert dj.find_git_folder(api)["id"] == 99
+    assert dj.find_git_folder(api, "bank-health-data-platform")["id"] == 99
 
 
 def test_repr_hides_token():

@@ -1,15 +1,23 @@
-# Snowflake connection for dbt. Every value comes from environment variables
-# (.env, loaded into the Airflow containers) — no secrets in this file.
+# Snowflake connection for dbt. Credentials come from environment variables (.env in the Airflow
+# containers, GitHub Actions secrets in CI); no secrets in this file.
+#
+# The target follows BANK_HEALTH_ENV, which is required (dbt stops if it is not set):
+#   prod  database BANK_HEALTH      schemas STAGING, MARTS
+#   dev   database BANK_HEALTH_DEV  schemas STAGING, MARTS (same names, separate database)
+#   ci    database BANK_HEALTH_DEV  one temporary schema CI_<run_id> from DBT_CI_SCHEMA, which CI
+#         drops at the end; sources and deferred models are read from BANK_HEALTH (read-only)
+# Database names are fixed here, not read from .env, so a wrong .env can't point a target at
+# another environment. macros/assert_environment.sql checks that target and BANK_HEALTH_ENV agree.
 bank_health:
-  target: prod
+  target: "{{ env_var('BANK_HEALTH_ENV') }}"
   outputs:
-    prod:
+    prod: &snowflake
       type: snowflake
       account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
       user: "{{ env_var('SNOWFLAKE_USER') }}"
       role: "{{ env_var('SNOWFLAKE_ROLE') }}"
       warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
-      database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+      database: BANK_HEALTH
       schema: STAGING
       authenticator: snowflake_jwt
       private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
@@ -17,3 +25,12 @@ bank_health:
       threads: 4
       client_session_keep_alive: false
       query_tag: dbt_bank_health
+    dev:
+      <<: *snowflake
+      database: BANK_HEALTH_DEV
+      query_tag: dbt_bank_health_dev
+    ci:
+      <<: *snowflake
+      database: BANK_HEALTH_DEV
+      schema: "{{ env_var('DBT_CI_SCHEMA') }}"
+      query_tag: dbt_bank_health_ci

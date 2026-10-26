@@ -53,3 +53,12 @@ def no_sleep(monkeypatch):
     import time
 
     monkeypatch.setattr(time, "sleep", lambda s: None)
+
+
+@pytest.fixture(autouse=True)
+def bank_health_env(monkeypatch):
+    """Unit tests run as dev unless a test sets another environment (monkeypatch.setenv).
+    Real .env values that could point at another environment never leak in."""
+    monkeypatch.setenv("BANK_HEALTH_ENV", "dev")
+    for name in ("SNOWFLAKE_DATABASE", "DATABRICKS_CATALOG"):
+        monkeypatch.delenv(name, raising=False)

@@ -1,7 +1,8 @@
 """Copy all project data into the local PostgreSQL mirror (postgres/docker-compose.yaml).
 
-  Databricks  bank_health.{bronze,silver,gold,ml}.*  -> Postgres schemas bronze, silver, gold, ml
-  Snowflake   BANK_HEALTH.{RAW,MARTS}.*              -> snowflake_raw, snowflake_marts
+  Databricks  <catalog>.{bronze,silver,gold,ml}.*    -> Postgres schemas bronze, silver, gold, ml
+  Snowflake   <database>.{RAW,MARTS}.*               -> snowflake_raw, snowflake_marts
+  (catalog and database follow BANK_HEALTH_ENV: bank_health / BANK_HEALTH in prod)
   FDIC API    CBLRIND + IBA flags (2020 Q1 onward)   -> explore.fdic_capital_flags (for the views)
   Views       postgres/views.sql                     -> explore.*
 
@@ -143,8 +144,9 @@ class DatabricksSource:
         from databricks import sql as dbsql
         from ingestion.databricks_files import DatabricksFiles
         from ingestion.databricks_jobs import DatabricksAPI
+        from ingestion.environment import databricks_catalog
 
-        self.catalog = os.environ.get("DATABRICKS_CATALOG") or "bank_health"
+        self.catalog = databricks_catalog()
         self.api = DatabricksAPI.from_env()
         self.files = DatabricksFiles.from_env()
         warehouses = self.api.call("GET", "/api/2.0/sql/warehouses").get("warehouses", [])
@@ -328,16 +330,18 @@ class DatabricksSource:
 # ===================================================================== Snowflake
 class SnowflakeSource:
     def __init__(self):
+        from ingestion.environment import settings
         from ingestion.snowflake_load import connect_from_env
 
+        self.database = settings().snowflake_database
         self.conn = connect_from_env()
         self.cur = self.conn.cursor()
         self.cur.execute("alter session set query_tag = 'postgres_mirror'")
         self.started = datetime.now(UTC)
 
     def tables(self) -> list[dict]:
-        self.cur.execute("""select table_schema, table_name, column_name, data_type, numeric_precision, numeric_scale
-                            from BANK_HEALTH.INFORMATION_SCHEMA.COLUMNS
+        self.cur.execute(f"""select table_schema, table_name, column_name, data_type, numeric_precision, numeric_scale
+                            from {self.database}.INFORMATION_SCHEMA.COLUMNS
                             where table_schema in ('RAW', 'MARTS') order by table_schema, table_name, ordinal_position""")
         by_table: dict[tuple, list] = {}
         for schema, table, col, dtype, prec, scale in self.cur.fetchall():
@@ -345,7 +349,7 @@ class SnowflakeSource:
                 (col, pm.pg_type_snowflake(dtype, prec, scale, col))
             )
         self.cur.execute(
-            "select table_schema, table_name from BANK_HEALTH.INFORMATION_SCHEMA.TABLES "
+            f"select table_schema, table_name from {self.database}.INFORMATION_SCHEMA.TABLES "
             "where table_schema in ('RAW', 'MARTS') and table_type = 'BASE TABLE'"
         )
         base = set(self.cur.fetchall())
@@ -354,7 +358,7 @@ class SnowflakeSource:
                 "source": "snowflake",
                 "pg_schema": pm.SNOWFLAKE_SCHEMAS[s],
                 "table": t,
-                "source_table": f"BANK_HEALTH.{s}.{t}",
+                "source_table": f"{self.database}.{s}.{t}",
                 "columns": cols,
                 "json_columns": {c for c, ty in cols if ty == "jsonb"},
             }

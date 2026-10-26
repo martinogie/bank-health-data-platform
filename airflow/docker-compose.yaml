@@ -1,5 +1,10 @@
-# Slim Airflow 3 stack for one PC: LocalExecutor (no Redis/Celery), ~3-4 GB RAM.
+# Slim Airflow 3 stack for one machine: LocalExecutor (no Redis/Celery), ~3-4 GB RAM.
 # Based on the official apache/airflow 3.3.2 docker-compose.yaml.
+#
+# THIS FILE IS PROD (BANK_HEALTH_ENV=prod below). Prod is whichever machine runs it: today the
+# PC, later the Oracle Cloud Arm VM (the image builds for linux/amd64 and linux/arm64).
+# The dev stack adds docker-compose.dev.yaml on top (BANK_HEALTH_ENV=dev, port 8081, its own
+# project name and metadata database); see CONTRIBUTING.md.
 #
 # Run from the airflow/ folder:
 #   docker compose build
@@ -17,6 +22,9 @@ x-airflow-common:
     - ../.env
   environment:
     &airflow-common-env
+    # Set here, not only in .env, so this stack can only ever run as prod. It overrides .env.
+    # The dev override file sets dev. The entrypoint stops the container if it is missing.
+    BANK_HEALTH_ENV: prod
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__PARALLELISM: 4
     # Low-memory settings for a PC where Docker gets ~4 GB
@@ -42,6 +50,7 @@ x-airflow-common:
     - ./logs:/opt/airflow/logs
     - ../ingestion:/opt/airflow/ingestion
     - ../dbt:/opt/airflow/dbt
+    - ../databricks:/opt/airflow/databricks:ro   # dev uploads these notebooks to its own folder
     - ../data:/opt/airflow/data
     - ../site:/opt/airflow/site          # export_watchlist writes site/data/watchlist.json
     - ../keys:/opt/airflow/keys:ro

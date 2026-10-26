@@ -49,25 +49,26 @@ import pandas as pd
 from mlflow.tracking import MlflowClient
 
 NOTEBOOK = "05_score"
-MODEL_NAME = f"{CATALOG}.ml.distress_model"
 require_pinned_environment()
 mlflow.set_registry_uri("databricks-uc")
 
 dbutils.widgets.text("model_alias", "champion", "Model alias to score with")
 ALIAS = dbutils.widgets.get("model_alias").strip() or "champion"
 PRODUCTION = ALIAS == "champion"
+# @champion is always prod's model (dev reads it, read-only); other aliases are this environment's.
+SCORING_MODEL = CHAMPION_MODEL if PRODUCTION else MODEL_NAME
 SCORES_TABLE = f"{ML}.risk_scores" if PRODUCTION else f"{ML}.risk_scores_{ALIAS}"
 
 client = MlflowClient()
-mv = client.get_model_version_by_alias(MODEL_NAME, ALIAS)
+mv = client.get_model_version_by_alias(SCORING_MODEL, ALIAS)
 version = mv.version
-model = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}@{ALIAS}")
+model = mlflow.sklearn.load_model(f"models:/{SCORING_MODEL}@{ALIAS}")
 cutoffs = cutoffs_from_tags(mv.tags)
 model_features = list(getattr(model, "feature_names_in_", FEATURES))
 unknown = sorted(set(model_features) - set(FEATURES))
 if unknown:
     raise ValueError(f"v{version} expects features this code no longer builds: {unknown}")
-print(f"Scoring with {MODEL_NAME} v{version} (@{ALIAS}); band cut-offs {cutoffs}; writing {SCORES_TABLE}")
+print(f"Scoring with {SCORING_MODEL} v{version} (@{ALIAS}); band cut-offs {cutoffs}; writing {SCORES_TABLE}")
 
 # COMMAND ----------
 
@@ -141,7 +142,7 @@ out_cols = [
     "cre_to_equity_pct",
 ]
 scores = cur[out_cols].copy()
-scores["model_name"] = MODEL_NAME
+scores["model_name"] = SCORING_MODEL
 scores["model_version"] = int(version)
 scores["scored_at"] = pd.Timestamp(RUN_TS).tz_localize(None)
 
@@ -210,7 +211,7 @@ band_counts = scores["risk_band"].value_counts().reindex(ALL_BANDS, fill_value=0
 summary = {
     "report_date": str(latest),
     "banks": len(scores),
-    "model": f"{MODEL_NAME} v{version} (@{ALIAS})",
+    "model": f"{SCORING_MODEL} v{version} (@{ALIAS})",
     "table": SCORES_TABLE,
     "band_cutoffs": cutoffs,
     "risk_bands": {k: int(v) for k, v in band_counts.items()},

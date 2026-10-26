@@ -1,0 +1,23 @@
+# Dev stack: the same services as docker-compose.yaml, with BANK_HEALTH_ENV=dev.
+# Run it from a dev checkout (its own folder, its own ../.env with the dev credentials):
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d
+# UI: http://localhost:8081 (prod keeps 8080). The project name gives dev its own containers
+# and its own metadata database, so dev runs, watermarks and variables never mix with prod's.
+# Dev writes BANK_HEALTH_DEV and bank_health_dev only, and skips the watchlist and manifest.
+name: bank-health-dev
+
+services:
+  airflow-apiserver:
+    environment:
+      BANK_HEALTH_ENV: dev
+    ports: !override
+      - "8081:8080"
+  airflow-scheduler:
+    environment:
+      BANK_HEALTH_ENV: dev
+  airflow-dag-processor:
+    environment:
+      BANK_HEALTH_ENV: dev
+  airflow-init:
+    environment:
+      BANK_HEALTH_ENV: dev

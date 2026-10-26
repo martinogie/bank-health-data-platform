@@ -169,7 +169,7 @@ def calibration(yv, p, bins=10):
 
 mlflow.set_registry_uri("databricks-uc")
 user = spark.sql("select current_user()").first()[0]
-mlflow.set_experiment(f"/Users/{user}/bank_health_distress_model")
+mlflow.set_experiment(f"/Users/{user}/{EXPERIMENT_NAME}")
 
 out = {}
 with mlflow.start_run(

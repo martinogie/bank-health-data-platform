@@ -10,7 +10,7 @@ import uuid
 
 import pytest
 
-from ingestion.databricks_files import RAW_VOLUME, DatabricksFiles
+from ingestion.databricks_files import DatabricksFiles, raw_volume
 from tests.integration.conftest import require_env
 
 pytestmark = pytest.mark.integration
@@ -30,20 +30,20 @@ def test_upload_list_download_delete_roundtrip(dbx, tmp_path):
     local.write_bytes(payload)
 
     [remote] = dbx.upload_files([local], local_root)
-    assert remote == f"{RAW_VOLUME}/_integration_test/probe.txt"
+    assert remote == f"{raw_volume()}/_integration_test/probe.txt"
     try:
-        listed = {e["path"] for e in dbx.list_directory(f"{RAW_VOLUME}/_integration_test")}
+        listed = {e["path"] for e in dbx.list_directory(f"{raw_volume()}/_integration_test")}
         assert remote in listed
         back = dbx.download_file(remote, tmp_path / "back.txt")
         assert back.read_bytes() == payload
     finally:
         dbx.delete_file(remote)
 
-    listed_after = {e["path"] for e in dbx.list_directory(f"{RAW_VOLUME}/_integration_test")}
+    listed_after = {e["path"] for e in dbx.list_directory(f"{raw_volume()}/_integration_test")}
     assert remote not in listed_after
 
 
 def test_expected_raw_folders_exist(dbx):
     """00_setup created the layout that uploads mirror."""
-    top = {e["name"].rstrip("/") for e in dbx.list_directory(RAW_VOLUME) if e.get("is_directory")}
+    top = {e["name"].rstrip("/") for e in dbx.list_directory(raw_volume()) if e.get("is_directory")}
     assert {"fdic", "cfpb"} <= top

@@ -21,22 +21,28 @@ class FakeDbx:
 
 
 class FakeCursor:
-    def __init__(self, log):
-        self.log = log
+    def __init__(self, log, database):
+        self.log, self.database = log, database
 
     def execute(self, sql):
         self.log.append(sql)
+
+    def fetchone(self):
+        return (self.database,)  # answers "select current_database()"
 
     def close(self):
         pass
 
 
 class FakeConn:
-    def __init__(self):
+    """A Snowflake connection whose session is in `database` (dev by default, like the tests)."""
+
+    def __init__(self, database="BANK_HEALTH_DEV"):
         self.sql = []
+        self.database = database
 
     def cursor(self):
-        return FakeCursor(self.sql)
+        return FakeCursor(self.sql, self.database)
 
 
 def parquet_bytes(df, tmp_path, name):

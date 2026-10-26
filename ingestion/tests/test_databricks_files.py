@@ -1,7 +1,17 @@
 import pytest
 
-from ingestion.databricks_files import RAW_VOLUME, DatabricksFiles
+from ingestion.databricks_files import DatabricksFiles, raw_volume
 from ingestion.tests.conftest import FakeResponse, FakeSession
+
+# Unit tests run as dev (conftest.py), so uploads go to the dev catalog's Volume.
+RAW_VOLUME = "/Volumes/bank_health_dev/bronze/raw_files"
+
+
+def test_raw_volume_follows_the_environment(monkeypatch):
+    assert raw_volume() == RAW_VOLUME
+    monkeypatch.setenv("BANK_HEALTH_ENV", "prod")
+    assert raw_volume() == "/Volumes/bank_health/bronze/raw_files"
+
 
 HOST = "https://dbc-example.cloud.databricks.com"
 

@@ -77,7 +77,6 @@ from sklearn.preprocessing import QuantileTransformer
 
 NOTEBOOK = "04_train_model"
 require_pinned_environment()
-MODEL_NAME = f"{CATALOG}.ml.distress_model"
 SEED = 42
 PERIODS = {
     "selection_train": (2001, 2016),
@@ -94,6 +93,7 @@ dbutils.widgets.text("retrain", "true", "Retrain model (true/false)")
 dbutils.widgets.text("promote", "false", "Make the new version @champion (true/false)")
 RETRAIN = dbutils.widgets.get("retrain").strip().lower() == "true"
 PROMOTE = dbutils.widgets.get("promote").strip().lower() == "true"
+check_promote(PROMOTE)
 # Band meanings = distress rate within the band, out of sample on the training years:
 # High >= 50%, Elevated 25-50%, Watch 10-25%, Low < 10%
 BAND_TARGETS = {"High": 0.50, "Elevated": 0.25, "Watch": 0.10}
@@ -101,11 +101,11 @@ WALK_FORWARD_FIRST_YEAR = 2003  # first year with 2 earlier years to train on
 mlflow.set_registry_uri("databricks-uc")
 if not RETRAIN:
     try:
-        current = MlflowClient().get_model_version_by_alias(MODEL_NAME, "champion").version
+        current = MlflowClient().get_model_version_by_alias(CHAMPION_MODEL, "champion").version
     except Exception:
         current = None
     if current is not None:
-        print(f"retrain=false: keeping {MODEL_NAME} v{current} (@champion); training skipped")
+        print(f"retrain=false: keeping {CHAMPION_MODEL} v{current} (@champion); training skipped")
         dbutils.notebook.exit(json.dumps({"skipped": True, "champion_version": int(current)}))
     print("retrain=false but no @champion exists yet, so training anyway")
 
@@ -268,7 +268,7 @@ def log_model_kwargs():
 # Set the registry first: otherwise MLflow looks it up in a Spark config that serverless blocks.
 mlflow.set_registry_uri("databricks-uc")
 user = spark.sql("select current_user()").first()[0]
-mlflow.set_experiment(f"/Users/{user}/bank_health_distress_model")
+mlflow.set_experiment(f"/Users/{user}/{EXPERIMENT_NAME}")
 
 X_sel, y_sel, _ = period("selection_train")
 X_val, y_val, _ = period("validation")
@@ -509,8 +509,8 @@ print("challenger (own label)", {k: round(v, 4) for k, v in ch_own.items()})
 # COMMAND ----------
 
 try:
-    old_version = MlflowClient().get_model_version_by_alias(MODEL_NAME, "champion").version
-    old_model = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}@champion")
+    old_version = MlflowClient().get_model_version_by_alias(CHAMPION_MODEL, "champion").version
+    old_model = mlflow.sklearn.load_model(f"models:/{CHAMPION_MODEL}@champion")
     X_old = pdf.loc[X_te.index].assign(total_risk_based_capital_pct=pdf.loc[X_te.index, "raw_total_rbc_pct"])
     p_old = old_model.predict_proba(X_old[list(old_model.feature_names_in_)].astype("float64"))[:, 1]
     old_eval = evaluate(y_te, p_old)
@@ -636,6 +636,7 @@ client.set_model_version_tag(MODEL_NAME, version, "test_period", f"{PERIODS['tes
 client.set_model_version_tag(MODEL_NAME, version, "challenger_run_id", challenger_run_id)
 client.set_registered_model_alias(MODEL_NAME, "candidate", version)
 if PROMOTE:
+    assert IS_PROD and MODEL_NAME == CHAMPION_MODEL  # checked above; never move @champion outside prod
     client.set_registered_model_alias(MODEL_NAME, "champion", version)
 mlflow.end_run()
 print(

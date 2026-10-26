@@ -7,6 +7,7 @@ keys/
 __pycache__/
 *.pyc
 .venv/
+.venv-dbt/
 venv/
 # airflow
 logs/

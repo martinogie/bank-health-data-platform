@@ -18,6 +18,8 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
+from ingestion.environment import assert_can_publish
+
 SCHEMA_VERSION = 2  # 2: bands N and F (not scored) replace the old "nb" new-bank flag
 HISTORY_QUARTERS = 8
 MAX_BYTES = 3 * 1024 * 1024
@@ -407,7 +409,10 @@ def fetch_rows(conn) -> tuple[list[dict], list[dict], list[dict]]:
 
 
 def export(conn, out_path: Path, today: date | None = None) -> dict:
-    """Fetch, build, validate and write. Returns a small summary for logs (no secrets)."""
+    """Fetch, build, validate and write. Returns a small summary for logs (no secrets).
+
+    Only prod publishes the watchlist (the file is what the public page shows)."""
+    assert_can_publish("the watchlist (site/data/watchlist.json)")
     banks, history, peers = fetch_rows(conn)
     payload = build_payload(banks, history, peers, today or date.today())
     size = write_payload(payload, out_path)

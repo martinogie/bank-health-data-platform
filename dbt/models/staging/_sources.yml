@@ -5,7 +5,8 @@ sources:
     description: >
       Tables loaded weekly by Airflow from Databricks silver exports (Parquet).
       Each row carries _LOADED_AT (Snowflake load time) and _INGESTED_AT (Databricks bronze time).
-    database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+    # The environment's own RAW; CI reads prod RAW (read-only), like the prod models it defers to.
+    database: "{{ 'BANK_HEALTH' if target.name == 'ci' else target.database }}"
     schema: RAW
     config:
       loaded_at_field: _loaded_at

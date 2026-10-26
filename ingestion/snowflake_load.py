@@ -1,7 +1,11 @@
-"""Load Databricks exports (Parquet in a UC Volume) into Snowflake BANK_HEALTH.RAW.
+"""Load Databricks exports (Parquet in a UC Volume) into Snowflake RAW.
+
+The catalog and database follow BANK_HEALTH_ENV (prod: bank_health -> BANK_HEALTH,
+dev: bank_health_dev -> BANK_HEALTH_DEV); load_all refuses to start if the connection's
+database doesn't match, or if a non-prod environment is connected to BANK_HEALTH.
 
 Flow per table:
-  1. list   /Volumes/bank_health/gold/exports/<folder>/*.parquet
+  1. list   /Volumes/<catalog>/gold/exports/<folder>/*.parquet
   2. download each part file, write it into RAW.<TABLE>__LOADING (write_pandas)
   3. ALTER TABLE <TABLE> SWAP WITH <TABLE>__LOADING, then drop the loading copy
 Step 3 is a single atomic metadata change, so readers never see a half-loaded table.
@@ -20,12 +24,39 @@ from pathlib import Path, PurePosixPath
 
 import pandas as pd
 
-from ingestion.databricks_files import CATALOG, DatabricksFiles
+from ingestion.databricks_files import DatabricksFiles
+from ingestion.environment import EnvironmentMismatch, assert_can_write, databricks_catalog, settings
 
 log = logging.getLogger(__name__)
 
-EXPORT_ROOT = f"/Volumes/{CATALOG}/gold/exports"
 RAW_SCHEMA = "RAW"
+
+
+def export_root() -> str:
+    """Gold exports Volume in the current environment's catalog."""
+    return f"/Volumes/{databricks_catalog()}/gold/exports"
+
+
+def check_target_database(conn) -> str:
+    """The database this connection really writes to, checked against BANK_HEALTH_ENV.
+
+    Raises EnvironmentMismatch if it is not the environment's database, and ProdWriteRefused if
+    a non-prod environment is connected to the prod database. Called before any write."""
+    cur = conn.cursor()
+    try:
+        cur.execute("select current_database()")
+        row = cur.fetchone()
+    finally:
+        cur.close()
+    actual = (row[0] if row else None) or ""
+    expected = settings().snowflake_database
+    if actual.upper() != expected:
+        raise EnvironmentMismatch(
+            f"Snowflake session is in database {actual or '(none)'}, expected {expected}"
+        )
+    assert_can_write(actual)
+    return actual
+
 
 # Snowflake RAW table  ->  export folder written by the Databricks notebooks
 EXPORT_TABLES = {
@@ -151,13 +182,16 @@ def load_all(conn, dbx: DatabricksFiles, tables: dict[str, str] | None = None) -
     A missing export fails the load, except for OPTIONAL_TABLES, which are skipped.
     """
     tables = tables or EXPORT_TABLES
+    database = check_target_database(conn)
+    root = export_root()
+    log.info("loading %s exports into %s.%s", root, database, RAW_SCHEMA)
     loaded = {}
     for table, folder in tables.items():
         try:
-            loaded[table] = load_table(conn, dbx, table, f"{EXPORT_ROOT}/{folder}")
+            loaded[table] = load_table(conn, dbx, table, f"{root}/{folder}")
         except Exception as exc:
             if table in OPTIONAL_TABLES and _is_missing(exc):
-                log.info("RAW.%s skipped: no export at %s/%s yet", table, EXPORT_ROOT, folder)
+                log.info("RAW.%s skipped: no export at %s/%s yet", table, root, folder)
                 continue
             raise
     return loaded

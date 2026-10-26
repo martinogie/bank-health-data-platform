@@ -23,7 +23,8 @@ from ingestion import snowflake_load as sl
 from tests.integration.conftest import require_env
 
 pytestmark = pytest.mark.e2e
-AIRFLOW = "http://localhost:8080"
+# The stack of this checkout's environment: prod on 8080, dev on 8081 (docker-compose.dev.yaml).
+AIRFLOW = os.environ.get("AIRFLOW_URL", "http://localhost:8080")
 logging.getLogger("snowflake").setLevel(logging.WARNING)
 
 
@@ -31,6 +32,7 @@ logging.getLogger("snowflake").setLevel(logging.WARNING)
 def sf():
     require_env("SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PRIVATE_KEY_PATH")
     conn = sl.connect_from_env()
+    sl.check_target_database(conn)  # tables below are read from this environment's database
     yield conn
     conn.close()
 
@@ -82,40 +84,38 @@ TABLE_MINIMUMS = {
 
 @pytest.mark.parametrize("table,minimum", TABLE_MINIMUMS.items())
 def test_tables_populated(sf, table, minimum):
-    assert one(sf, f"select count(*) from BANK_HEALTH.{table}")[0] >= minimum
+    assert one(sf, f"select count(*) from {table}")[0] >= minimum
 
 
 def test_raw_and_marts_consistent(sf):
     assert (
-        one(sf, "select count(*) from BANK_HEALTH.RAW.CFPB_COMPLAINTS")[0]
-        == one(sf, "select count(*) from BANK_HEALTH.MARTS.FCT_COMPLAINTS")[0]
+        one(sf, "select count(*) from RAW.CFPB_COMPLAINTS")[0]
+        == one(sf, "select count(*) from MARTS.FCT_COMPLAINTS")[0]
     )
     assert (
-        one(sf, "select count(*) from BANK_HEALTH.RAW.FDIC_INSTITUTIONS")[0]
-        == one(sf, "select count(*) from BANK_HEALTH.MARTS.DIM_BANK")[0]
+        one(sf, "select count(*) from RAW.FDIC_INSTITUTIONS")[0]
+        == one(sf, "select count(*) from MARTS.DIM_BANK")[0]
     )
     assert (
-        one(sf, "select count(*) from BANK_HEALTH.RAW.ML_RISK_SCORES")[0]
-        == one(sf, "select count(*) from BANK_HEALTH.MARTS.MART_EARLY_WARNING")[0]
+        one(sf, "select count(*) from RAW.ML_RISK_SCORES")[0]
+        == one(sf, "select count(*) from MARTS.MART_EARLY_WARNING")[0]
     )
 
 
 def test_marts_have_fdic_latest_quarter(sf):
     latest = fdic.latest_financials_quarter()
-    assert one(sf, "select max(report_date) from BANK_HEALTH.MARTS.FCT_BANK_QUARTER")[0] == latest
-    assert one(sf, "select max(report_date) from BANK_HEALTH.MARTS.MART_EARLY_WARNING")[0] == latest
+    assert one(sf, "select max(report_date) from MARTS.FCT_BANK_QUARTER")[0] == latest
+    assert one(sf, "select max(report_date) from MARTS.MART_EARLY_WARNING")[0] == latest
 
 
 def test_complaint_history_covers_three_years(sf):
-    lo, hi = one(sf, "select min(date_received), max(date_received) from BANK_HEALTH.RAW.CFPB_COMPLAINTS")
+    lo, hi = one(sf, "select min(date_received), max(date_received) from RAW.CFPB_COMPLAINTS")
     assert (hi - lo).days >= 33 * 30
     assert (date.today() - hi).days <= 10
 
 
 def test_loaded_recently(sf):
-    hours = one(
-        sf, "select datediff(hour, min(_loaded_at), current_timestamp()) from BANK_HEALTH.RAW.CFPB_COMPLAINTS"
-    )[0]
+    hours = one(sf, "select datediff(hour, min(_loaded_at), current_timestamp()) from RAW.CFPB_COMPLAINTS")[0]
     assert hours <= 8 * 24
 
 
@@ -131,8 +131,7 @@ def test_spot_check_bank_total_assets_vs_fdic(sf):
     api_assets = payload["data"][0]["data"]["ASSET"]
     ours = one(
         sf,
-        f"select total_assets_k from BANK_HEALTH.MARTS.FCT_BANK_QUARTER "
-        f"where cert = 628 and report_date = '{latest}'",
+        f"select total_assets_k from MARTS.FCT_BANK_QUARTER where cert = 628 and report_date = '{latest}'",
     )[0]
     assert ours == api_assets
 
@@ -144,8 +143,7 @@ def test_spot_check_month_complaint_count_vs_cfpb(sf):
     api = cfpb.count_complaints(requests.Session(), first, last)
     ours = one(
         sf,
-        f"select count(*) from BANK_HEALTH.MARTS.FCT_COMPLAINTS "
-        f"where date_received between '{first}' and '{last}'",
+        f"select count(*) from MARTS.FCT_COMPLAINTS where date_received between '{first}' and '{last}'",
     )[0]
     # The CFPB keeps publishing a few late complaints for old months; allow 0.5%.
     assert abs(ours - api) <= 0.005 * api, f"{first:%Y-%m}: ours {ours} vs CFPB API {api}"

@@ -1,97 +1,40 @@
-"""Pull the Databricks Git folder to the latest main, then run notebooks one by one.
+r"""Run Databricks notebooks one by one, in the environment set by BANK_HEALTH_ENV.
+
+    prod  pulls the Git folder to the latest main, runs against catalog bank_health
+    dev   uploads this checkout's notebooks to a plain workspace folder, runs against
+          bank_health_dev (so an unpushed branch can be tested without touching prod)
 
 One-off serverless runs (Jobs API runs/submit): nothing is saved as a job.
 Prints each notebook's exit summary, or its error.
 
-Usage (from the project folder):
-    .venv\\Scripts\\python scripts/databricks_run.py 01_bronze 02_silver 03_gold
-    (add --local to run this checkout's notebooks, --param=name=value to pass a widget value)
-
---local uploads databricks/notebooks/*.py from this checkout to a scratch workspace folder
-(/Users/<me>/bank-health-local-run) and runs them from there, so an unpushed branch can be
-tested. The notebooks still read and write the real catalog tables.
+Usage (from the project folder; BANK_HEALTH_ENV comes from .env):
+    .venv\Scripts\python scripts/databricks_run.py 01_bronze 02_silver 03_gold
+    (add --param=name=value to pass a widget value, e.g. --param=model_alias=candidate)
 """
 
 from __future__ import annotations
 
-import base64
 import json
-import os
 import sys
 import time
-from pathlib import Path
 
-import requests
 from _env import ROOT, load_env
 
 sys.path.insert(0, str(ROOT))
+from ingestion import databricks_jobs as dj  # noqa: E402
+from ingestion import environment  # noqa: E402
 from ingestion.databricks_jobs import ENVIRONMENTS  # noqa: E402
 
-REPO_NAME = "bank-health-data-platform"
-LOCAL_FOLDER = "bank-health-local-run"
-NOTEBOOK_DIR = Path(__file__).resolve().parents[1] / "databricks" / "notebooks"
 POLL_SECONDS = 15
+FIXED_PARAMS = ("env", "catalog")  # follow BANK_HEALTH_ENV; never passed by hand
 
 
-class Databricks:
-    def __init__(self):
-        self.host = os.environ["DATABRICKS_HOST"].rstrip("/")
-        self.s = requests.Session()
-        self.s.headers["Authorization"] = "Bearer " + os.environ["DATABRICKS_TOKEN"]
-
-    def call(self, method, path, **kw):
-        r = self.s.request(method, self.host + path, timeout=60, **kw)
-        if r.status_code >= 400:
-            raise RuntimeError(f"{method} {path} -> {r.status_code}: {r.text[:500]}")
-        return r.json() if r.text else {}
-
-
-def find_and_pull_repo(db: Databricks) -> str:
-    repos = db.call("GET", "/api/2.0/repos").get("repos", [])
-    mine = [r for r in repos if r.get("url", "").rstrip("/").removesuffix(".git").endswith(REPO_NAME)]
-    if mine:
-        repo = mine[0]
-    else:
-        # On Free Edition the Repos API list can be empty even for a real Git folder,
-        # but the folder can still be fetched by its id (the workspace resource_id).
-        me = db.call("GET", "/api/2.0/preview/scim/v2/Me")["userName"]
-        status = db.call("GET", "/api/2.0/workspace/get-status", params={"path": f"/Users/{me}/{REPO_NAME}"})
-        repo = db.call("GET", f"/api/2.0/repos/{status['resource_id']}")
-    db.call("PATCH", f"/api/2.0/repos/{repo['id']}", json={"branch": "main"})  # pulls latest main
-    head = db.call("GET", f"/api/2.0/repos/{repo['id']}").get("head_commit_id", "")[:7]
-    print(f"Git folder {repo['path']} pulled to main @ {head}")
-    return repo["path"]
-
-
-def upload_local_notebooks(db: Databricks) -> str:
-    """Copy this checkout's notebooks to a scratch workspace folder; returns its root path."""
-    me = db.call("GET", "/api/2.0/preview/scim/v2/Me")["userName"]
-    root = f"/Users/{me}/{LOCAL_FOLDER}"
-    target = f"{root}/databricks/notebooks"
-    db.call("POST", "/api/2.0/workspace/mkdirs", json={"path": target})
-    files = sorted(NOTEBOOK_DIR.glob("*.py"))
-    for f in files:
-        db.call(
-            "POST",
-            "/api/2.0/workspace/import",
-            json={
-                "path": f"{target}/{f.stem}",
-                "format": "SOURCE",
-                "language": "PYTHON",
-                "overwrite": True,
-                "content": base64.b64encode(f.read_bytes()).decode(),
-            },
-        )
-    print(f"Uploaded {len(files)} local notebooks to {target}")
-    return root
-
-
-def run_notebook(db: Databricks, repo_path: str, notebook: str, params: dict) -> bool:
+def run_notebook(db: dj.DatabricksAPI, repo_path: str, notebook: str, params: dict) -> bool:
     run = db.call(
         "POST",
         "/api/2.2/jobs/runs/submit",
         json={
-            "run_name": f"bank_health {notebook} (manual)",
+            "run_name": f"bank_health {notebook} ({params['env']}, manual)",
             "environments": ENVIRONMENTS,  # same serverless environment as the scheduled job
             "tasks": [
                 {
@@ -134,15 +77,24 @@ def run_notebook(db: Databricks, repo_path: str, notebook: str, params: dict) ->
 
 def main() -> None:
     args = sys.argv[1:]
+    if "--local" in args:
+        raise SystemExit(
+            "--local is gone: set BANK_HEALTH_ENV=dev instead (dev always runs this checkout's "
+            "notebooks against bank_health_dev). Prod only runs main."
+        )
     notebooks = [a for a in args if not a.startswith("--")] or ["01_bronze", "02_silver", "03_gold"]
     load_env()
-    params = {"catalog": os.environ.get("DATABRICKS_CATALOG") or "bank_health"}
+    s = environment.settings()
+    params = {"catalog": environment.databricks_catalog(), "env": s.name}
     for a in args:
         if a.startswith("--param="):  # --param=retrain=false
             k, v = a.removeprefix("--param=").split("=", 1)
+            if k in FIXED_PARAMS:
+                raise SystemExit(f"--param={k}=... is not allowed: {k} follows BANK_HEALTH_ENV")
             params[k] = v
-    db = Databricks()
-    repo_path = upload_local_notebooks(db) if "--local" in args else find_and_pull_repo(db)
+    print(environment.describe())
+    db = dj.DatabricksAPI.from_env()
+    repo_path = dj.sync_notebooks(db, s)
     for nb in notebooks:
         if not run_notebook(db, repo_path, nb, params):
             raise SystemExit(f"{nb} failed; stopping.")
