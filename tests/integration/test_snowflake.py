@@ -49,13 +49,24 @@ def query(conn, sql):
         cur.close()
 
 
-def test_key_pair_login_uses_pipeline_identity(conn):
+# The service identity each environment logs in as (snowflake/setup.sql, setup_dev.sql).
+IDENTITIES = {
+    "prod": ("SVC_BANK_PIPELINE", "BANK_PIPELINE_ROLE", "BANK_HEALTH"),
+    "dev": ("SVC_BANK_DEV", "DEV_ROLE", "BANK_HEALTH_DEV"),
+}
+
+
+def test_key_pair_login_uses_the_environments_identity(conn):
+    from ingestion.environment import current_env
+
+    env = current_env()
+    if env not in IDENTITIES:
+        pytest.skip(f"no RAW load identity in {env}")
     user, role, db, schema = query(
         conn, "select current_user(), current_role(), current_database(), current_schema()"
     )[0]
-    assert user == "SVC_BANK_PIPELINE"
-    assert role == "BANK_PIPELINE_ROLE"
-    assert (db, schema) == ("BANK_HEALTH", "RAW")
+    assert (user, role, db) == IDENTITIES[env]
+    assert schema == "RAW"
 
 
 def test_write_pandas_round_trip(conn):
