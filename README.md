@@ -298,6 +298,8 @@ pass. On each push and pull request, [GitHub Actions](.github/workflows/ci.yml) 
 | `secrets` | gitleaks over the whole git history and the current files |
 | `dbt-slim-ci` | builds only the dbt models a change touches, plus everything downstream, into a throwaway schema, reading unchanged models from prod (`--defer` against the manifest of the latest successful prod run); then checks that the CI login cannot write prod; the schema is dropped at the end |
 
+Latest result: the first CI run (pull request #7, 26 Oct 2026) passed all 8 checks. `dbt-slim-ci` had no prod manifest yet, so it built every model into its throwaway schema (107 passed, 2 warnings, 0 errors), and the CI login was refused every write to prod (10 passed).
+
 Locally, pre-commit runs ruff, whitespace fixes, a private-key check and gitleaks on every
 commit. Dependabot proposes dependency updates weekly; each goes through the same CI.
 
