@@ -9,6 +9,14 @@ updates:
     groups:
       python-dev-tools:
         patterns: ["*"]
+    ignore:
+      # PySpark stays on 3.5.x (patch updates only). The feature tests run _features.py on local
+      # Spark to stand in for Databricks serverless environment 2, which runs Spark 3.5. Spark 4
+      # behaves differently (e.g. ANSI mode on by default changes division by zero and casts),
+      # so tests could pass on rules the real notebooks don't follow; it also needs Java 17.
+      # Move only together with the Databricks environment pin (ingestion/databricks_jobs.py).
+      - dependency-name: "pyspark"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: pip
     directory: /airflow      # the Airflow image (versions also bounded by Airflow's constraints file)
     schedule: {interval: weekly, day: monday, time: "09:00", timezone: America/Chicago}
