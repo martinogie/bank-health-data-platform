@@ -85,6 +85,7 @@ def dag_facts() -> dict:
 def test_dags_import_without_errors(dag_facts):
     assert dag_facts["import_errors"] == {}
     assert "bank_health_weekly" in dag_facts["dag_ids"]
+    assert "bank_health_slo_check" in dag_facts["dag_ids"]
 
 
 def test_dag_schedule_and_settings(dag_facts):
@@ -135,7 +136,12 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     # release guardrail: no retries (a bad top 20 won't fix itself), runs before dbt publishes marts
     assert tasks["sanity_check_top20"]["upstream"] == ["load_snowflake"]
     assert tasks["sanity_check_top20"]["retries"] == 0 and tasks["sanity_check_top20"]["has_doc_md"]
-    assert tasks["export_watchlist"]["upstream"] == ["verify_pipeline"]  # final task
+    # Phase 2: metrics, then freshness and volume gates before the watchlist; record_run last
+    assert tasks["collect_metrics"]["upstream"] == ["verify_pipeline"]
+    assert tasks["export_watchlist"]["upstream"] == ["check_freshness", "check_volumes"]
+    assert tasks["record_run"]["upstream"] == ["export_watchlist", "publish_dbt_manifest"]
+    assert "all_done" in tasks["record_run"]["trigger_rule"]  # runs even after failures
+    assert all(t["has_failure_alert"] for t in tasks.values()), "every task must alert on failure"
     # prod-only publish of the dbt manifest for slim CI, after the docs (full manifest) are built
     assert tasks["publish_dbt_manifest"]["upstream"] == ["dbt_docs_generate"]
 
