@@ -28,8 +28,8 @@ jobs:
   lint:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -43,8 +43,8 @@ jobs:
   types:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
@@ -58,13 +58,13 @@ jobs:
     env:
       REQUIRE_SPARK: "1"   # the label/feature tests must run here, never skip
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - uses: actions/setup-java@v4   # for PySpark (local Spark in the feature tests)
+      - uses: actions/setup-java@v6   # for PySpark (local Spark in the feature tests)
         with:
           distribution: temurin
           java-version: "17"
@@ -79,7 +79,7 @@ jobs:
           --include="databricks/notebooks/_features.py,databricks/notebooks/_scoring_rules.py"
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: |
@@ -90,10 +90,10 @@ jobs:
   dag-import:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Build the Airflow image (linux/amd64, reuses the docker job's cache)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: airflow
           platforms: linux/amd64
@@ -130,10 +130,10 @@ jobs:
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
       - name: Build (no push)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: airflow
           platforms: ${{ matrix.platform }}
@@ -156,7 +156,7 @@ jobs:
   secrets:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # whole history
       - name: gitleaks, every commit in the history
@@ -192,9 +192,9 @@ jobs:
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Snowflake secrets are not available to this run; dbt slim CI skipped."
           fi
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.secrets.outputs.enabled == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.secrets.outputs.enabled == 'true'
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -261,7 +261,7 @@ jobs:
           EOF
       - name: Upload dbt run results
         if: always() && steps.secrets.outputs.enabled == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dbt-run-results
           path: dbt/target/run_results.json
