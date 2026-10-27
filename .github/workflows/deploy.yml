@@ -1,0 +1,45 @@
+# Deploy main to the prod VM, after CI passed on main and after you approve it.
+#
+# Runs on the self-hosted runner on the Oracle VM. Never on pull requests: this workflow has no
+# pull_request trigger, and workflow_run always uses the workflow file from the default branch,
+# so a pull request can't change what it does. See docs/runbooks/deploy.md (security section).
+#
+# Switched on by the repository variable DEPLOY_ENABLED=true (set once the runner exists), so
+# merges before then don't queue deploys that wait for a runner that isn't there.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:   # manual deploy of the current main (still needs your approval)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false   # never interrupt a deploy half-way
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      github.repository == 'martinogie/bank-health-data-platform' &&
+      (
+        (github.event_name == 'workflow_run' &&
+         github.event.workflow_run.conclusion == 'success' &&
+         github.event.workflow_run.event == 'push' &&
+         github.event.workflow_run.head_branch == 'main') ||
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      )
+    runs-on: [self-hosted, linux, arm64, prod]
+    environment: production   # required reviewer: you; deployment branches: main only
+    timeout-minutes: 30
+    steps:
+      - name: Deploy the approved commit (build, restart, smoke check)
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        # No checkout on the runner: the deploy user's own checkout fast-forwards to this sha.
+        run: sudo -n -H -u deploy /srv/bank-health/app/deploy/deploy.sh "$SHA"

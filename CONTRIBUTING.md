@@ -90,9 +90,18 @@ No force pushes. Merge commits are fine.
 **dbt slim CI** builds only the dbt models a pull request changed, plus everything downstream,
 into a throwaway schema `BANK_HEALTH_DEV.CI_<run_id>`, and reads every unchanged model from prod.
 It compares against the manifest of the latest successful prod dbt run, which prod Airflow
-uploads to `@BANK_HEALTH.RAW.DBT_ARTIFACTS` (task `publish_dbt_manifest`). Until the first
-prod run after this was added, the stage is empty and CI builds everything. Without the
-Snowflake secrets (forks, Dependabot) the job skips and passes.
+uploads to `@BANK_HEALTH.RAW.DBT_ARTIFACTS` (task `publish_dbt_manifest`).
+
+To spare the dev warehouse (`BANK_DEV_WH`, capped at a few credits a month), the job uses
+Snowflake only when it has to:
+- **No change under `dbt/` or `requirements-dbt.txt`:** nothing to build. The job passes
+  without connecting. If the change touches the grant scripts (`snowflake/`) or the
+  environment rules, it still runs the "CI can't write prod" check.
+- **No prod manifest yet:** `dbt build --empty` builds every model and runs every test on
+  zero rows. That catches compile errors, bad SQL, missing columns and broken refs at a
+  fraction of a full build's cost. The 7 recency tests are left out, because on zero rows
+  they always fail.
+- **Without the Snowflake secrets** (forks, Dependabot) the job skips and passes.
 
 If a CI job was killed before its clean-up step, find and drop leftover schemas (as
 ACCOUNTADMIN or `CI_ROLE`):

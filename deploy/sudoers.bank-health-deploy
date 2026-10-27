@@ -1,0 +1,6 @@
+# /etc/sudoers.d/bank-health-deploy  (install with: sudo visudo -f /etc/sudoers.d/bank-health-deploy)
+#
+# The GitHub runner user may run exactly one program as deploy: the deploy script. It can't
+# run anything else as deploy or as root, and it is not in the docker group. The script
+# accepts only a commit sha equal to the current origin/main (see deploy.sh).
+gh-runner ALL=(deploy) NOPASSWD: /srv/bank-health/app/deploy/deploy.sh

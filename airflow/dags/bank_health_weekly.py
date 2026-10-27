@@ -23,7 +23,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `publish_dbt_manifest` | prod only: upload `manifest.json` to `@BANK_HEALTH.RAW.DBT_ARTIFACTS` for dbt slim CI | overwrites the file |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
-| `export_watchlist` | prod only: refresh `site/data/watchlist.json` for the watchlist page | file replaced atomically |
+| `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 
 The model retrains automatically when a new FDIC quarter arrives; trigger with
 `{"retrain_model": true}` to force a retrain. A retrained model is registered as `@candidate`;
@@ -55,7 +55,7 @@ if ENV.databricks_job_name is None or ENV.databricks_catalog is None:
     )
 
 RAW_DIR = Path("/opt/airflow/data/raw")
-SITE_DATA = Path("/opt/airflow/site/data")  # ../site mounted by docker-compose
+SITE_DATA = Path("/opt/airflow/site/data")  # WATCHLIST_DIR on the host (docker-compose.yaml)
 DBT_DIR = "/opt/airflow/dbt"
 DBT_BIN = os.environ.get("DBT_EXECUTABLE", "/home/airflow/dbt_venv/bin/dbt")
 TZ = "America/Chicago"
@@ -311,8 +311,9 @@ def bank_health_weekly():
         return {"counts": counts, "latest_quarter": latest_q}
 
     @task(
-        doc_md="Refresh site/data/watchlist.json (one record per scored bank) for the watchlist page. "
-        "Overwrites the file atomically, so it is safe to re-run. Commit the file to publish it."
+        doc_md="Refresh watchlist.json (one record per scored bank) for the watchlist page, in "
+        "WATCHLIST_DIR outside the git checkout. Overwrites the file atomically, so it is safe to re-run. "
+        "To publish, copy it to site/data/ on a branch and open a pull request."
     )
     def export_watchlist() -> dict:
         import logging

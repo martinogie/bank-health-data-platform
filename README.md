@@ -296,7 +296,7 @@ pass. On each push and pull request, [GitHub Actions](.github/workflows/ci.yml) 
 | `dag-import` | builds the Airflow image and loads the DAG as prod and as dev (Cosmos renders the dbt project); a missing `BANK_HEALTH_ENV` must be refused |
 | `docker (linux/amd64)`, `docker (linux/arm64)` | builds the custom Airflow image for both platforms (arm64 is the VM); no push |
 | `secrets` | gitleaks over the whole git history and the current files |
-| `dbt-slim-ci` | builds only the dbt models a change touches, plus everything downstream, into a throwaway schema, reading unchanged models from prod (`--defer` against the manifest of the latest successful prod run); then checks that the CI login cannot write prod; the schema is dropped at the end |
+| `dbt-slim-ci` | when a change touches dbt: builds only the changed models, plus everything downstream, into a throwaway schema, reading unchanged models from prod (`--defer` against the manifest of the latest successful prod run; with no manifest yet, `dbt build --empty`); then checks that the CI login cannot write prod; the schema is dropped at the end. Changes that don't touch dbt pass without using Snowflake |
 
 Latest result: the first CI run (pull request #7, 26 Oct 2026) passed all 8 checks. `dbt-slim-ci` had no prod manifest yet, so it built every model into its throwaway schema (107 passed, 2 warnings, 0 errors), and the CI login was refused every write to prod (10 passed).
 
@@ -345,9 +345,11 @@ cd dbt && dbt build                           # models + data tests
    `bank_health_weekly`. The first run loads the full history; later runs only add new data.
 5. **Power BI:** run `snowflake/powerbi_user.sql`, open `powerbi/BankHealth.pbip`, sign in with
    **Key pair** as `SVC_POWERBI`, then click Refresh. Details are in `powerbi/DASHBOARD_GUIDE.md`.
-6. **Watchlist:** the DAG refreshes `site/data/watchlist.json` on every run (or run
-   `python scripts/export_watchlist_data.py`). Preview with `python -m http.server` and open
-   http://localhost:8000/watchlist.html; commit the JSON to publish it on GitHub Pages.
+6. **Watchlist:** the DAG refreshes `watchlist.json` on every prod run, outside the git checkout
+   (`data/site/` on the PC, `/srv/bank-health/var/site/` on the VM), so a deploy never meets a
+   changed file. To publish: copy it to `site/data/watchlist.json` on a branch and open a pull
+   request (or run `python scripts/export_watchlist_data.py`, which writes `site/data/` directly).
+   Preview with `python -m http.server` and open http://localhost:8000/watchlist.html.
 
 ## Repository layout
 
