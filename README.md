@@ -345,9 +345,11 @@ cd dbt && dbt build                           # models + data tests
    `bank_health_weekly`. The first run loads the full history; later runs only add new data.
 5. **Power BI:** run `snowflake/powerbi_user.sql`, open `powerbi/BankHealth.pbip`, sign in with
    **Key pair** as `SVC_POWERBI`, then click Refresh. Details are in `powerbi/DASHBOARD_GUIDE.md`.
-6. **Watchlist:** the DAG refreshes `site/data/watchlist.json` on every run (or run
-   `python scripts/export_watchlist_data.py`). Preview with `python -m http.server` and open
-   http://localhost:8000/watchlist.html; commit the JSON to publish it on GitHub Pages.
+6. **Watchlist:** the DAG refreshes `watchlist.json` on every prod run, outside the git checkout
+   (`data/site/` on the PC, `/srv/bank-health/var/site/` on the VM), so a deploy never meets a
+   changed file. To publish: copy it to `site/data/watchlist.json` on a branch and open a pull
+   request (or run `python scripts/export_watchlist_data.py`, which writes `site/data/` directly).
+   Preview with `python -m http.server` and open http://localhost:8000/watchlist.html.
 
 ## Repository layout
 
