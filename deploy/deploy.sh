@@ -33,7 +33,11 @@ main() {
     fi
 
     cd airflow
-    if docker compose ps --status running --services 2>/dev/null | grep -qx airflow-scheduler; then
+    # Capture first, then search: `cmd | grep -q` under pipefail can report "no match" when
+    # grep exits early and cmd gets SIGPIPE.
+    local services
+    services="$(docker compose ps --status running --services 2>/dev/null || true)"
+    if grep -qx airflow-scheduler <<<"$services"; then
         local running
         running="$(docker compose exec -T airflow-scheduler airflow dags list-runs bank_health_weekly \
             --state running -o plain 2>/dev/null | tail -n +2 | grep -v 'No data found' | grep -c . || true)"
@@ -49,6 +53,10 @@ main() {
     cd airflow
     docker compose build
     docker compose up -d --wait --wait-timeout 600
+    # dbt packages are not in git (dbt/dbt_packages); Cosmos needs them to load the DAG.
+    # Versions are pinned in dbt/package-lock.yml, so this is repeatable.
+    docker compose exec -T airflow-scheduler bash -c \
+        'cd /opt/airflow/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir . --quiet'
     "$app/deploy/smoke_check.sh"
     echo "DEPLOYED $(git rev-parse --short HEAD)"
 }

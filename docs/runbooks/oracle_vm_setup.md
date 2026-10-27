@@ -216,7 +216,16 @@ scp C:\Users\marti\projects\bank-health-data-platform\keys\snowflake_rsa_key.p8 
 ssh bank-health-vm "chmod 600 /srv/bank-health/secrets/.env /srv/bank-health/secrets/keys/snowflake_rsa_key.p8 && ls -l /srv/bank-health/secrets /srv/bank-health/secrets/keys"
 ```
 
-Expected: both files are `-rw------- deploy deploy`. The `.env` keeps `BANK_HEALTH_ENV=prod`
+Expected: both files are `-rw------- deploy deploy`.
+
+Give the VM its machine name (not a secret). The copied `.env` may not end with a newline, so
+add one first if it's missing; otherwise the new line is glued to the last one:
+
+```powershell
+ssh bank-health-vm "f=/srv/bank-health/secrets/.env; grep -q '^PROD_HOST_ID=' \$f || { [ -z \"\$(tail -c1 \$f)\" ] || echo >> \$f; echo PROD_HOST_ID=oracle-vm >> \$f; }; grep -c '^PROD_HOST_ID=' \$f"
+```
+
+Expected output: `1`. The `.env` keeps `BANK_HEALTH_ENV=prod`
 and `SNOWFLAKE_PRIVATE_KEY_PATH=/opt/airflow/keys/snowflake_rsa_key.p8`; the path is the same
 inside the container on both machines. Don't edit secrets on the VM in chat or in logs. To
 change one, edit it on the VM with `nano`, or copy a new file.
@@ -227,15 +236,21 @@ As `deploy` on the VM:
 
 ```bash
 cd /srv/bank-health/app/airflow
-docker compose build                  # native arm64 build, a few minutes
+docker compose build                  # native arm64 build, about 5 minutes
 docker compose up airflow-init        # creates the metadata database and the admin user
 docker compose up -d --wait
+# dbt packages aren't in git: install them once (deploy.sh repeats this on every deploy).
+# Until they exist the DAG fails to import with "missing dbt_packages".
+docker compose exec airflow-scheduler bash -c 'cd /opt/airflow/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir .'
+# the DAG processor re-reads files every 2 minutes; give it that long
 docker compose ps                     # every service "healthy"
 docker compose logs airflow-scheduler | grep 'Bank Health Airflow'
 #   Bank Health Airflow: environment=prod snowflake_database=BANK_HEALTH databricks_catalog=bank_health ...
 docker compose exec airflow-scheduler airflow dags list-import-errors   # "No data found"
 docker compose exec airflow-scheduler airflow dags details bank_health_weekly | grep is_paused
 #   is_paused  True   <- must stay True until cutover
+# On this fresh database the scheduler's next run date is the last missed Monday: unpausing
+# would start a prod run AT ONCE. Never unpause here; cutover brings the PC's database.
 ```
 
 The UI: on your PC, `ssh bank-health-vm` (leave the window open), then browse to
@@ -247,7 +262,7 @@ Run these from your PC (PowerShell) and on the VM:
 
 | Check | Command | Expected |
 |---|---|---|
-| SSH works | `ssh bank-health-vm "hostname; whoami"` | `bank-health-prod`, `deploy` |
+| SSH works | `ssh bank-health-vm "hostname; whoami"` | the VM's hostname (OCI names it after the VNIC, e.g. `bank-health-prod-vnic`), `deploy` |
 | Only 22 is reachable | `Test-NetConnection <VM IP> -Port 22`, then `-Port 8080` | 22: `TcpTestSucceeded : True`; 8080: `False` |
 | SSH only from your IP | from your phone's hotspot (a different IP): `Test-NetConnection <VM IP> -Port 22` | `False` |
 | UI only through the tunnel | with the tunnel open: <http://localhost:8090>; with it closed: fails | |
