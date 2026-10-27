@@ -52,14 +52,18 @@ models:
       - name: tier1_leverage_pct
         description: Tiny or brand-new banks can report extreme values, so out-of-range is a warning.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              arguments: {min_value: -50, max_value: 100}
-              config: {severity: warn}
+          # Kept and warned about, with the failing rows stored and sampled (finding D-05).
+          - value_in_range:
+              arguments: {min_value: -50, max_value: 100, key_columns: [cert, report_date]}
+              config: {severity: warn, store_failures: true}
       - name: cre_to_loans_pct
+        description: >
+          CRE loans as % of loans. Above 100% happens in real call reports (e.g. CRE reported
+          against a small net loan book), so out-of-range is a warning; see docs/model_card.md.
         tests:
-          - dbt_expectations.expect_column_values_to_be_between:
-              arguments: {min_value: 0, max_value: 100}
-              config: {severity: warn}
+          - value_in_range:
+              arguments: {min_value: 0, max_value: 100, key_columns: [cert, report_date]}
+              config: {severity: warn, store_failures: true}
       - name: complaints
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
