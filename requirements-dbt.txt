@@ -1,4 +1,4 @@
 # dbt for the dbt-slim-ci job and local dbt work. Same versions as the Airflow image's dbt
 # virtualenv (airflow/Dockerfile): keep the two in step.
 dbt-core==1.12.6
-dbt-snowflake==1.12.3
+dbt-snowflake==1.12.4

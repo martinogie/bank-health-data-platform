@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir "apache-airflow==${AIRFLOW_VERSION}" \
 # 2. dbt in its own virtualenv so its dependencies can't clash with Airflow's.
 #    Cosmos is pointed at /home/airflow/dbt_venv/bin/dbt.
 RUN python -m venv /home/airflow/dbt_venv \
- && /home/airflow/dbt_venv/bin/pip install --no-cache-dir dbt-core==1.12.6 dbt-snowflake==1.12.3
+ && /home/airflow/dbt_venv/bin/pip install --no-cache-dir dbt-core==1.12.6 dbt-snowflake==1.12.4
 
 # 3. Startup wrapper that turns plain .env values into Airflow connections
 COPY --chmod=755 include/entrypoint.sh /opt/airflow/include/entrypoint.sh
