@@ -14,17 +14,21 @@ services:
     image: *dev-image
     environment:
       BANK_HEALTH_ENV: dev
+      AIRFLOW_UI_URL: http://localhost:8081
     ports: !override
       - "127.0.0.1:8081:8080"
   airflow-scheduler:
     image: *dev-image
     environment:
       BANK_HEALTH_ENV: dev
+      AIRFLOW_UI_URL: http://localhost:8081
   airflow-dag-processor:
     image: *dev-image
     environment:
       BANK_HEALTH_ENV: dev
+      AIRFLOW_UI_URL: http://localhost:8081
   airflow-init:
     image: *dev-image
     environment:
       BANK_HEALTH_ENV: dev
+      AIRFLOW_UI_URL: http://localhost:8081

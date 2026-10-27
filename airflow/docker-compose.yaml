@@ -37,6 +37,8 @@ x-airflow-common:
     # Set here, not only in .env, so this stack can only ever run as prod. It overrides .env.
     # The dev override file sets dev. The entrypoint stops the container if it is missing.
     BANK_HEALTH_ENV: prod
+    # Base of the Airflow UI links in alerts (through the SSH tunnel on the VM). Not a secret.
+    AIRFLOW_UI_URL: ${AIRFLOW_UI_URL:-http://localhost:8080}
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__PARALLELISM: 4
     # Low-memory settings for a PC where Docker gets ~4 GB
