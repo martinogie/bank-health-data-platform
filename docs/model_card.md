@@ -159,6 +159,33 @@ no new bank, no foreign-bank office, no 0% or missing Tier 1 leverage and no rea
 unusable capital ratio (`sanity_check_top20`). The [runbook](runbook.md) has the review steps. v5
 passed on 2026-10-25.
 
+### Outliers kept, not removed (finding D-05)
+
+Two dbt tests on `fct_bank_quarter` only **warn**:
+- `cre_to_loans_pct` above 100%: 132 bank-quarters;
+- `tier1_leverage_pct` outside −50 … 100: 672 bank-quarters.
+
+Both counts are from the dbt run of 25 Oct 2026, and the same in the dev build of 26 Oct 2026.
+These rows stay in the data and in the model's population. Why:
+
+- **They are what the banks reported.** The values come from FDIC call reports. An unusual
+  value is evidence about that bank; removing it would make the data look cleaner than the
+  banks are.
+- **Impossible is different from unusual.** Where a value is *not reported* rather than
+  extreme, the pipeline already treats it as missing, not as a number. For example, capital
+  ratios of banks that don't report them are NULL, not 0 (finding D-03, test
+  `assert_unreported_capital_is_null`).
+- **The model is robust to extremes.** Gradient-boosted trees split on thresholds, so an
+  extreme value falls into the outermost branch instead of stretching a fitted coefficient.
+  Brand-new banks, the usual source of extreme early ratios, are not scored at all (younger
+  than 3 years).
+
+Warnings must not scroll past unseen. Every run, the failing rows are stored with their keys
+(`cert`, `report_date`), and up to 20 sample keys plus the count go to
+`OPS.DBT_WARNINGS_AUDIT`. The health page shows the count per run (`WARNED_ROWS`). To look
+at them:
+`SELECT * FROM BANK_HEALTH.OPS.DBT_WARNINGS_AUDIT ORDER BY RECORDED_AT DESC;`
+
 ### Known limits
 
 - **CBLR banks score less well.** On 2020–2024 the model separates CBLR banks less well than other

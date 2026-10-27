@@ -43,7 +43,7 @@ complaints, through a full production-style pipeline.
 flowchart LR
     A[FDIC BankFind API<br/>financials, institutions, failures] --> AF
     B[CFPB Complaint API<br/>complaints since Oct 2023] --> AF
-    AF[Apache Airflow in Docker<br/>weekly DAG, Mondays 06:00 CT] -->|upload raw files| V[(Databricks<br/>Unity Catalog volume)]
+    AF[Apache Airflow in Docker<br/>Oracle Cloud Arm VM<br/>weekly DAG, Mondays 06:00 CT] -->|upload raw files| V[(Databricks<br/>Unity Catalog volume)]
     AF -->|run job| DB
     subgraph DB[Databricks, PySpark]
       BR[bronze<br/>raw Delta] --> SI[silver<br/>typed, de-duplicated,<br/>complaint company to FDIC bank] --> GO[gold<br/>one row per bank per quarter]
@@ -52,9 +52,11 @@ flowchart LR
     V --> BR
     GO -->|load| SF[(Snowflake RAW)]
     SC -->|load| SF
-    SF --> DBT[dbt<br/>staging, intermediate, marts<br/>89 data tests]
+    SF --> DBT[dbt<br/>staging, intermediate, marts<br/>96 data tests]
     DBT --> M[(Snowflake MARTS)]
     M -->|Import, key-pair login| PBI[Power BI report]
+    AF -->|every run| OPS[(Snowflake OPS<br/>run log, dbt results,<br/>warnings, health view)]
+    AF -->|failures, late runs,<br/>weekly OK| AL[Slack + Discord]
 ```
 
 Why Airflow downloads the data instead of Databricks: Databricks Free Edition only allows outbound
@@ -66,8 +68,9 @@ Catalog volume.
 | Ingest | Airflow + Python (`ingestion/`) | Pages through the FDIC and CFPB APIs. Watermarks mean only new quarters and new complaint dates are fetched after the first run. |
 | Bronze / silver / gold | Databricks notebooks (`databricks/notebooks/`) | PySpark turns raw files into Delta tables, removes duplicates, matches complaint companies to FDIC banks and builds about 40 columns of ratios and growth rates per bank-quarter. |
 | Model | Databricks + MLflow | Gradient-boosted classifier, tracked and registered in Unity Catalog as `bank_health.ml.distress_model@champion`. |
-| Warehouse | Snowflake | `RAW`, `STAGING` and `MARTS` schemas, an XSMALL warehouse that suspends after 60 s, a 20-credit monitor, key-pair service users. |
-| Transform + test | dbt (`dbt/`) via astronomer-cosmos | 12 models and 89 data tests, one Airflow task per model. |
+| Warehouse | Snowflake | `RAW`, `STAGING`, `MARTS` and `OPS` schemas, an XSMALL warehouse that suspends after 60 s, a 5-credit monthly account cap (plus a 1-credit cap on the dev warehouse), key-pair service users. |
+| Transform + test | dbt (`dbt/`) via astronomer-cosmos | 12 models and 96 data tests, one Airflow task per model. Every result is recorded in `OPS.DBT_RESULTS`; warnings, with sample row keys, in `OPS.DBT_WARNINGS_AUDIT`. |
+| Operations | Airflow + Snowflake `OPS` | Alerts to Slack and Discord, freshness and volume checks, one `PIPELINE_RUNS` row per run (rows, duration, tests, credits), a late-run check against the Monday 12:00 CT objective. |
 | Report | Power BI (`powerbi/`) | Three pages, built from code as a Power BI project (`build_report.py`). |
 
 ## Results from the first full run (20 Oct 2026)
@@ -264,6 +267,36 @@ where s.total_assets_k is distinct from r.total_assets_k
    or s.tier1_leverage_pct is distinct from r.tier1_leverage_pct;
 ```
 
+## Production and operations
+
+**Where prod runs.** Production Airflow runs on an Oracle Cloud Always Free Arm VM
+(4 OCPU / 24 GB, Ubuntu 24.04), from the cutover in Phase 2; until the cutover the PC runs it.
+Exactly one machine may run the prod schedule: `BANK_HEALTH.OPS.PROD_SCHEDULER` names it, and
+a run on any other machine stops at its first task. Why a VM and how it's built:
+[ADR 0001](docs/adr/0001-oracle-vm-and-self-hosted-runner.md),
+[VM runbook](docs/runbooks/oracle_vm_setup.md).
+
+**The Airflow UI** is never on the internet. The VM accepts SSH only, from one IP, and the UI
+listens on `127.0.0.1`. Open a tunnel (`ssh bank-health-vm`, with `LocalForward` in your SSH
+config), then browse to `http://localhost:8080` (`8090` while the PC still uses 8080).
+
+**Deploys** happen only from `main`, after CI passes, and only after the owner approves the
+`production` environment in GitHub. A self-hosted runner on the VM then fast-forwards to that
+commit, rebuilds, restarts and runs a smoke check ([deploy runbook](docs/runbooks/deploy.md)).
+
+**Alerts** go to both Slack and Discord ([ADR 0002](docs/adr/0002-alert-channels-slack-and-discord.md)):
+- a task failing after its last retry, naming a Databricks quota stop plainly when that's the
+  cause ([ADR 0003](docs/adr/0003-databricks-free-edition-limits.md));
+- a failed freshness or volume check;
+- no successful run by **Monday 12:00 CT**, checked on the VM and again from GitHub Actions;
+- one *OK* message per run.
+
+**The run log.** Every run writes one row to `OPS.PIPELINE_RUNS`: state, failed tasks, rows per
+layer, dbt results, credits, the model used, the latest FDIC quarter. The view
+`OPS.HEALTH_RUNS_LAST_12` is the data behind the future health page
+([contract](docs/health_page_contract.md)). What to do for each alert:
+[alerts runbook](docs/runbooks/alerts.md).
+
 ## Environments
 
 Every component reads `BANK_HEALTH_ENV` (`dev`, `ci` or `prod`). It has no default: if it is
@@ -309,12 +342,12 @@ Five kinds of tests, each in code, plus the checks above:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value), the top-20 release check, the **label, feature and exclusion logic** (`_features.py` run on a local Spark session over hand-made bank histories) and **environment safety** (dev and ci can't write prod, publish or promote, in every code path that writes). | `ingestion/tests/` | 236 passed; coverage: `ingestion/` 92%, label/feature/exclusion logic 100% (26 Oct 2026) |
+| **Unit** | One function on its own. Also the Phase 2 operations code: alerts to both channels (both succeed, one fails, both fail, the webhook URL never reaches a log), the one-scheduler guard, the Monday 12:00 CT objective across clock changes, freshness, volume thresholds, the run-log row. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value), the top-20 release check, the **label, feature and exclusion logic** (`_features.py` run on a local Spark session over hand-made bank histories) and **environment safety** (dev and ci can't write prod, publish or promote, in every code path that writes). | `ingestion/tests/` | 294 passed; coverage: `ingestion/` 93%, label/feature/exclusion logic 100% (27 Oct 2026) |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload, list and delete, Snowflake key-pair login and a small `write_pandas` load, and **environment safety at the grant level**: logged in as the dev (or CI) service user, every attempt to write `BANK_HEALTH` is refused by Snowflake. Skipped when credentials are missing. | `tests/integration/` (21 tests) | 19 passed, 2 skipped (CI-only checks, run in GitHub Actions); 26 Oct 2026, against dev |
 | **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. The DAG's own `verify_pipeline` task repeats the core checks on every run. | `tests/e2e/`, task `verify_pipeline` | 17 passed (20 Oct 2026 run). Prod run 26 Oct 2026: 53 tasks succeeded, 4,257 banks scored. Dev run 26 Oct 2026 (2 FDIC quarters, about a month of complaints, into `bank_health_dev` / `BANK_HEALTH_DEV`): 53 tasks succeeded, the 2 prod-only tasks (watchlist, dbt manifest) skipped, 4,257 banks scored with prod's `@champion` read-only |
 | **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5); dev 26 Oct 2026: same result |
 | **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores in Databricks and in Snowflake RAW (25 Oct 2026) |
-| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (the environment check first, the release check before dbt). In CI the DAG is also loaded as prod and as dev inside the built image, and must be refused without `BANK_HEALTH_ENV` (`tests/smoke/check_dag_import.py`). | `tests/smoke/` | 7 passed on the dev stack; DAG import check passed for prod and dev (26 Oct 2026) |
+| **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (the environment check first, the release check before dbt). In CI the DAG is also loaded as prod and as dev inside the built image, and must be refused without `BANK_HEALTH_ENV` (`tests/smoke/check_dag_import.py`). | `tests/smoke/` | 7 passed on the dev stack (26 Oct 2026); DAG import check passed for prod and dev, both DAGs, every task with a failure alert (27 Oct 2026) |
 | **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v5 data, 25 Oct 2026) |
 
 Unit tests use test doubles (fake HTTP sessions, fake Snowflake connections and cursors,
@@ -355,17 +388,19 @@ cd dbt && dbt build                           # models + data tests
 
 ```
 .github/      CI workflow (ci.yml) and Dependabot
-airflow/      Docker Compose stack (prod; docker-compose.dev.yaml adds dev), custom image, DAG bank_health_weekly
+airflow/      Docker Compose stack (prod; docker-compose.dev.yaml adds dev), custom image, DAGs
+              bank_health_weekly and bank_health_slo_check
+deploy/       deploy.sh and smoke_check.sh (run on the VM by the approved deploy), airflow_state.sh
 ingestion/    FDIC + CFPB clients, Databricks upload, Snowflake load (+ unit tests)
 databricks/   notebooks 00_setup to 05_score (PySpark, MLflow)
-snowflake/    setup.sql, setup_dev.sql, powerbi_user.sql
+snowflake/    setup.sql, setup_dev.sql, setup_ops.sql, powerbi_user.sql
 dbt/          staging, intermediate and mart models with tests
 powerbi/      BankHealth.pbip (TMDL + PBIR), build_report.py, theme, screenshots
 watchlist.html  the watchlist page (plain HTML/CSS/JS); index.html is the project page
 site/data/    watchlist.json + its schema (README.md)
 scripts/      export_watchlist_data.py and helper scripts
 tests/        integration, smoke, browser and end-to-end tests
-docs/         workflow PDF, end-to-end run report, screenshots
+docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/, health page contract
 ```
 
 ## Data sources
