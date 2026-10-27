@@ -1,14 +1,14 @@
 # Local development / unit tests (the Airflow image has its own airflow/requirements.txt)
-requests>=2.32
-pandas>=2.2
-pyarrow>=17
-pytest>=8
-snowflake-connector-python>=4.7
-playwright>=1.48
-pytest-playwright>=0.5
+requests>=2.34.2
+pandas>=3.1.0
+pyarrow>=26.0.0
+pytest>=9.1.1
+snowflake-connector-python>=5.1.0
+playwright>=1.64.1
+pytest-playwright>=0.10.0
 databricks-sql-connector[pyarrow]==4.8.0
 psycopg[binary]==3.3.6
-pytest-cov>=7
+pytest-cov>=7.1.0
 # label/feature tests run _features.py on local Spark (needs Java 8/11/17). Stays on 3.5.x to
 # match Databricks serverless environment 2; see .github/dependabot.yml.
-pyspark==3.5.5
+pyspark==3.5.9
