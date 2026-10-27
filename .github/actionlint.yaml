@@ -1,0 +1,4 @@
+# actionlint settings: the custom label of the self-hosted runner on the prod VM.
+self-hosted-runner:
+  labels:
+    - prod
