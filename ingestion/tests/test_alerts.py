@@ -186,6 +186,24 @@ def test_failure_callback_sends_one_alert_and_never_raises(webhooks, monkeypatch
     alerts.task_failure_callback({})  # an empty context still doesn't raise
 
 
+def test_already_reported_failures_send_no_second_alert(webhooks, monkeypatch):
+    """record_run fails the run on purpose after an earlier task failed and alerted."""
+    sent = []
+    monkeypatch.setattr(alerts, "notify", lambda title, lines=None, **k: sent.append(title))
+
+    class RunFailed(alerts.AlreadyReported, RuntimeError):
+        pass
+
+    alerts.task_failure_callback(
+        {"ti": types.SimpleNamespace(task_id="record_run"), "exception": RunFailed("x")}
+    )
+    assert sent == []
+    alerts.task_failure_callback(
+        {"ti": types.SimpleNamespace(task_id="record_run"), "exception": RuntimeError("db down")}
+    )
+    assert sent == ["FAILED: ? / record_run"]  # a real error in record_run still alerts
+
+
 def test_failure_callback_names_the_quota(webhooks, monkeypatch):
     sent = []
     monkeypatch.setattr(alerts, "notify", lambda title, lines=None, **k: sent.append(title))

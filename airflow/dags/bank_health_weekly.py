@@ -53,7 +53,7 @@ from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, 
 from cosmos.constants import LoadMode, SourceRenderingBehavior, TestBehavior
 
 from ingestion import environment
-from ingestion.alerts import task_failure_callback
+from ingestion.alerts import AlreadyReported, task_failure_callback
 
 # Fails the DAG import (shown in the Airflow UI) if BANK_HEALTH_ENV is missing or invalid, or if
 # .env belongs to another environment. Nothing runs with a guessed environment.
@@ -137,6 +137,19 @@ def _task_states(dag_id: str, run_id: str) -> dict[str, str | None]:
     return {str(k): (str(v) if v is not None else None) for k, v in inner.items()}
 
 
+def _run_failed_class():
+    """RunFailed: no retry (AirflowFailException), no second alert (AlreadyReported)."""
+    from airflow.sdk.exceptions import AirflowFailException
+
+    class RunFailed(AlreadyReported, AirflowFailException):
+        pass
+
+    return RunFailed
+
+
+RunFailed = _run_failed_class()
+
+
 def _record_run() -> dict:
     from airflow.sdk import get_current_context
 
@@ -152,7 +165,8 @@ def _record_run() -> dict:
                 scheduler_guard.check(cur, host)
             except scheduler_guard.SchedulerNotAuthorized as exc:
                 print(f"Not the prod scheduler, nothing recorded: {exc}")
-                return {"recorded": False}
+                # check_environment already failed (and alerted) on this machine; end red, not green
+                raise RunFailed("not the prod scheduler; nothing recorded") from None
         state, failed = run_log.run_outcome(_task_states(dag_run.dag_id, dag_run.run_id), ti.task_id)
         metrics = ti.xcom_pull(task_ids="collect_metrics") or _collect_metrics(ti)
         volume = ti.xcom_pull(task_ids="check_volumes", key="volume_result") or {}
@@ -189,6 +203,13 @@ def _record_run() -> dict:
     )
     if state == "success":
         notify(*run_log.success_message(row))
+    if state == "failed":
+        # record_run is the run's last task and succeeds after failures (all_done), which would
+        # make Airflow show the whole run as a success. Fail it, so the run is red in Airflow;
+        # the failed task already alerted, so this doesn't alert again (AlreadyReported).
+        raise RunFailed(
+            f"run failed: {', '.join(failed) or 'an upstream task'}; recorded in OPS.PIPELINE_RUNS"
+        )
     return {"recorded": True, "state": state, "failed_tasks": failed}
 
 

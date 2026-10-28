@@ -151,6 +151,13 @@ def failure_lines(
     return lines
 
 
+class AlreadyReported(Exception):  # noqa: N818 (a marker, not an error name)
+    """Mixin for exceptions raised only to set a state, whose cause was already alerted.
+
+    record_run raises one to mark the whole run failed after an earlier task failed: that
+    task already sent its alert, so the callback stays quiet instead of alerting twice."""
+
+
 def task_failure_callback(context: Mapping[str, Any]) -> None:
     """on_failure_callback for every task: Airflow calls it once, after the last retry failed."""
     try:
@@ -158,6 +165,8 @@ def task_failure_callback(context: Mapping[str, Any]) -> None:
         task = context.get("task")
         dag_run = context.get("dag_run")
         exc = context.get("exception")
+        if isinstance(exc, AlreadyReported):
+            return
         dag_id = str(getattr(ti, "dag_id", None) or getattr(dag_run, "dag_id", None) or "?")
         run_id = str(getattr(ti, "run_id", None) or getattr(dag_run, "run_id", None) or "?")
         task_id = str(getattr(ti, "task_id", None) or "?")

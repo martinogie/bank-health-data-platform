@@ -29,6 +29,9 @@ PLACEHOLDERS = {
     # Cosmos caches `dbt ls` in Airflow's metadata database, which this bare container doesn't
     # have; without the cache it simply runs dbt ls each time (same DAG, slower parse).
     "AIRFLOW__COSMOS__ENABLE_CACHE_DBT_LS": "False",
+    # Same import time limit as the real stacks (docker-compose.yaml): without its cache Cosmos runs
+    # dbt ls during the import, which can exceed Airflow's 30-second default on a busy machine.
+    "AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT": "180",
 }
 
 PARSE = r"""
