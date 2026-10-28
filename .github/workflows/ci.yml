@@ -205,8 +205,9 @@ jobs:
           changed="$(git diff --name-only "$base" HEAD)"
           echo "Files changed since ${base:0:7}:"; while read -r f; do echo "  $f"; done <<< "$changed"
           dbt=false; grants=false
-          # dbt models, macros, tests, packages, the dbt version
-          if echo "$changed" | grep -qE '^(dbt/|requirements-dbt\.txt$)'; then dbt=true; fi
+          # dbt models, macros, tests, packages, the dbt version, and this workflow itself (so a
+          # change to the dbt job is tested by the dbt job)
+          if echo "$changed" | grep -qE '^(dbt/|requirements-dbt\.txt$|\.github/workflows/ci\.yml$)'; then dbt=true; fi
           # what the "CI can't write prod" test checks: the grant scripts, the environment rules
           if echo "$changed" | grep -qE '^(snowflake/|ingestion/environment\.py$|tests/integration/test_environment_safety\.py$)'; then grants=true; fi
           echo "dbt=$dbt" >> "$GITHUB_OUTPUT"
@@ -220,7 +221,7 @@ jobs:
         run: |
           if [ "$NEEDED" != "true" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No changes under dbt/, requirements-dbt.txt or the grant scripts: nothing to build, Snowflake not used."
+            echo "::notice::No changes under dbt/, requirements-dbt.txt, ci.yml or the grant scripts: nothing to build, Snowflake not used."
           elif [ -n "$SNOWFLAKE_ACCOUNT" ] && [ "$HAS_KEY" = "true" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else

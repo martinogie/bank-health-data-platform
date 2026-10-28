@@ -186,6 +186,8 @@ def _record_run() -> dict:
             host_id=host or (None if ENV.is_prod else "dev"),
             dag_id=dag_run.dag_id,
             started_at=dag_run.start_date or ended,  # STARTED_AT is NOT NULL
+            # SLO_MET only for scheduled runs; manual runs (tests, cutover) record NULL
+            scheduled=str(getattr(dag_run.run_type, "value", dag_run.run_type)).lower() == "scheduled",
             ended_at=ended,
             state=state,
             failed_tasks=failed,
