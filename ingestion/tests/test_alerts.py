@@ -87,6 +87,13 @@ def test_one_channel_failing_never_stops_the_other(webhooks, caplog, slack, disc
     assert_no_secret(caplog)
 
 
+def test_a_successful_send_is_logged_by_channel_name_only(webhooks, caplog):
+    caplog.set_level(logging.INFO, logger="ingestion.alerts")
+    alerts.notify("x", session=FakeHttp())
+    assert "alert sent to Slack, Discord" in caplog.text
+    assert_no_secret(caplog)
+
+
 def test_missing_webhook_is_a_warning_not_an_error(monkeypatch, caplog):
     monkeypatch.delenv("SLACK_WEBHOOK_URL", raising=False)
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", DISCORD)

@@ -130,12 +130,15 @@ def credits_used(cur, warehouse: str, start: datetime, end: datetime) -> float |
     """Warehouse credits metered in the hours the run touched. None without MONITOR USAGE."""
     try:
         cur.execute(
-            "select coalesce(sum(CREDITS_USED), 0) from table(INFORMATION_SCHEMA.WAREHOUSE_METERING_HISTORY("
+            "select sum(CREDITS_USED), count(*) from table(INFORMATION_SCHEMA.WAREHOUSE_METERING_HISTORY("
             "date_range_start => %(start)s::timestamp_ltz, date_range_end => %(end)s::timestamp_ltz, "
             "warehouse_name => %(wh)s))",
             {"start": start, "end": end, "wh": warehouse},
         )
-        return float(cur.fetchone()[0])
+        total, hours = cur.fetchone()
+        # No metering rows means "no data" (e.g. dev, which has no MONITOR USAGE, gets an empty
+        # result rather than an error), not "zero credits": record NULL, never a misleading 0.
+        return float(total) if hours else None
     except Exception as exc:  # no privilege in dev, or metering unavailable
         log.info("credits not available: %s", type(exc).__name__)
         return None
@@ -188,7 +191,11 @@ def build_row(
         DAG_ID=dag_id,
         STARTED_AT=started_at,
         ENDED_AT=ended_at,
-        DURATION_SECONDS=round((ended_at - started_at).total_seconds()) if started_at else None,
+        # NULL rather than a negative number if the start time is wrong (`airflow dags test` with a
+        # future logical date sets the run start to that date).
+        DURATION_SECONDS=(
+            round((ended_at - started_at).total_seconds()) if started_at and ended_at >= started_at else None
+        ),
         STATE=state,
         FAILED_TASKS=", ".join(failed_tasks) or None,
         MARTS_ROWS=sum(marts.values()) if marts else None,

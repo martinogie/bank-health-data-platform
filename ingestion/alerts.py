@@ -108,6 +108,9 @@ def notify(
                 results[name] = True
             except Exception as exc:  # network errors, timeouts, anything
                 log.warning("alert to %s failed: %s", name, mask(f"{type(exc).__name__}: {exc}", secrets))
+        sent = [name for name, ok in results.items() if ok]
+        if sent:
+            log.info("alert sent to %s", ", ".join(sent))  # channel names only, never the URL
     except Exception as exc:  # formatting problems must not fail the caller either
         log.warning("alert not sent: %s", mask(f"{type(exc).__name__}: {exc}"))
     return results

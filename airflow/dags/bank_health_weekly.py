@@ -452,8 +452,8 @@ def bank_health_weekly():
     def export_watchlist() -> dict:
         import logging
 
-        from airflow.exceptions import AirflowSkipException
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from ingestion.watchlist_export import export
 
@@ -472,8 +472,8 @@ def bank_health_weekly():
         "Skipped in dev."
     )
     def publish_dbt_manifest() -> dict:
-        from airflow.exceptions import AirflowSkipException
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from ingestion.dbt_manifest import publish_manifest
 

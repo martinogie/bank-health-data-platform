@@ -270,10 +270,25 @@ def test_dbt_counts_by_status():
     assert run_log.dbt_counts(FakeCursor(), "r") == {}  # no dbt results: NULLs, not zeros
 
 
+def test_no_metering_rows_means_null_not_zero():
+    """Dev has no MONITOR USAGE: Snowflake returns no rows, not an error. That's unknown, not free."""
+    cur = FakeCursor({"WAREHOUSE_METERING_HISTORY": [(None, 0)]})
+    assert run_log.credits_used(cur, "BANK_DEV_WH", datetime.now(UTC), datetime.now(UTC)) is None
+
+
+def test_a_start_after_the_end_gives_no_duration():
+    r = run_log.build_row(
+        run_id="r", environment="dev", host_id="dev", dag_id="d",
+        started_at=chicago(2026, 10, 28, 6), ended_at=chicago(2026, 10, 27, 23, 48),
+        state="failed", failed_tasks=["download_fdic"],
+    )  # fmt: skip
+    assert r["DURATION_SECONDS"] is None
+
+
 def test_credits_are_none_without_the_privilege():
     cur = FakeCursor({"WAREHOUSE_METERING_HISTORY": PermissionError("insufficient privileges")})
     assert run_log.credits_used(cur, "BANK_DEV_WH", datetime.now(UTC), datetime.now(UTC)) is None
-    assert run_log.credits_used(FakeCursor({"WAREHOUSE_METERING_HISTORY": [(0.0833,)]}), "BANK_WH",
+    assert run_log.credits_used(FakeCursor({"WAREHOUSE_METERING_HISTORY": [(0.0833, 1)]}), "BANK_WH",
                                 datetime.now(UTC), datetime.now(UTC)) == 0.0833  # fmt: skip
 
 
@@ -344,7 +359,9 @@ def test_merge_updates_every_column_except_the_key():
 
 def test_backfill_final_credits_updates_settled_runs():
     start, end = chicago(2026, 10, 26, 6), chicago(2026, 10, 26, 6, 30)
-    cur = FakeCursor({"CREDITS_FINAL is null": [("r1", start, end)], "WAREHOUSE_METERING_HISTORY": [(0.1,)]})
+    cur = FakeCursor(
+        {"CREDITS_FINAL is null": [("r1", start, end)], "WAREHOUSE_METERING_HISTORY": [(0.1, 1)]}
+    )
     assert run_log.backfill_final_credits(cur, "BANK_WH", chicago(2026, 11, 2, 7)) == 1
     assert any(sql.startswith("update OPS.PIPELINE_RUNS set CREDITS_FINAL") for sql, _ in cur.queries)
 

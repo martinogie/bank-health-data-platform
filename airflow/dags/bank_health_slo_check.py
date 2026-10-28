@@ -52,9 +52,9 @@ def bank_health_slo_check():
         import logging
         from datetime import datetime
 
-        from airflow.exceptions import AirflowFailException, AirflowSkipException
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
         from airflow.sdk import get_current_context
+        from airflow.sdk.exceptions import AirflowFailException, AirflowSkipException
 
         from ingestion import scheduler_guard, slo
         from ingestion.alerts import notify
