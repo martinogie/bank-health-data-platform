@@ -30,6 +30,7 @@ GRANT MONITOR USAGE ON ACCOUNT TO ROLE BANK_PIPELINE_ROLE;
 -- 1. PROD: BANK_HEALTH.OPS, owned by the pipeline role
 -- -----------------------------------------------------------------------------
 USE ROLE BANK_PIPELINE_ROLE;
+USE WAREHOUSE BANK_WH;   -- the INSERT below needs a running warehouse (a few seconds of XSMALL)
 CREATE SCHEMA IF NOT EXISTS BANK_HEALTH.OPS
   COMMENT = 'Pipeline operations: run log, dbt results, warnings audit, scheduler guard, health view';
 USE SCHEMA BANK_HEALTH.OPS;
