@@ -69,6 +69,18 @@ def test_late_alerts_the_prod_channels(monkeypatch, sent):
     assert title.startswith("LATE (seen from GitHub)") and env == "prod watchdog"
 
 
+def test_warehouse_quota_is_named_in_the_alert(monkeypatch, sent):
+    use(
+        monkeypatch,
+        error=RuntimeError(
+            "090073 (22000): Warehouse 'BANK_DEV_WH' cannot be resumed because resource monitor "
+            "'BANK_DEV_WH_MONITOR' has exceeded its quota."
+        ),
+    )
+    assert watchdog.main(NOON_PAST) == 2
+    assert sent[0][0].endswith("(the CI warehouse's monthly credit cap is used up)")
+
+
 def test_cannot_check_alerts_without_leaking_secrets(monkeypatch, sent, capsys):
     monkeypatch.setenv("SLACK_WEBHOOK_URL", "https://hooks.slack.com/services/T/B/secretX")
     use(monkeypatch, error=RuntimeError("login failed via https://hooks.slack.com/services/T/B/secretX"))

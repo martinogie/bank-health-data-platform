@@ -37,11 +37,16 @@ def main(now: datetime | None = None) -> int:
     except Exception as exc:
         problem = mask(f"{type(exc).__name__}: {exc}")[:500]
         print(f"could not check: {problem}")
-        notify(
-            "WATCHDOG: could not check this week's run",
-            [problem, "Check Snowflake and the CI service user; see docs/runbooks/alerts.md."],
-            env="prod watchdog",
-        )
+        title = "WATCHDOG: could not check this week's run"
+        hint = "Check Snowflake and the CI service user; see docs/runbooks/alerts.md."
+        if "resource monitor" in problem.lower() or "cannot be resumed" in problem.lower():
+            title += " (the CI warehouse's monthly credit cap is used up)"
+            hint = (
+                "BANK_DEV_WH could not start: its resource monitor quota is reached. The prod run may "
+                "be fine; check it in Airflow. Raise the dev cap or wait for its monthly reset "
+                "(docs/runbooks/alerts.md, Watchdog)."
+            )
+        notify(title, [problem, hint], env="prod watchdog")
         return 2
     print(message)
     if ok:

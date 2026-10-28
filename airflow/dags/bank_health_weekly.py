@@ -171,7 +171,7 @@ def _record_run() -> dict:
             environment=ENV.name,
             host_id=host or (None if ENV.is_prod else "dev"),
             dag_id=dag_run.dag_id,
-            started_at=dag_run.start_date,
+            started_at=dag_run.start_date or ended,  # STARTED_AT is NOT NULL
             ended_at=ended,
             state=state,
             failed_tasks=failed,

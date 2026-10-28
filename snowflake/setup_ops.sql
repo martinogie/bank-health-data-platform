@@ -10,7 +10,8 @@
 --   OPS.DBT_WARNINGS_AUDIT   one row per warning test per run, with a sample of row keys
 --   OPS.HEALTH_RUNS_LAST_12  view for the health page: the last 12 runs
 -- And in prod only:
---   OPS.PROD_SCHEDULER       the one machine allowed to run the prod schedule (row: 'pc')
+--   OPS.PROD_SCHEDULER       the one machine allowed to run the prod schedule (row: 'pc');
+--                            owned by ACCOUNTADMIN, read-only for the pipeline role
 --
 -- Pattern from Phase 1: prod objects are owned by BANK_PIPELINE_ROLE, dev objects by DEV_ROLE.
 -- CI_ROLE may read prod OPS (the GitHub late-run watchdog), never write it.
@@ -30,7 +31,6 @@ GRANT MONITOR USAGE ON ACCOUNT TO ROLE BANK_PIPELINE_ROLE;
 -- 1. PROD: BANK_HEALTH.OPS, owned by the pipeline role
 -- -----------------------------------------------------------------------------
 USE ROLE BANK_PIPELINE_ROLE;
-USE WAREHOUSE BANK_WH;   -- the INSERT below needs a running warehouse (a few seconds of XSMALL)
 CREATE SCHEMA IF NOT EXISTS BANK_HEALTH.OPS
   COMMENT = 'Pipeline operations: run log, dbt results, warnings audit, scheduler guard, health view';
 USE SCHEMA BANK_HEALTH.OPS;
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS PIPELINE_RUNS (
   ENVIRONMENT          STRING        NOT NULL,  -- prod / dev
   HOST_ID              STRING,                  -- PROD_HOST_ID of the machine that ran it
   DAG_ID               STRING        NOT NULL,
-  STARTED_AT           TIMESTAMP_TZ,
+  STARTED_AT           TIMESTAMP_TZ  NOT NULL, -- record_run always knows it
   ENDED_AT             TIMESTAMP_TZ,
   DURATION_SECONDS     NUMBER,
   STATE                STRING        NOT NULL,  -- success / failed
@@ -93,18 +93,6 @@ CREATE TABLE IF NOT EXISTS DBT_WARNINGS_AUDIT (
   RECORDED_AT      TIMESTAMP_TZ  DEFAULT CURRENT_TIMESTAMP()
 );
 
--- The one machine allowed to run the prod schedule. check_environment stops a prod run on
--- any other machine. Cutover changes this one row (docs/runbooks/cutover_and_rollback.md).
-CREATE TABLE IF NOT EXISTS PROD_SCHEDULER (
-  HOST_ID   STRING        NOT NULL,
-  SET_AT    TIMESTAMP_TZ  DEFAULT CURRENT_TIMESTAMP(),
-  SET_BY    STRING        DEFAULT CURRENT_USER(),
-  NOTE      STRING
-);
-INSERT INTO PROD_SCHEDULER (HOST_ID, NOTE)
-  SELECT 'pc', 'initial: the PC runs prod until cutover'
-  WHERE NOT EXISTS (SELECT 1 FROM PROD_SCHEDULER);
-
 -- Health page data (Step 8): the last 12 runs. Contract: docs/health_page_contract.md.
 CREATE OR REPLACE VIEW HEALTH_RUNS_LAST_12 AS
 WITH runs AS (
@@ -113,13 +101,16 @@ WITH runs AS (
          w.WARNED_ROWS
   FROM PIPELINE_RUNS r
   LEFT JOIN (SELECT AIRFLOW_RUN_ID, SUM(FAILING_ROWS) AS WARNED_ROWS
-             FROM DBT_WARNINGS_AUDIT GROUP BY AIRFLOW_RUN_ID) w
+             FROM (SELECT AIRFLOW_RUN_ID, FAILING_ROWS FROM DBT_WARNINGS_AUDIT
+                   QUALIFY ROW_NUMBER() OVER (PARTITION BY AIRFLOW_RUN_ID, NODE_ID
+                                              ORDER BY RECORDED_AT DESC) = 1)  -- latest try per test
+             GROUP BY AIRFLOW_RUN_ID) w
     ON w.AIRFLOW_RUN_ID = r.RUN_ID
 ),
 ranked AS (
   SELECT runs.*,
-         AVG(CREDITS) OVER (ORDER BY STARTED_AT ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS CREDITS_AVG_LAST_4,
-         ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC) AS RUN_RANK
+         AVG(CREDITS) OVER (ORDER BY STARTED_AT NULLS LAST ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS CREDITS_AVG_LAST_4,
+         ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC NULLS LAST) AS RUN_RANK
   FROM runs
 )
 SELECT RUN_RANK, RUN_ID, ENVIRONMENT, HOST_ID, STARTED_AT, ENDED_AT,
@@ -136,6 +127,24 @@ SELECT RUN_RANK, RUN_ID, ENVIRONMENT, HOST_ID, STARTED_AT, ENDED_AT,
        MODEL_NAME, MODEL_VERSION, MODEL_ALIAS
 FROM ranked
 WHERE RUN_RANK <= 12;
+
+-- The one machine allowed to run the prod schedule. check_environment stops a prod run on
+-- any other machine (and stops if it can't read this table). Created, filled and OWNED by
+-- ACCOUNTADMIN: the pipeline role, which both machines use, may only READ it, so the pipeline
+-- can't rewrite the rule that restrains it. Cutover changes this one row, as ACCOUNTADMIN
+-- (docs/runbooks/cutover_and_rollback.md).
+USE ROLE ACCOUNTADMIN;
+USE WAREHOUSE BANK_WH;   -- the INSERT needs a running warehouse (a few seconds of XSMALL)
+CREATE TABLE IF NOT EXISTS BANK_HEALTH.OPS.PROD_SCHEDULER (
+  HOST_ID   STRING        NOT NULL,
+  SET_AT    TIMESTAMP_TZ  DEFAULT CURRENT_TIMESTAMP(),
+  SET_BY    STRING        DEFAULT CURRENT_USER(),
+  NOTE      STRING
+);
+INSERT INTO BANK_HEALTH.OPS.PROD_SCHEDULER (HOST_ID, NOTE)
+  SELECT 'pc', 'initial: the PC runs prod until cutover'
+  WHERE NOT EXISTS (SELECT 1 FROM BANK_HEALTH.OPS.PROD_SCHEDULER);
+GRANT SELECT ON TABLE BANK_HEALTH.OPS.PROD_SCHEDULER TO ROLE BANK_PIPELINE_ROLE;   -- read only
 
 -- CI_ROLE: read-only (the GitHub late-run watchdog reads PIPELINE_RUNS). The database-level
 -- future SELECT grants from setup_dev.sql already cover these tables; usage on the schema
@@ -161,7 +170,7 @@ CREATE TABLE IF NOT EXISTS PIPELINE_RUNS (
   ENVIRONMENT          STRING        NOT NULL,  -- prod / dev
   HOST_ID              STRING,                  -- PROD_HOST_ID of the machine that ran it
   DAG_ID               STRING        NOT NULL,
-  STARTED_AT           TIMESTAMP_TZ,
+  STARTED_AT           TIMESTAMP_TZ  NOT NULL, -- record_run always knows it
   ENDED_AT             TIMESTAMP_TZ,
   DURATION_SECONDS     NUMBER,
   STATE                STRING        NOT NULL,  -- success / failed
@@ -222,13 +231,16 @@ WITH runs AS (
          w.WARNED_ROWS
   FROM PIPELINE_RUNS r
   LEFT JOIN (SELECT AIRFLOW_RUN_ID, SUM(FAILING_ROWS) AS WARNED_ROWS
-             FROM DBT_WARNINGS_AUDIT GROUP BY AIRFLOW_RUN_ID) w
+             FROM (SELECT AIRFLOW_RUN_ID, FAILING_ROWS FROM DBT_WARNINGS_AUDIT
+                   QUALIFY ROW_NUMBER() OVER (PARTITION BY AIRFLOW_RUN_ID, NODE_ID
+                                              ORDER BY RECORDED_AT DESC) = 1)  -- latest try per test
+             GROUP BY AIRFLOW_RUN_ID) w
     ON w.AIRFLOW_RUN_ID = r.RUN_ID
 ),
 ranked AS (
   SELECT runs.*,
-         AVG(CREDITS) OVER (ORDER BY STARTED_AT ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS CREDITS_AVG_LAST_4,
-         ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC) AS RUN_RANK
+         AVG(CREDITS) OVER (ORDER BY STARTED_AT NULLS LAST ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) AS CREDITS_AVG_LAST_4,
+         ROW_NUMBER() OVER (ORDER BY STARTED_AT DESC NULLS LAST) AS RUN_RANK
   FROM runs
 )
 SELECT RUN_RANK, RUN_ID, ENVIRONMENT, HOST_ID, STARTED_AT, ENDED_AT,
@@ -251,7 +263,8 @@ USE ROLE ACCOUNTADMIN;
 -- -----------------------------------------------------------------------------
 -- 3. Checks
 -- -----------------------------------------------------------------------------
-SHOW TABLES IN SCHEMA BANK_HEALTH.OPS;        -- 4 tables, owner BANK_PIPELINE_ROLE
+SHOW TABLES IN SCHEMA BANK_HEALTH.OPS;        -- 4 tables: 3 owned by BANK_PIPELINE_ROLE, PROD_SCHEDULER by ACCOUNTADMIN
+SHOW GRANTS ON TABLE BANK_HEALTH.OPS.PROD_SCHEDULER;  -- OWNERSHIP ACCOUNTADMIN; BANK_PIPELINE_ROLE: SELECT only
 SHOW TABLES IN SCHEMA BANK_HEALTH_DEV.OPS;    -- 3 tables, owner DEV_ROLE
 SELECT * FROM BANK_HEALTH.OPS.PROD_SCHEDULER; -- one row: pc
 SHOW GRANTS TO ROLE BANK_PIPELINE_ROLE;       -- includes MONITOR USAGE on the account

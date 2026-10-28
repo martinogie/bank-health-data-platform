@@ -216,15 +216,28 @@ def build_row(
     return row
 
 
+def merge_sql() -> str:
+    """One MERGE on RUN_ID: inserts the run's row, or replaces it if record_run is retried.
+    A single atomic statement, so a retry after a timeout can neither duplicate the row nor
+    leave the run without one."""
+    source = ", ".join(
+        (f"parse_json(%({c})s)" if c in VARIANT_COLUMNS else f"%({c})s") + f" as {c}" for c in COLUMNS
+    )
+    updates = ", ".join(f"t.{c} = s.{c}" for c in COLUMNS if c != "RUN_ID")
+    return (
+        f"merge into {TABLE} t using (select {source}) s on t.RUN_ID = s.RUN_ID "
+        f"when matched then update set {updates}, t.RECORDED_AT = current_timestamp() "
+        f"when not matched then insert ({', '.join(COLUMNS)}) values ({', '.join('s.' + c for c in COLUMNS)})"
+    )
+
+
 def write_row(cur, row: dict[str, Any]) -> None:
-    """Replace this run's row (a re-run of record_run doesn't duplicate it)."""
-    cur.execute(f"delete from {TABLE} where RUN_ID = %(RUN_ID)s", {"RUN_ID": row["RUN_ID"]})
-    values = ", ".join(f"parse_json(%({c})s)" if c in VARIANT_COLUMNS else f"%({c})s" for c in COLUMNS)
+    """Write this run's row with one MERGE on RUN_ID (idempotent under Airflow retries)."""
     params = {
         c: (json.dumps(row[c], default=str) if c in VARIANT_COLUMNS and row[c] is not None else row[c])
         for c in COLUMNS
     }
-    cur.execute(f"insert into {TABLE} ({', '.join(COLUMNS)}) select {values}", params)
+    cur.execute(merge_sql(), params)
 
 
 def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:

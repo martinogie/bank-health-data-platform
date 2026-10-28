@@ -9,6 +9,10 @@ the prod DAG.** Two things make that hard to get wrong:
    `check_environment`, the first task of every prod run, stops the run (and alerts) on any other
    machine, and `record_run` writes nothing there. Even if both DAGs were unpaused by mistake, only
    one could get past its first task. Cutover is a single change of that row.
+   - **The table is owned by `ACCOUNTADMIN`.** `BANK_PIPELINE_ROLE`, which both machines use, may
+     only read it, so the pipeline can't rewrite the rule that restrains it. Only you change it.
+   - **It fails safe.** If a run can't read the table (missing table, missing grant, Snowflake
+     down), `check_environment` stops the run and the alert says why.
 
 **Do it on a quiet day: not a Monday, and not while a run is going.** It takes about an hour,
 most of it waiting for the manual run. Every step that changes something is marked **(stop)**:
@@ -137,7 +141,8 @@ three successful `HOST_ID = 'oracle-vm'` rows, on three consecutive Mondays, in
    PC).
 3. **(stop)** On the PC: `docker compose start postgres`, restore as in step 5 (`docker compose
    cp`, `pg_restore --clean --if-exists --no-owner`), then `docker compose start`.
-4. **(stop)** In Snowsight: `UPDATE BANK_HEALTH.OPS.PROD_SCHEDULER SET HOST_ID = 'pc', ... NOTE = 'rollback';`
+4. **(stop)** In Snowsight, as ACCOUNTADMIN:
+   `UPDATE BANK_HEALTH.OPS.PROD_SCHEDULER SET HOST_ID = 'pc', SET_AT = CURRENT_TIMESTAMP(), SET_BY = CURRENT_USER(), NOTE = 'rollback';`
 5. **(stop)** Unpause both DAGs on the PC, and trigger one run to check it.
 
 ## The PostgreSQL mirror after the move

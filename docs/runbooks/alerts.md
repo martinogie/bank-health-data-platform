@@ -67,6 +67,23 @@ GitHub **disables scheduled workflows in public repositories after 60 days witho
 back on: GitHub → **Actions** → *Late-run watchdog* → **Enable workflow**. Any commit to the
 repository also resets the 60 days. Check it is enabled whenever you come back to the project.
 
+### 5. The watchdog's warehouse and cost
+
+The watchdog logs in as the CI user, whose only warehouse is **`BANK_DEV_WH`**, under the dev
+warehouse's monthly cap (`BANK_DEV_WH_MONITOR`).
+
+- **Cost:** one short query each Monday wakes the XSMALL warehouse, which bills at least 60
+  seconds: about **0.017 credits a run**, so **about 0.07 credits a month** (4–5 Mondays). Manual
+  runs add the same each.
+- **If the dev cap is used up,** the warehouse can't start and the watchdog can't read the run
+  log. It doesn't fail silently: it alerts **"WATCHDOG: could not check this week's run (the CI
+  warehouse's monthly credit cap is used up)"** in both prod channels, and the workflow run
+  fails. The prod run itself may be fine: check Airflow.
+- **So the dev cap must leave room** for the watchdog: keep about 0.1 credits a month spare
+  after dev and CI work. If dev and CI regularly use the whole cap, give the watchdog its own
+  headroom instead, for example `GRANT USAGE ON WAREHOUSE BANK_WH TO ROLE CI_ROLE` and point the
+  workflow at `BANK_WH`, which only the account cap limits. That's your decision; it isn't set up.
+
 ## Test the alerts (dev only, never prod)
 
 1. **The alert path (about a minute).** Start the dev stack, open <http://localhost:8081>, and

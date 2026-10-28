@@ -58,6 +58,14 @@ def test_guard_needs_a_host_id(host):
         scheduler_guard.check(FakeCursor(), host)
 
 
+def test_guard_stops_when_it_cannot_read_its_table():
+    cur = FakeCursor({"PROD_SCHEDULER": RuntimeError("Object does not exist or not authorized")})
+    with pytest.raises(
+        scheduler_guard.SchedulerNotAuthorized, match="Cannot read .*Not running.*setup_ops.sql"
+    ):
+        scheduler_guard.check(cur, "pc")
+
+
 @pytest.mark.parametrize("rows", [[], [("pc", None, None), ("oracle-vm", None, None)]])
 def test_guard_needs_exactly_one_row(rows):
     with pytest.raises(scheduler_guard.SchedulerNotAuthorized, match="exactly one row"):
@@ -293,15 +301,45 @@ def test_build_row_fills_every_column():
     assert failed["FAILED_TASKS"] == "load_snowflake, verify_pipeline" and failed["SLO_MET"] is False
 
 
-def test_write_row_replaces_the_runs_row_and_parses_json():
-    cur = FakeCursor()
-    run_log.write_row(cur, row(volume_anomalies=[{"metric": "GOLD_ROWS"}]))
-    (delete_sql, delete_params), (insert_sql, params) = cur.queries
-    assert delete_sql.startswith("delete from OPS.PIPELINE_RUNS") and delete_params == {
-        "RUN_ID": "scheduled__2026-11-02"
-    }
-    assert "parse_json(%(ROWS_DETAIL)s)" in insert_sql and "parse_json(%(VOLUME_ANOMALIES)s)" in insert_sql
-    assert json.loads(params["VOLUME_ANOMALIES"]) == [{"metric": "GOLD_ROWS"}]
+class MergeTable:
+    """Stands in for OPS.PIPELINE_RUNS: applies a MERGE on RUN_ID like Snowflake would."""
+
+    def __init__(self):
+        self.rows: dict[str, dict] = {}
+        self.statements: list[str] = []
+
+    def execute(self, sql, params=None):
+        self.statements.append(sql)
+        assert sql.startswith("merge into OPS.PIPELINE_RUNS t using (select ")
+        assert "on t.RUN_ID = s.RUN_ID" in sql and "when matched then update" in sql
+        assert "when not matched then insert" in sql
+        self.rows[params["RUN_ID"]] = dict(params)  # matched: replace; not matched: insert
+
+
+def test_write_row_is_one_merge_that_parses_json():
+    table = MergeTable()
+    run_log.write_row(table, row(volume_anomalies=[{"metric": "GOLD_ROWS"}]))
+    (sql,) = table.statements  # one atomic statement: no DELETE + INSERT window
+    assert "parse_json(%(ROWS_DETAIL)s) as ROWS_DETAIL" in sql
+    assert "parse_json(%(VOLUME_ANOMALIES)s) as VOLUME_ANOMALIES" in sql
+    assert json.loads(table.rows["scheduled__2026-11-02"]["VOLUME_ANOMALIES"]) == [{"metric": "GOLD_ROWS"}]
+
+
+def test_writing_one_run_twice_leaves_one_row():
+    """record_run retried by Airflow (e.g. after a timeout) must not create a second row."""
+    table = MergeTable()
+    run_log.write_row(table, row(state="failed", failed=["load_snowflake"]))
+    run_log.write_row(table, row(state="success"))
+    assert list(table.rows) == ["scheduled__2026-11-02"]
+    assert table.rows["scheduled__2026-11-02"]["STATE"] == "success"  # the retry's values win
+
+
+def test_merge_updates_every_column_except_the_key():
+    sql = run_log.merge_sql()
+    for column in run_log.COLUMNS:
+        if column != "RUN_ID":
+            assert f"t.{column} = s.{column}" in sql
+    assert "t.RUN_ID = s.RUN_ID," not in sql  # the key is matched on, never overwritten
 
 
 def test_backfill_final_credits_updates_settled_runs():
