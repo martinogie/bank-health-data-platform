@@ -32,6 +32,8 @@ if dag is not None:
         "tasks": {
             t.task_id: {
                 "retries": t.retries,
+                "trigger_rule": str(getattr(t.trigger_rule, "value", t.trigger_rule)),
+                "has_failure_alert": bool(getattr(t, "on_failure_callback", None)),
                 "upstream": sorted(t.upstream_task_ids),
                 "has_doc_md": bool(t.doc_md),
             }

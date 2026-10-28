@@ -9,7 +9,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 
 | Task | What it does | Why a re-run is safe |
 |---|---|---|
-| `check_environment` | logs the environment; checks the Snowflake session is in that environment's database | read-only |
+| `check_environment` | logs the environment; checks the Snowflake session is in that environment's database; in prod, stops unless this machine is the one named in `OPS.PROD_SCHEDULER` (one scheduler only) | read-only |
 | `download_fdic` | new FDIC quarters (last 2 re-pulled for amendments), institutions, failures | fixed file names; complete quarters already on disk are reused |
 | `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded | complete months already on disk are reused |
 | `upload_raw` | fresh files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
@@ -23,7 +23,15 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `publish_dbt_manifest` | prod only: upload `manifest.json` to `@BANK_HEALTH.RAW.DBT_ARTIFACTS` for dbt slim CI | overwrites the file |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
+| `collect_metrics` | row counts per layer (Databricks notebook summaries, Snowflake MARTS), latest FDIC quarter | read-only |
+| `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
+| `check_volumes` | row counts vs the median of the last 4 successful runs (thresholds in `ingestion/volume_checks.py`) | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
+| `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
+
+**Alerts** (Slack and Discord, `ingestion/alerts.py`): any task failing after its last retry, the
+freshness and volume checks, a run not finished by Monday 12:00 CT (`bank_health_slo_check`), and
+one success message per run. Response guide: `docs/runbooks/alerts.md`.
 
 The model retrains automatically when a new FDIC quarter arrives; trigger with
 `{"retrain_model": true}` to force a retrain. A retrained model is registered as `@candidate`;
@@ -45,6 +53,7 @@ from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, 
 from cosmos.constants import LoadMode, SourceRenderingBehavior, TestBehavior
 
 from ingestion import environment
+from ingestion.alerts import AlreadyReported, task_failure_callback
 
 # Fails the DAG import (shown in the Airflow UI) if BANK_HEALTH_ENV is missing or invalid, or if
 # .env belongs to another environment. Nothing runs with a guessed environment.
@@ -71,13 +80,150 @@ def _as_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
+# ------------------------------------------------------------------ helpers for the Phase 2 tasks
+class _snowflake_cursor:
+    """`with _snowflake_cursor() as cur:` (the account is in the login URL, so connector logs are quiet)."""
+
+    def __enter__(self):
+        import logging
+
+        from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+
+        logging.getLogger("snowflake").setLevel(logging.ERROR)
+        self.conn = SnowflakeHook(snowflake_conn_id="snowflake_default").get_conn()
+        return self.conn.cursor()
+
+    def __exit__(self, *exc):
+        self.conn.close()
+        return False
+
+
+def _collect_metrics(ti) -> dict:
+    """Current counts, JSON-safe. Each source is optional: a failed run has fewer of them."""
+    from ingestion import run_log
+    from ingestion.databricks_jobs import DatabricksAPI
+
+    out: dict = {"layers": {}, "marts": None, "latest_quarter": None}
+    run_id = ti.xcom_pull(task_ids="run_databricks_job", key="run_id")
+    if run_id:
+        try:
+            out["layers"] = run_log.layer_rows(run_log.databricks_outputs(DatabricksAPI.from_env(), run_id))
+        except Exception as exc:
+            print(f"Databricks summaries not available: {type(exc).__name__}")
+    try:
+        with _snowflake_cursor() as cur:
+            out["marts"] = run_log.marts_counts(cur)
+            out["latest_quarter"] = str(run_log.latest_fdic_quarter(cur))
+    except Exception as exc:
+        print(f"Snowflake counts not available: {type(exc).__name__}")
+    layers, marts = out["layers"], out["marts"] or {}
+    out["current"] = {
+        "BRONZE_ROWS": layers.get("BRONZE_ROWS"),
+        "SILVER_ROWS": layers.get("SILVER_ROWS"),
+        "GOLD_ROWS": layers.get("GOLD_ROWS"),
+        "MARTS_ROWS": sum(marts.values()) if marts else None,
+        "SCORED_BANKS": marts.get("MART_EARLY_WARNING"),
+    }
+    print("metrics:", out["current"])
+    return out
+
+
+def _task_states(dag_id: str, run_id: str) -> dict[str, str | None]:
+    """{task_id: state} for this run, through the Task SDK (tasks can't read the metadata DB)."""
+    from airflow.sdk.execution_time.task_runner import RuntimeTaskInstance
+
+    states = RuntimeTaskInstance.get_task_states(dag_id=dag_id, run_ids=[run_id])
+    inner = states.get(run_id, states) if isinstance(states, dict) else {}
+    return {str(k): (str(v) if v is not None else None) for k, v in inner.items()}
+
+
+def _run_failed_class():
+    """RunFailed: no retry (AirflowFailException), no second alert (AlreadyReported)."""
+    from airflow.sdk.exceptions import AirflowFailException
+
+    class RunFailed(AlreadyReported, AirflowFailException):
+        pass
+
+    return RunFailed
+
+
+RunFailed = _run_failed_class()
+
+
+def _record_run() -> dict:
+    from airflow.sdk import get_current_context
+
+    from ingestion import run_log, scheduler_guard
+    from ingestion.alerts import notify
+
+    ctx = get_current_context()
+    ti, dag_run = ctx["ti"], ctx["dag_run"]
+    host = os.environ.get("PROD_HOST_ID") or None
+    with _snowflake_cursor() as cur:
+        if ENV.is_prod:
+            try:
+                scheduler_guard.check(cur, host)
+            except scheduler_guard.SchedulerNotAuthorized as exc:
+                print(f"Not the prod scheduler, nothing recorded: {exc}")
+                # check_environment already failed (and alerted) on this machine; end red, not green
+                raise RunFailed("not the prod scheduler; nothing recorded") from None
+        state, failed = run_log.run_outcome(_task_states(dag_run.dag_id, dag_run.run_id), ti.task_id)
+        metrics = ti.xcom_pull(task_ids="collect_metrics") or _collect_metrics(ti)
+        volume = ti.xcom_pull(task_ids="check_volumes", key="volume_result") or {}
+        ended = pendulum.now("UTC")
+        warehouse = os.environ.get("SNOWFLAKE_WAREHOUSE", "")
+        try:
+            dbt = run_log.dbt_counts(cur, dag_run.run_id)
+        except Exception as exc:
+            print(f"dbt results not available: {type(exc).__name__}")
+            dbt = {}
+        credits = (
+            run_log.credits_used(cur, warehouse, dag_run.start_date, ended) if dag_run.start_date else None
+        )
+        row = run_log.build_row(
+            run_id=dag_run.run_id,
+            environment=ENV.name,
+            host_id=host or (None if ENV.is_prod else "dev"),
+            dag_id=dag_run.dag_id,
+            started_at=dag_run.start_date or ended,  # STARTED_AT is NOT NULL
+            ended_at=ended,
+            state=state,
+            failed_tasks=failed,
+            layers=metrics.get("layers"),
+            marts=metrics.get("marts"),
+            dbt=dbt,
+            credits=credits,
+            latest_quarter=metrics.get("latest_quarter"),
+            volume_anomalies=volume.get("anomalies"),
+        )
+        run_log.write_row(cur, row)
+        backfilled = run_log.backfill_final_credits(cur, warehouse, ended)
+    print(
+        f"recorded {dag_run.run_id}: {state}, failed {failed or 'none'}; final credits filled for {backfilled} run(s)"
+    )
+    if state == "success":
+        notify(*run_log.success_message(row))
+    if state == "failed":
+        # record_run is the run's last task and succeeds after failures (all_done), which would
+        # make Airflow show the whole run as a success. Fail it, so the run is red in Airflow;
+        # the failed task already alerted, so this doesn't alert again (AlreadyReported).
+        raise RunFailed(
+            f"run failed: {', '.join(failed) or 'an upstream task'}; recorded in OPS.PIPELINE_RUNS"
+        )
+    return {"recorded": True, "state": state, "failed_tasks": failed}
+
+
 @dag(
     dag_id="bank_health_weekly",
     schedule="0 6 * * 1",
     start_date=pendulum.datetime(2026, 10, 1, tz=TZ),
     catchup=False,
     max_active_runs=1,
-    default_args={"retries": 2, "retry_delay": timedelta(minutes=5)},
+    default_args={
+        "retries": 2,
+        "retry_delay": timedelta(minutes=5),
+        "on_failure_callback": task_failure_callback,  # alert once, after the last retry
+    },
     params={"retrain_model": Param(False, type="boolean", description="Retrain and re-register the model")},
     doc_md=__doc__,
     tags=["bank-health", ENV.name, "fdic", "cfpb", "databricks", "snowflake", "dbt"],
@@ -103,7 +249,15 @@ def bank_health_weekly():
         finally:
             conn.close()
         print(f"Snowflake session database: {database}")
-        return {"env": ENV.name, "snowflake_database": database, "databricks_catalog": CATALOG}
+        host = os.environ.get("PROD_HOST_ID") or None
+        if ENV.is_prod:
+            # One scheduler only: stop here unless OPS.PROD_SCHEDULER names this machine.
+            from ingestion import scheduler_guard
+
+            with _snowflake_cursor() as cur:
+                host = scheduler_guard.check(cur, host)
+            print(f"Prod scheduler: this machine ({host}) is the one assigned in {scheduler_guard.TABLE}")
+        return {"env": ENV.name, "snowflake_database": database, "databricks_catalog": CATALOG, "host": host}
 
     @task(
         doc_md="FDIC: new quarters (+ last 2 refreshed), institutions, failures -> data/raw/fdic. "
@@ -263,8 +417,9 @@ def bank_health_weekly():
             source_rendering_behavior=SourceRenderingBehavior.WITH_TESTS_OR_FRESHNESS,
             should_detach_multiple_parents_tests=True,
         ),
-        operator_args={"install_deps": False},
-        default_args={"retries": 1},
+        # AIRFLOW_RUN_ID tags every dbt result in OPS.DBT_RESULTS (macros/record_dbt_results.sql).
+        operator_args={"install_deps": False, "env": {"AIRFLOW_RUN_ID": "{{ run_id }}"}, "append_env": True},
+        default_args={"retries": 1, "on_failure_callback": task_failure_callback},
     )
 
     dbt_docs_generate = BashOperator(
@@ -318,8 +473,8 @@ def bank_health_weekly():
     def export_watchlist() -> dict:
         import logging
 
-        from airflow.exceptions import AirflowSkipException
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from ingestion.watchlist_export import export
 
@@ -338,8 +493,8 @@ def bank_health_weekly():
         "Skipped in dev."
     )
     def publish_dbt_manifest() -> dict:
-        from airflow.exceptions import AirflowSkipException
         from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+        from airflow.sdk.exceptions import AirflowSkipException
 
         from ingestion.dbt_manifest import publish_manifest
 
@@ -350,6 +505,69 @@ def bank_health_weekly():
             return publish_manifest(conn, Path(DBT_DIR) / "target" / "manifest.json")
         finally:
             conn.close()
+
+    @task(
+        retries=1,
+        doc_md="Row counts per layer for the volume checks and the run log: bronze, silver and gold from "
+        "the Databricks notebooks' exit summaries, MARTS from Snowflake. Read-only.",
+    )
+    def collect_metrics() -> dict:
+        from airflow.sdk import get_current_context
+
+        return _collect_metrics(get_current_context()["ti"])
+
+    @task(
+        retries=0,
+        doc_md="Freshness gate before the watchlist: every MARTS table rebuilt in this run, the FDIC quarter "
+        "expected for today's date, scored banks in range (ingestion/freshness.py). Fails (and alerts) if not.",
+    )
+    def check_freshness(metrics: dict) -> dict:
+        from airflow.sdk import get_current_context
+
+        from ingestion import freshness, volume_checks
+
+        ctx = get_current_context()
+        with _snowflake_cursor() as cur:
+            history = volume_checks.fetch_history(cur, ctx["dag_run"].run_id)
+            median = volume_checks.baseline(history).get("SCORED_BANKS")
+            result = freshness.check(cur, ctx["dag_run"].start_date, pendulum.now(TZ).date(), median)
+        print(result)
+        if result["problems"]:
+            raise ValueError("Freshness check failed: " + "; ".join(result["problems"]))
+        return result
+
+    @task(
+        retries=0,
+        doc_md="Row counts vs the median of the last 4 successful runs in OPS.PIPELINE_RUNS. Fails (and "
+        "alerts) on a drop or jump beyond the thresholds in ingestion/volume_checks.py; passes with a note "
+        "while there are fewer than 3 earlier runs.",
+    )
+    def check_volumes(metrics: dict) -> dict:
+        from airflow.sdk import get_current_context
+
+        from ingestion import volume_checks
+
+        ctx = get_current_context()
+        with _snowflake_cursor() as cur:
+            history = volume_checks.fetch_history(cur, ctx["dag_run"].run_id)
+        result = volume_checks.compare(metrics["current"], history)
+        ctx["ti"].xcom_push(key="volume_result", value=result)  # record_run keeps it even on failure
+        print(result["note"])
+        if result["anomalies"]:
+            raise ValueError(
+                "Volume anomaly: " + "; ".join(volume_checks.describe(a) for a in result["anomalies"])
+            )
+        return result
+
+    @task(
+        trigger_rule="all_done",
+        retries=1,
+        doc_md="Always runs last, even after failures: writes this run's OPS.PIPELINE_RUNS row (state, failed "
+        "tasks, rows per layer, dbt results, credits, model, latest quarter, SLO) and sends the weekly success "
+        "message. On a machine that is not the assigned prod scheduler it writes nothing.",
+    )
+    def record_run() -> dict:
+        return _record_run()
 
     env_checked = check_environment()
     fdic_result = download_fdic()
@@ -362,8 +580,13 @@ def bank_health_weekly():
     [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
     run_databricks_job >> loaded >> sanity_check_top20() >> dbt_build >> dbt_docs_generate
-    dbt_docs_generate >> publish_dbt_manifest()
-    dbt_docs_generate >> verify_pipeline(watermarks) >> export_watchlist()
+    manifest = publish_dbt_manifest()
+    dbt_docs_generate >> manifest
+    metrics = collect_metrics()
+    dbt_docs_generate >> verify_pipeline(watermarks) >> metrics
+    watchlist = export_watchlist()
+    [check_freshness(metrics), check_volumes(metrics)] >> watchlist
+    [watchlist, manifest] >> record_run()
 
 
 bank_health_weekly()

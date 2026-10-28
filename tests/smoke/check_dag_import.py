@@ -29,6 +29,9 @@ PLACEHOLDERS = {
     # Cosmos caches `dbt ls` in Airflow's metadata database, which this bare container doesn't
     # have; without the cache it simply runs dbt ls each time (same DAG, slower parse).
     "AIRFLOW__COSMOS__ENABLE_CACHE_DBT_LS": "False",
+    # Same import time limit as the real stacks (docker-compose.yaml): without its cache Cosmos runs
+    # dbt ls during the import, which can exceed Airflow's 30-second default on a busy machine.
+    "AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT": "180",
 }
 
 PARSE = r"""
@@ -46,6 +49,9 @@ if dag is not None:
     params = getattr(run, "job_parameters", None) or (getattr(run, "json", None) or {}).get("job_parameters") or {}
     out["job_parameters"] = {k: v for k, v in params.items() if k != "retrain"}
     out["tags"] = sorted(dag.tags)
+    out["no_callback"] = sorted(t.task_id for t in dag.tasks if not getattr(t, "on_failure_callback", None))
+    rule = dag.get_task("record_run").trigger_rule
+    out["record_run_rule"] = str(getattr(rule, "value", rule))
 print("RESULT=" + json.dumps(out))
 """.replace("DAGS", repr(DAGS))
 
@@ -83,11 +89,20 @@ def main() -> int:
         dbt_tasks = [t for t in r["tasks"] if t.startswith("dbt_build.")]
         if r["job_name"] != job or r["job_parameters"] != params or env not in r["tags"]:
             problems.append(f"{env}: targets {r['job_name']} {r['job_parameters']} tags {r['tags']}")
-        for needed in ("check_environment", "publish_dbt_manifest", "export_watchlist"):
+        for needed in (
+            "check_environment", "publish_dbt_manifest", "export_watchlist",
+            "collect_metrics", "check_freshness", "check_volumes", "record_run",
+        ):  # fmt: skip
             if needed not in r["tasks"]:
                 problems.append(f"{env}: task {needed} missing")
         if not dbt_tasks:
             problems.append(f"{env}: Cosmos rendered no dbt tasks")
+        if r["no_callback"]:
+            problems.append(f"{env}: tasks without a failure alert: {r['no_callback']}")
+        if "all_done" not in r["record_run_rule"]:
+            problems.append(f"{env}: record_run must run after failures too, got {r['record_run_rule']}")
+        if "bank_health_slo_check" not in r["dag_ids"]:
+            problems.append(f"{env}: bank_health_slo_check DAG missing")
         print(
             f"[{env}] imported: {len(r['tasks'])} tasks ({len(dbt_tasks)} dbt), job {r['job_name']} {r['job_parameters']}"
         )

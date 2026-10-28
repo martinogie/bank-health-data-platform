@@ -29,7 +29,9 @@ main() {
         if ! echo "$errors" | grep -q 'No data found'; then
             fail "DAG import errors: $(echo "$errors" | head -c 800)"
         fi
-        if docker compose exec -T airflow-scheduler airflow dags list -o plain 2>/dev/null | grep -q '^bank_health_weekly'; then
+        local dags
+        dags="$(docker compose exec -T airflow-scheduler airflow dags list -o plain 2>/dev/null || true)"
+        if grep -q '^bank_health_weekly' <<<"$dags"; then  # capture first: no SIGPIPE under pipefail
             echo "DAG: bank_health_weekly loaded, no import errors"
             echo "smoke check passed"
             return 0

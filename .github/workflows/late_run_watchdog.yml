@@ -1,0 +1,49 @@
+# Late-run watchdog: checks from outside the prod VM that this week's data was ready by
+# Monday 12:00 America/Chicago, and alerts the prod Slack and Discord channels if not.
+# The VM has its own check (DAG bank_health_slo_check); this one still works when the VM is down.
+#
+# Cron is in UTC: 18:30 UTC = 12:30 CST (winter) / 13:30 CDT (summer), after the deadline.
+#
+# GitHub turns scheduled workflows OFF in public repositories after 60 days without repository
+# activity. If that happens: Actions -> "Late-run watchdog" -> "Enable workflow". See
+# docs/runbooks/alerts.md.
+name: Late-run watchdog
+
+on:
+  schedule:
+    - cron: "30 18 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  watchdog:
+    if: github.repository == 'martinogie/bank-health-data-platform'
+    runs-on: ubuntu-24.04
+    env:
+      BANK_HEALTH_ENV: ci
+      # Read-only CI identity (CI_ROLE can read BANK_HEALTH.OPS.PIPELINE_RUNS; it writes nothing).
+      SNOWFLAKE_USER: SVC_BANK_CI
+      SNOWFLAKE_ROLE: CI_ROLE
+      SNOWFLAKE_WAREHOUSE: BANK_DEV_WH
+      SNOWFLAKE_DATABASE: BANK_HEALTH_DEV
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      # The PROD channels: this alert is about prod.
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_PROD }}
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL_PROD }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - run: pip install "snowflake-connector-python>=4.7" "pandas>=2.2" pyarrow requests
+      - name: Write the CI private key to the runner's temp folder (never printed)
+        env:
+          KEY: ${{ secrets.SNOWFLAKE_CI_PRIVATE_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$KEY" > "$RUNNER_TEMP/snowflake_ci_rsa_key.p8"
+          echo "SNOWFLAKE_PRIVATE_KEY_PATH=$RUNNER_TEMP/snowflake_ci_rsa_key.p8" >> "$GITHUB_ENV"
+      - name: Was this week's run on time?
+        run: python scripts/late_run_watchdog.py

@@ -12,6 +12,9 @@ clean-targets: ["target", "dbt_packages"]
 # Stops every run unless the target matches BANK_HEALTH_ENV (macros/assert_environment.sql).
 on-run-start:
   - "{{ environment_check_sql() }}"
+# Records every model/test result (and warnings, with sample keys) in OPS (macros/record_dbt_results.sql).
+on-run-end:
+  - "{{ record_dbt_results(results) }}"
 
 models:
   bank_health:
