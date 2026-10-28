@@ -276,13 +276,44 @@ def test_no_metering_rows_means_null_not_zero():
     assert run_log.credits_used(cur, "BANK_DEV_WH", datetime.now(UTC), datetime.now(UTC)) is None
 
 
-def test_a_start_after_the_end_gives_no_duration():
-    r = run_log.build_row(
-        run_id="r", environment="dev", host_id="dev", dag_id="d",
-        started_at=chicago(2026, 10, 28, 6), ended_at=chicago(2026, 10, 27, 23, 48),
-        state="failed", failed_tasks=["download_fdic"],
+def bare_row(started_at, ended_at, scheduled=True, state="success"):
+    return run_log.build_row(
+        run_id="r", environment="prod", host_id="oracle-vm", dag_id="d",
+        started_at=started_at, ended_at=ended_at, state=state, failed_tasks=[], scheduled=scheduled,
     )  # fmt: skip
-    assert r["DURATION_SECONDS"] is None
+
+
+def test_an_end_before_the_start_fails_clearly():
+    with pytest.raises(
+        run_log.InvalidRunTimes,
+        match=r"ENDED_AT 2026-10-28 04:48:00Z is before STARTED_AT 2026-10-28 11:00:00Z",
+    ):
+        bare_row(chicago(2026, 10, 28, 6), chicago(2026, 10, 27, 23, 48))
+
+
+def test_times_are_stored_in_utc_from_chicago_input():
+    # Mon 2 Nov 2026 is the first Monday after clocks go back: Chicago is UTC-6 (CST).
+    r = bare_row(chicago(2026, 11, 2, 6), chicago(2026, 11, 2, 6, 25))
+    assert r["STARTED_AT"] == datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
+    assert r["ENDED_AT"] == datetime(2026, 11, 2, 12, 25, tzinfo=UTC)
+    assert r["STARTED_AT"].utcoffset() == timedelta(0) and r["ENDED_AT"].utcoffset() == timedelta(0)
+    assert r["DURATION_SECONDS"] == 1500
+
+
+@pytest.mark.parametrize("moment", [None, datetime(2026, 11, 2, 6)])
+def test_missing_or_naive_times_are_refused(moment):
+    with pytest.raises(run_log.InvalidRunTimes, match="STARTED_AT"):
+        bare_row(moment, chicago(2026, 11, 2, 7))
+
+
+def test_slo_is_judged_only_for_scheduled_runs():
+    on_time = (chicago(2026, 11, 2, 6), chicago(2026, 11, 2, 6, 25))
+    assert bare_row(*on_time, scheduled=True)["SLO_MET"] is True
+    assert bare_row(*on_time, scheduled=False)["SLO_MET"] is None  # manual run: not this week's run
+    late = (chicago(2026, 11, 2, 6), chicago(2026, 11, 2, 12, 30))
+    assert bare_row(*late, scheduled=True)["SLO_MET"] is False
+    title, lines = run_log.success_message(bare_row(*on_time, scheduled=False))
+    assert "Data ready before Monday 12:00 CT: n/a (manual run)" in lines
 
 
 def test_credits_are_none_without_the_privilege():
@@ -298,7 +329,7 @@ def row(state="success", **kw):
         started_at=chicago(2026, 11, 2, 6), ended_at=chicago(2026, 11, 2, 6, 24), state=state,
         failed_tasks=kw.pop("failed", []), layers=run_log.layer_rows(OUTPUTS),
         marts={"DIM_BANK": 27_835, "MART_EARLY_WARNING": 4257}, dbt={"DBT_TESTS_PASS": 94, "DBT_TESTS_WARN": 2},
-        credits=0.08333, latest_quarter=date(2026, 6, 30), **kw,
+        credits=0.08333, latest_quarter=date(2026, 6, 30), scheduled=kw.pop("scheduled", True), **kw,
     )  # fmt: skip
 
 

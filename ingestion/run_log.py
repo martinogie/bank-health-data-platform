@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ingestion import slo
@@ -165,15 +165,28 @@ def backfill_final_credits(cur, warehouse: str, now: datetime, settle_hours: int
 
 
 # ------------------------------------------------------------------ the row
+class InvalidRunTimes(ValueError):
+    """The run's start or end time can't be right; no row is written from it."""
+
+
+def _to_utc(moment: datetime | None, name: str) -> datetime:
+    if moment is None:
+        raise InvalidRunTimes(f"{name} is missing")
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise InvalidRunTimes(f"{name} has no time zone: {moment!r}")
+    return moment.astimezone(UTC)
+
+
 def build_row(
     *,
     run_id: str,
     environment: str,
     host_id: str | None,
     dag_id: str,
-    started_at: datetime | None,
+    started_at: datetime,
     ended_at: datetime,
     state: str,
+    scheduled: bool,
     failed_tasks: list[str],
     layers: dict[str, Any] | None = None,
     marts: dict[str, int] | None = None,
@@ -182,6 +195,17 @@ def build_row(
     latest_quarter=None,
     volume_anomalies: list[dict] | None = None,
 ) -> dict[str, Any]:
+    """One PIPELINE_RUNS row. Times are stored in UTC. A run that ended before it started
+    (e.g. `airflow dags test` with a future logical date) raises InvalidRunTimes instead of
+    writing a misleading row. SLO_MET is judged only for scheduled runs (NULL for manual ones:
+    a manual run is not 'this week's run')."""
+    started = _to_utc(started_at, "STARTED_AT")
+    ended = _to_utc(ended_at, "ENDED_AT")
+    if ended < started:
+        raise InvalidRunTimes(
+            f"ENDED_AT {ended:%Y-%m-%d %H:%M:%S}Z is before STARTED_AT {started:%Y-%m-%d %H:%M:%S}Z "
+            f"for run {run_id}: not writing a row with a negative duration"
+        )
     layers = layers or {}
     row: dict[str, Any] = dict.fromkeys(COLUMNS)
     row.update(
@@ -189,13 +213,9 @@ def build_row(
         ENVIRONMENT=environment,
         HOST_ID=host_id,
         DAG_ID=dag_id,
-        STARTED_AT=started_at,
-        ENDED_AT=ended_at,
-        # NULL rather than a negative number if the start time is wrong (`airflow dags test` with a
-        # future logical date sets the run start to that date).
-        DURATION_SECONDS=(
-            round((ended_at - started_at).total_seconds()) if started_at and ended_at >= started_at else None
-        ),
+        STARTED_AT=started,
+        ENDED_AT=ended,
+        DURATION_SECONDS=round((ended - started).total_seconds()),
         STATE=state,
         FAILED_TASKS=", ".join(failed_tasks) or None,
         MARTS_ROWS=sum(marts.values()) if marts else None,
@@ -203,7 +223,7 @@ def build_row(
         CREDITS_ESTIMATE=round(credits, 4) if credits is not None else None,
         LATEST_FDIC_QUARTER=latest_quarter,
         VOLUME_ANOMALIES=volume_anomalies or None,
-        SLO_MET=slo.slo_met(state, started_at, ended_at),
+        SLO_MET=slo.slo_met(state, started, ended) if scheduled else None,
     )
     for key in (
         "BRONZE_ROWS",
@@ -263,6 +283,7 @@ def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:
         f"dbt: {n(row.get('DBT_TESTS_PASS'))} tests passed, {n(row.get('DBT_TESTS_WARN'))} warned, "
         f"{n(row.get('DBT_TESTS_FAIL'))} failed",
         f"Credits (estimate): {row['CREDITS_ESTIMATE']}" if row.get("CREDITS_ESTIMATE") is not None else "",
-        "Data ready before Monday 12:00 CT: " + ("yes" if row.get("SLO_MET") else "no"),
+        "Data ready before Monday 12:00 CT: "
+        + {True: "yes", False: "no", None: "n/a (manual run)"}[row.get("SLO_MET")],
     ]
     return f"OK: {row['DAG_ID']} succeeded", [line for line in lines if line]
