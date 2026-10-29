@@ -36,6 +36,15 @@ merge PR -> CI on main (all 8 checks) -> Deploy workflow waits -> you approve ("
    - **Required reviewers:** add `martinogie`. Leave *Prevent self-review* **off**, so you can
      approve your own deploys.
    - **Deployment branches and tags:** *Selected branches and tags* → add the rule `main`.
+   - **Untick** *Allow administrators to bypass configured protection rules*: you are the only
+     admin, so with it ticked approval is optional, not required.
+   - Click **Save protection rules**, then check it was saved (a missed save once let a deploy
+     run without approval):
+     ```bash
+     gh api repos/martinogie/bank-health-data-platform/environments/production \
+       -q '"bypass=\(.can_admins_bypass)", (.protection_rules[] | "\(.type) \([.reviewers[]?.reviewer.login] | join(","))")'
+     # expect: bypass=false, branch_policy, required_reviewers martinogie
+     ```
 3. Leave the switch off until the runner exists: the repository variable `DEPLOY_ENABLED` is
    created in step C.4.
 
