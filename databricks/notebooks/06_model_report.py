@@ -15,8 +15,12 @@
 # MAGIC 3. **Intervals:** 95% bootstrap intervals that resample **banks**, not bank-quarters (one bank's
 # MAGIC    quarters are not independent). The headline is the *paired* difference v5 minus rule.
 # MAGIC 4. **M-07 segments:** ROC-AUC, PR-AUC and top-10% capture by asset-size tier, Census region and
-# MAGIC    CBLR reporting, with rows and positives. Fewer than 30 positives = too small to judge.
-# MAGIC    Capture in a segment = share of that segment's distress cases in its own riskiest 10%.
+# MAGIC    CBLR reporting, with rows, positives and distinct distressed banks. Fewer than 30
+# MAGIC    positives = too small to judge; cases from fewer than 10 distinct banks = too thin to judge.
+# MAGIC    Capture in a segment = share of that segment's distress cases in its own riskiest 10%,
+# MAGIC    also shown as a share of the most it could be (below 100% when the base rate is over 10%).
+# MAGIC    Lift = PR-AUC / base rate, so segments with different base rates can be compared.
+# MAGIC    For each tier, which distress rule made the cases positive.
 # MAGIC
 # MAGIC *Portfolio model on public data, not a supervisory rating.*
 
@@ -57,6 +61,7 @@ mlflow.set_registry_uri("databricks-uc")
 SEED = 42
 N_BOOT = 1000
 MIN_POSITIVES = 30  # a segment with fewer distress cases is too small to judge
+MIN_DISTRESSED_BANKS = 10  # cases from fewer distinct banks are too thin to judge
 TRAIN_YEARS = (2001, 2019)
 TEST_YEARS = (2020, 2024)
 PROD_FRAME = f"{ENV_CATALOGS['prod']}.ml.model_frame"  # read-only
@@ -292,15 +297,24 @@ for dim, col in SEGMENTS.items():
         positives = int(rows["y"].sum())
         point = metrics(rows["y"].to_numpy(), rows["p_v5"].to_numpy())
         point["top_decile_capture"] = capture(rows["y"], rows["p_v5"]) if positives else np.nan
+        distressed_banks = int(rows.loc[rows["y"] == 1, "cert"].nunique())
+        base_rate = positives / len(rows)
+        # The riskiest 10% can hold at most ceil(10% of rows) cases: below 100% when base rate > 10%
+        capture_max = min(1.0, math.ceil(0.10 * len(rows)) / positives) if positives else np.nan
         row = {
             "dimension": dim,
             "segment": str(value),
             "rows": len(rows),
             "banks": rows["cert"].nunique(),
             "positives": positives,
-            "base_rate": positives / len(rows),
+            "distressed_banks": distressed_banks,
+            "base_rate": base_rate,
             "too_small_to_judge": positives < MIN_POSITIVES,
+            "too_thin_to_judge": distressed_banks < MIN_DISTRESSED_BANKS,
             **point,
+            "pr_auc_lift": point["pr_auc"] / base_rate if positives else np.nan,
+            "capture_max_possible": capture_max,
+            "capture_share_of_max": point["top_decile_capture"] / capture_max if positives else np.nan,
         }
         if positives >= MIN_POSITIVES:
             bs = boot(rows, ["p_v5"])["p_v5"]
@@ -309,6 +323,97 @@ for dim, col in SEGMENTS.items():
         seg_rows.append(row)
 segments = pd.DataFrame(seg_rows)
 display(segments)
+
+# COMMAND ----------
+
+# MAGIC %md ### Which distress rule made each test case positive, by asset-size tier
+# MAGIC
+# MAGIC The label is 1 if, in any of the next 4 quarters, non-current loans > 3%, Tier 1 < 5%, or a
+# MAGIC quarterly loss followed a quarterly loss (two losses in a row), or if the bank fails within 12
+# MAGIC months. The triggers are rebuilt from the same frame; a case can have several.
+
+# COMMAND ----------
+
+all_q = (
+    spark.table(PROD_FRAME)
+    .select(
+        "cert", "report_date", "noncurrent_loans_pct", "tier1_leverage_pct", "net_income_qtr_to_assets_pct"
+    )
+    .toPandas()
+)
+d = pd.to_datetime(all_q["report_date"])
+all_q["q_idx"] = d.dt.year * 4 + d.dt.quarter
+all_q["loss"] = all_q["net_income_qtr_to_assets_pct"] < 0
+prev = all_q[["cert", "q_idx", "loss"]].assign(q_idx=all_q["q_idx"] + 1).rename(columns={"loss": "loss_prev"})
+all_q = all_q.merge(prev, on=["cert", "q_idx"], how="left")
+all_q["t_ncl"] = all_q["noncurrent_loans_pct"] > NCL_THRESHOLD
+all_q["t_tier1"] = all_q["tier1_leverage_pct"] < TIER1_THRESHOLD
+all_q["t_two_losses"] = all_q["loss"] & all_q["loss_prev"].fillna(False).astype(bool)
+flags = all_q.set_index(["cert", "q_idx"])[["t_ncl", "t_tier1", "t_two_losses"]]
+
+fails = spark.table(PROD_FRAME).select("cert", "report_date", "fails_within_12m").toPandas()
+pos = test.loc[test["y"] == 1, ["cert", "report_date", "asset_size_tier"]].merge(
+    fails, on=["cert", "report_date"], how="left"
+)
+pd_pos = pd.to_datetime(pos["report_date"])
+pos["q_idx"] = pd_pos.dt.year * 4 + pd_pos.dt.quarter
+ahead = pd.concat(
+    [pos.assign(q_idx=pos["q_idx"] + k)[["cert", "q_idx"]].assign(case=pos.index) for k in (1, 2, 3, 4)]
+)
+ahead = (
+    ahead.join(flags, on=["cert", "q_idx"])
+    .fillna(False)
+    .groupby("case")[["t_ncl", "t_tier1", "t_two_losses"]]
+    .any()
+)
+pos = pos.join(ahead)
+pos["t_failure"] = pos["fails_within_12m"].fillna(0).astype(int) == 1
+TRIGGERS = ["t_two_losses", "t_ncl", "t_tier1", "t_failure"]
+pos["n_triggers"] = pos[TRIGGERS].sum(axis=1)
+untriggered = int((pos["n_triggers"] == 0).sum())
+if untriggered:
+    raise ValueError(
+        f"{untriggered} positive test cases have no trigger: the rebuild does not match the label"
+    )
+pos["two_losses_only"] = pos["t_two_losses"] & (pos["n_triggers"] == 1)
+triggers = (
+    pos.groupby("asset_size_tier")
+    .agg(
+        positives=("cert", "size"),
+        distressed_banks=("cert", "nunique"),
+        two_losses=("t_two_losses", "sum"),
+        two_losses_only=("two_losses_only", "sum"),
+        ncl_over_3=("t_ncl", "sum"),
+        tier1_under_5=("t_tier1", "sum"),
+        failure=("t_failure", "sum"),
+    )
+    .reset_index()
+)
+display(triggers)
+LARGEST_TIER = sorted(test["asset_size_tier"].dropna().unique())[-1]
+largest = pos[pos["asset_size_tier"] == LARGEST_TIER]
+names = (
+    spark.table(PROD_FRAME)
+    .filter(F.col("cert").isin([int(c) for c in largest["cert"].unique()]))
+    .groupBy("cert")
+    .agg(F.max_by("bank_name", "report_date").alias("bank_name"))
+    .toPandas()
+)
+largest_banks = (
+    largest.groupby("cert")
+    .agg(
+        cases=("cert", "size"),
+        two_losses=("t_two_losses", "sum"),
+        ncl_over_3=("t_ncl", "sum"),
+        tier1_under_5=("t_tier1", "sum"),
+        failure=("t_failure", "sum"),
+    )
+    .reset_index()
+    .merge(names, on="cert", how="left")
+    .sort_values("cases", ascending=False)
+)
+display(largest_banks)
+largest_banks = largest_banks.to_dict("records")
 
 # COMMAND ----------
 
@@ -326,9 +431,15 @@ summary = {
     "bootstrap": {"replicates": N_BOOT, "unit": "bank (cert)", "seed": SEED, "banks": len(certs)},
     "headline": headline.to_dict("records"),
     "segments": segments.to_dict("records"),
+    "triggers_by_tier": triggers.to_dict("records"),
+    "largest_tier_distressed_banks": largest_banks,
 }
 
-for name, df in (("model_report_headline", headline), ("model_report_segments", segments)):
+for name, df in (
+    ("model_report_headline", headline),
+    ("model_report_segments", segments),
+    ("model_report_triggers", triggers),
+):
     (
         spark.createDataFrame(df.assign(run_ts=RUN_TS, champion_version=int(mv.version)))
         .write.mode("overwrite")
