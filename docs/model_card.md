@@ -100,6 +100,89 @@ rarer outcome well (ROC-AUC 0.858) but has lower PR-AUC because there are fewer 
 on the main label it is clearly weaker, so the main label stays. It does not become champion
 without approval.
 
+Note: the review (finding M-03) suggested a stricter variant of "failure or Tier 1 < 5% only". The
+challenger above is not that variant: it keeps the non-current-loans trigger and drops only the
+two-losses rule. It is reported as is; no new variant was trained.
+
+### How much v5 beats a simple rule (finding M-03)
+
+A rule anyone could apply without a model: rank banks by how close they are to the nearest
+distress line (non-current loans 3%, Tier 1 leverage 5%), measured as a share of the threshold.
+That measure was chosen over a second one (distance in units of each ratio's spread) on 2001–2019
+only (PR-AUC 0.302 vs 0.255), then judged once on the 2020–2024 test rows. Intervals are 95%
+bootstrap intervals that resample banks (4,934 banks, 1,000 samples), because one bank's quarters
+are not independent. Source: `databricks/notebooks/06_model_report.py`, run 29 Oct 2026.
+
+| 2020–2024 test (86,296 rows, base rate 5.5%) | v5 | Threshold rule | v5 minus rule |
+|---|---|---|---|
+| PR-AUC | 0.333 (0.313–0.356) | 0.153 (0.139–0.169) | **+0.180** (+0.161 to +0.199) |
+| Top-10% capture | 52.6% (50.6–54.6%) | 31.9% (29.9–34.0%) | **+20.6 points** (+18.5 to +22.9) |
+| ROC-AUC | 0.852 (0.842–0.861) | 0.637 (0.619–0.655) | +0.214 (+0.197 to +0.232) |
+
+**In short:** v5 roughly doubles the rule's PR-AUC (0.333 vs 0.153) and puts 21 points more of the
+distress cases in its riskiest 10% (52.6% vs 31.9%). v5 was better in all 1,000 bootstrap samples.
+Being near a threshold matters, but v5 adds a large amount beyond it.
+
+**The strict-label challenger** (figures from the v5 training run, not refitted): judged on the
+main label, PR-AUC 0.233 and capture 40.1%; judged on its own rarer label (base rate 3.1%),
+PR-AUC 0.243 and capture 56.2%. Dropping the two-losses rule gives a cleaner but rarer outcome
+and misses earnings-driven distress, so the main label stays primary.
+
+### Results by segment (finding M-07)
+
+Same test rows, v5 only. **Lift** = PR-AUC divided by the segment's base rate; segments are
+compared on lift, because raw PR-AUC rises with the base rate. **Capture** = share of the
+segment's distress cases in its own riskiest 10%; the riskiest 10% can hold at most
+ceil(10% of rows) cases, so where the base rate is above 10% capture can't reach 100%, and it is
+also shown as a share of that maximum. A segment is **too small to judge** with fewer than 30
+distressed cases, and **too thin to judge** when they come from fewer than 10 distinct banks.
+
+| Segment | Rows | Distressed (banks) | Base rate | ROC-AUC | PR-AUC | Lift | Capture | Capture / max |
+|---|---|---|---|---|---|---|---|---|
+| < $100M | 12,987 | 1,643 (393) | 12.7% | 0.808 | 0.431 | 3.4 | 38.0% | 48.1% of 79.1% |
+| $100M–$1B | 55,051 | 2,611 (667) | 4.7% | 0.844 | 0.299 | 6.3 | 54.0% | 54.0% |
+| $1B–$10B | 15,379 | 415 (119) | 2.7% | 0.846 | 0.226 | 8.4 | 54.9% | 54.9% |
+| $10B–$100B | 2,251 | 50 (19) | 2.2% | 0.873 | 0.249 | 11.2 | 64.0% | 64.0% |
+| > $100B | 628 | 42 (13) | 6.7% | 0.666 | 0.240 | 3.6 | 33.3% | 33.3% |
+| Midwest | 38,669 | 2,040 (479) | 5.3% | 0.852 | 0.320 | 6.1 | 52.9% | 52.9% |
+| Northeast | 9,119 | 525 (127) | 5.8% | 0.830 | 0.366 | 6.4 | 50.7% | 50.7% |
+| South | 30,387 | 1,679 (410) | 5.5% | 0.866 | 0.345 | 6.2 | 54.3% | 54.3% |
+| West | 8,025 | 501 (124) | 6.2% | 0.829 | 0.322 | 5.2 | 48.9% | 48.9% |
+| Territories / unknown | 96 | 16 (5) | 16.7% | – | – | – | – | too small to judge |
+| CBLR reporters | 31,355 | 1,998 (526) | 6.4% | 0.830 | 0.310 | 4.9 | 47.8% | 47.8% |
+| Not CBLR | 54,941 | 2,763 (723) | 5.0% | 0.864 | 0.350 | 7.0 | 56.4% | 56.4% |
+
+95% bank-bootstrap intervals for each segment are in the notebook output; the widest are for
+> $100B (ROC-AUC 0.50–0.85, capture 17–59%) and $10B–$100B (capture 44–83%).
+
+- **Regions** perform about the same (lift 5.2–6.4).
+- **Banks under $100M** have the highest distress rate. The model separates them reasonably
+  (ROC-AUC 0.81) but with the lowest lift (3.4), and it fills 48% of the possible top-10% slots.
+- **$1B–$100B** banks show the highest lift (8.4 and 11.2), on fewer cases.
+- **Banks over $100B** are where v5 is weakest: lift 3.6, ROC-AUC 0.666 with an interval reaching
+  0.50 (no better than chance). Their 42 distressed quarters come from **13 distinct banks**, so the
+  tier passes the "10 distinct banks" rule and is **not** flagged as too thin, but the evidence is
+  narrow. What made those cases distressed:
+
+  | > $100B: trigger in the next 4 quarters | Cases (of 42) | Banks |
+  |---|---|---|
+  | Two losses in a row | 26 (22 with no other trigger) | 9: USAA FSB, BMO, KeyBank, TD Bank, Flagstar, Capital One NA, Discover, MUFG Union, Capital One Bank (USA) |
+  | Failure within 12 months | 12 | 3: Silicon Valley Bank, Signature Bank, First Republic Bank (2023) |
+  | Non-current loans > 3% | 8 | M&T (4), Flagstar (3), USAA FSB (1) |
+  | Tier 1 < 5% | 0 | – |
+
+  So over half of the largest tier's cases (22 of 42) are the two-losses rule alone. Whether those
+  losses were one-off events, such as realised securities losses, is not checked here. The v6
+  items 6.1 (count only material losses) and 6.2 (separate securities gains and losses from
+  operating earnings) are aimed at exactly this ([roadmap](ROADMAP.md)). The other large group is
+  the three 2023 failures, which were driven by deposit runs and unrealised securities losses,
+  risks the call-report ratios used here don't capture well.
+- **CBLR reporters** score less well than other banks (ROC-AUC 0.830 vs 0.864, lift 4.9 vs 7.0,
+  capture 47.8% vs 56.4%), confirming the known gap: training (2001–2019) has no CBLR rows.
+
+**For watchlist users:** v5 is not reliable for the very largest banks (over $100B); judge those on
+their own filings. A small CBLR bank's rank is somewhat less reliable than other banks'.
+
 ### Bands
 
 Each band has a fixed meaning: the share of its banks that became distressed within 4 quarters,
@@ -189,7 +272,11 @@ at them:
 ### Known limits
 
 - **CBLR banks score less well.** On 2020–2024 the model separates CBLR banks less well than other
-  banks (ROC-AUC 0.833 vs 0.866 in the variant comparison) because training has no CBLR rows.
+  banks (ROC-AUC 0.830 vs 0.864, top-10% capture 47.8% vs 56.4%; see Results by segment) because
+  training has no CBLR rows.
+- **The largest banks.** For banks over $100B, v5 is weak (ROC-AUC 0.666, interval reaching 0.50),
+  and most of their distress cases come from the two-losses rule or the 2023 failures. Not reliable
+  for those banks.
 - **Slight over-prediction.** Probabilities run a little high (35% predicted vs 29–30% observed in
   the riskiest 10%). Bands are set from observed rates, so their meaning holds, but read a
   probability as a ranking more than an exact chance.
