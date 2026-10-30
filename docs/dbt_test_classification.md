@@ -1,7 +1,9 @@
-# dbt tests: critical or warn (Step 6, for review)
+# dbt tests: critical or warn
 
-**Status: proposal. Nothing here changes a test until you approve it.** All 96 tests are listed
-below, taken from the parsed dbt project on 27 Oct 2026.
+**Status: approved by Martins on 29 Oct 2026** (92 critical, 4 warn, as below; the dbt project
+already uses these severities). The publishing gap is closed in Phase 3, PR 4 (write, audit,
+publish; see [phase3_plan.md](phase3_plan.md)). All 96 tests are listed below, taken from the
+parsed dbt project on 27 Oct 2026.
 
 - **Critical** (`severity: error`): the data is wrong or incomplete, so it must not be published.
   The task fails, an alert goes out, and later steps stop.
@@ -26,9 +28,11 @@ marts** are built by dbt after scoring. Cosmos runs each model's tests right aft
 
 To close the gap, the marts would be built into a side schema, tested, and then swapped in one
 atomic step (`ALTER SCHEMA MARTS SWAP WITH MARTS_NEXT`), a "write, audit, publish" pattern. That
-fits Phase 3 (finding D-02, idempotent loads). **Your decision:** close it in Phase 3, or now.
+fits Phase 3 (finding D-02, idempotent loads). **Decided:** closed in Phase 3, PR 4. Schema-level
+grants don't survive a clone, so the swap step re-applies them, and the acceptance runs prove that
+`BANK_REPORTER_ROLE` (Power BI) and `CI_ROLE` can still read `MARTS` after a swap.
 
-## Proposed: no change to the classes
+## Approved: no change to the classes
 
 All 92 current error tests are pipeline-correctness checks, and stay **critical**. The 4 current
 warnings are real-world values, and stay **warn**. The one change in this phase is how the
@@ -75,7 +79,7 @@ warnings are surfaced: stored failures with row keys, the audit table, and the h
 | mart_bank_scorecard | unique (cert, report_date); five peer percentiles within 0 … 1; peers_in_tier ≥ 1 |
 | mart_early_warning | unique + not_null cert; not_null bank_name, distress_probability, risk_band; distress_probability 0 … 1; risk_percentile 0 … 1; accepted_values risk_band; relationship cert → dim_bank |
 
-## Questions for you
+## Decisions (29 Oct 2026)
 
-1. Approve the classes as above, or move any test (name it).
-2. The publishing gap: close it in Phase 3 with write, audit, publish, or now?
+1. The classes are approved as above: 92 critical, 4 warn.
+2. The publishing gap is closed in Phase 3, PR 4, with write, audit, publish.
