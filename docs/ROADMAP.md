@@ -29,8 +29,8 @@ each item are in the [model card](model_card.md).
 | 1 | 6.1 Count losses toward distress only when they are material |
 | 2 | 6.3 Handle young and recently merged banks |
 | 3 | 6.2 Separate realised securities gains and losses from operating earnings |
-| 4 | 6.6 Time-to-distress hazard model (needs 6.1 and 6.3) |
-| 5 | 6.5 Calibrate the classifier's probabilities |
+| 4 | 6.6 Time-to-distress hazard model (needs 6.1 and 6.3; review finding M-10) |
+| 5 | 6.5 Calibrate the classifier's probabilities (review finding M-06) |
 | 6 | 6.4 Report credit risk and failure risk as separate outputs (needs 6.6) |
 
 **Why this order:**
@@ -49,7 +49,15 @@ each item are in the [model card](model_card.md).
 
 | Order | Item |
 |---|---|
+| 0 | 7.0 Preparation: keep bank history (review finding D-04) |
 | 1 | 7.1 Complaint features as a tested challenger |
+
+**7.0 in brief:** today `dim_bank` keeps only each bank's latest name, holding company and status,
+so history is overwritten. A dbt snapshot (type 2 history: one row per bank per period, with valid
+from/to dates) keeps it. Complaint matching needs this over time: a complaint from 2015 should
+match the bank's 2015 name and holding company, not today's. Without it, back-filled complaints
+(7.1, step 1) can go to the wrong bank after mergers and renames. It moved here from Phase 3
+because it matters mainly for 7.1.
 
 **7.1 in brief:**
 1. Back-fill complaints from late 2011, with the same entity resolution as today.
