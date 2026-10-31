@@ -238,11 +238,20 @@ def test_enforce_mode_stops_the_run_and_warn_mode_does_not(tmp_path, capsys):
     summary = dc.enforce([bad], "warn")
     assert summary["errors"] == 1 and summary["would_fail"]
     assert "WOULD FAIL" in capsys.readouterr().out
-    assert dc.summary_line(summary).startswith("Data contracts (warn): ") and "would fail" in dc.summary_line(
-        summary
+    # the success message quotes the first would-fail finding itself, not just a count
+    assert dc.summary_line(summary) == (
+        "Data contracts (warn): 1 would fail in enforce mode, first: financials_20260630.jsonl.gz: "
+        "fdic_financials.NIMY is null in all 150 rows (retired at the source?)"
     )
     with pytest.raises(ValueError, match="CONTRACTS_MODE"):
         dc.enforce([bad], "off")
+
+
+def test_the_success_message_quotes_long_findings_shortly():
+    long = "x" * 1000
+    line = dc.summary_line({"mode": "warn", "would_fail": [long], "warnings": [long], "warning_count": 1})
+    assert line.count("…") == 2 and len(line) < 2 * dc.QUOTE_CHARS + 120
+    assert line.index("would fail") < line.index("warning(s)")  # the would-fail finding comes first
 
 
 def test_a_clean_run_has_no_summary_line(tmp_path):

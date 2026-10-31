@@ -449,13 +449,24 @@ def run_checks(paths: Iterable[Path], mode: str, schema_dir: Path, run_stamp: st
     return summary
 
 
+QUOTE_CHARS = 300  # how much of a finding the success message quotes
+
+
+def _quote(text: str) -> str:
+    return text if len(text) <= QUOTE_CHARS else text[: QUOTE_CHARS - 1] + "…"
+
+
 def summary_line(summary: dict[str, Any] | None) -> str:
-    """One line for the success message ('' when there is nothing to say)."""
+    """One line for the success message ('' when there is nothing to say). In warn mode the first
+    would-fail finding is quoted, so the message alone shows what enforce mode would have stopped;
+    the task log and its XCom have all of them."""
     if not summary:
         return ""
     parts = []
-    if summary.get("warning_count"):
-        parts.append(f"{summary['warning_count']} warning(s), first: {summary['warnings'][0]}")
     if summary.get("would_fail"):
-        parts.append(f"{len(summary['would_fail'])} would fail in enforce mode")
+        parts.append(
+            f"{len(summary['would_fail'])} would fail in enforce mode, first: {_quote(summary['would_fail'][0])}"
+        )
+    if summary.get("warning_count"):
+        parts.append(f"{summary['warning_count']} warning(s), first: {_quote(summary['warnings'][0])}")
     return f"Data contracts ({summary['mode']}): " + "; ".join(parts) if parts else ""
