@@ -196,16 +196,17 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
-          PUSH_BEFORE: ${{ github.event.before }}
         run: |
-          if [ "$EVENT" = "pull_request" ]; then
-            base="$PR_BASE"
-          elif [ -n "$PUSH_BEFORE" ] && ! echo "$PUSH_BEFORE" | grep -qE '^0+$' \
-               && git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
-            base="$PUSH_BEFORE"
-          else
-            base="$(git merge-base origin/main HEAD)"   # first push of a new branch
+          if [ "$EVENT" != "pull_request" ]; then
+            # A push to main is a merged pull request. Branch protection requires the branch to be
+            # up to date with main, so the pull request's run already tested this exact code: don't
+            # spend dev credits testing it again. The job still finishes green for the deploy.
+            echo "dbt=false" >> "$GITHUB_OUTPUT"
+            echo "grants=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Push to main: dbt and grants were tested on the pull request; Snowflake not used."
+            exit 0
           fi
+          base="$PR_BASE"
           changed="$(git diff --name-only "$base" HEAD)"
           echo "Files changed since ${base:0:7}:"; while read -r f; do echo "  $f"; done <<< "$changed"
           dbt=false; grants=false

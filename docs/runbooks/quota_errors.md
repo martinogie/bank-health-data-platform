@@ -70,8 +70,11 @@ Snowflake **resource monitors** cap credits per month and suspend a warehouse at
 
 | Monitor | Watches | Cap (credits / month) | Used by |
 |---|---|---|---|
-| `BANK_DEV_WH_MONITOR` | `BANK_DEV_WH` | 2 | dev pipeline runs, dbt slim CI, the GitHub late-run watchdog |
-| `ACCOUNT_MONTHLY_CAP` | the whole account | 5 | everything, including prod's Monday runs on `BANK_WH` |
+| `BANK_DEV_WH_MONITOR` | `BANK_DEV_WH` | 2 (3 until 26 Nov 2026) | dev pipeline runs, dbt slim CI (pull requests only) |
+| `ACCOUNT_MONTHLY_CAP` | the whole account | 5 (7 until 26 Nov 2026) | everything: prod's Monday runs on `BANK_WH` (about 0.31 credits a run), Power BI, the late-run watchdog on `BANK_OPS_WH` (about 0.07 a month), and dev |
+
+`BANK_DEV_WH` counts toward both caps. A prod run costs about 0.31 credits (measured, Oct 2026),
+so prod needs about 1.3–1.6 credits a month; the rest of the account cap is room for dev.
 
 ### How you'll know
 
