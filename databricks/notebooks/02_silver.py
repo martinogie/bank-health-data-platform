@@ -42,10 +42,20 @@ if SILVER_MODE not in SILVER_MODES:
 SILVER_SCHEMA = dbutils.widgets.get("silver_schema").strip() or "silver"
 if SILVER_SCHEMA != "silver" and IS_PROD:
     raise ValueError("silver_schema can only be changed in dev")
+# Dev checks only: read bronze from another catalog (e.g. prod's bank_health, READ-ONLY) to rebuild
+# prod's silver into a dev scratch schema and compare it with prod's silver. Writes stay in dev.
+dbutils.widgets.text("bronze_catalog", "", "Read bronze from this catalog (dev comparisons only)")
+BRONZE_CATALOG = dbutils.widgets.get("bronze_catalog").strip()
+if BRONZE_CATALOG:
+    if IS_PROD:
+        raise ValueError("bronze_catalog can only be changed in dev")
+    if SILVER_SCHEMA == "silver":
+        raise ValueError("reading another catalog's bronze must write a scratch schema, never dev silver")
+    BRONZE = f"{BRONZE_CATALOG}.bronze"  # only this notebook's reads; _common's other names stay dev
 OUT = f"{CATALOG}.{SILVER_SCHEMA}"
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {OUT}")
 LOADS = {}  # per table: how it was loaded, rows inserted/updated
-print(f"silver_mode={SILVER_MODE}, writing {OUT}")
+print(f"silver_mode={SILVER_MODE}, reading {BRONZE}, writing {OUT}")
 
 
 def save(df, table):

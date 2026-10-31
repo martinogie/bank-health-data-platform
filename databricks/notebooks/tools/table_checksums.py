@@ -9,6 +9,10 @@
 # MAGIC
 # MAGIC Dev check of PR 3: the incremental `silver` tables must equal a full rebuild written by
 # MAGIC `02_silver` with `silver_mode=full, silver_schema=silver_fullcheck`.
+# MAGIC
+# MAGIC A schema may name its catalog (`bank_health.silver`) to compare across catalogs, e.g. prod's
+# MAGIC silver with a dev rebuild from prod's bronze: `schemas=bank_health.silver,silver_fullcheck`
+# MAGIC (a schema without a catalog is in this environment's catalog). Only reads.
 
 # COMMAND ----------
 
@@ -32,7 +36,12 @@ schemas = [s.strip() for s in dbutils.widgets.get("schemas").split(",") if s.str
 if not 1 <= len(schemas) <= 2:
     raise ValueError("schemas: give one schema, or two to compare")
 
-result = {s: {t: table_checksum(f"{CATALOG}.{s}.{t}", keys) for t, keys in KEYS.items()} for s in schemas}
+
+def qualified(schema):
+    return schema if "." in schema else f"{CATALOG}.{schema}"
+
+
+result = {s: {t: table_checksum(f"{qualified(s)}.{t}", keys) for t, keys in KEYS.items()} for s in schemas}
 for s, tables in result.items():
     for t, c in tables.items():
         print(f"{s}.{t}: {c['rows']:,} rows, {c['distinct_keys']:,} keys, checksum {c['checksum']}")
