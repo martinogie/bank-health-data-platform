@@ -44,3 +44,17 @@ own for a mart that has no `_ROW_HASH` column yet (the first run after PR 4).
 Swapping needs ownership of both schemas. `BANK_PIPELINE_ROLE` owns `MARTS`
 ([snowflake/marts_ownership.sql](../../snowflake/marts_ownership.sql), run once) and creates
 `MARTS_NEXT` itself.
+
+## Who can read the marts
+
+- **Each publish** grants `USAGE` on `MARTS_NEXT` and `SELECT` on every table and view in it to
+  the readers, then swaps. Every mart exists by then, so each one is readable the moment it goes
+  live.
+- **Database-level future grants** (`SELECT` on future tables and views in `BANK_HEALTH`) for
+  `BANK_REPORTER_ROLE` and `CI_ROLE` are the safety net for anything created later. They are set
+  once, as ACCOUNTADMIN ([snowflake/marts_ownership.sql](../../snowflake/marts_ownership.sql),
+  step 3; `snowflake/setup_dev.sql` for `CI_ROLE`).
+- **Schema-level future grants are not re-applied** at a swap: Snowflake requires the account-wide
+  `MANAGE GRANTS` privilege for them, even for the schema's owner, and the pipeline role isn't
+  given it. The ones `MARTS` had before Phase 3 disappear at its first swap; the database-level
+  grants take over.

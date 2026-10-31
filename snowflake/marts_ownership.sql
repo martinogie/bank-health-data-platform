@@ -11,7 +11,18 @@
 -- no change. The pipeline role already had ALL PRIVILEGES in the schema and owns the tables in it.
 -- Nothing is dropped. Dev needs nothing: DEV_ROLE already owns BANK_HEALTH_DEV and its schemas.
 --
--- Run once, as ACCOUNTADMIN, after review, before PR 4 is deployed. Safe to re-run.
+-- Also (step 3): database-level FUTURE grants for Power BI's reporter role, as a safety net (option
+-- C, agreed 1 Nov 2026). Each publish already grants SELECT on every mart before the swap (option A),
+-- but schema-level future grants can't be re-applied after a swap without MANAGE GRANTS, so they
+-- disappear from MARTS at the first swap. Database-level future grants make any table or view dbt
+-- creates in BANK_HEALTH readable by the reporter role from the moment it exists. The reporter role
+-- has USAGE only on MARTS (and on last week's copy in MARTS_NEXT), so it still can't read RAW,
+-- STAGING or OPS. CI_ROLE already has the same database-level future grants (setup_dev.sql).
+-- Note: Snowflake applies a schema's own future grants instead of database-level ones, so these take
+-- effect in MARTS after its first swap (the new MARTS has no schema-level future grants).
+--
+-- Run once, as ACCOUNTADMIN, after review, on the day PR 4 is deployed (before its deploy).
+-- Safe to re-run.
 
 USE ROLE ACCOUNTADMIN;
 
@@ -26,4 +37,13 @@ GRANT OWNERSHIP ON SCHEMA BANK_HEALTH.MARTS TO ROLE BANK_PIPELINE_ROLE COPY CURR
 SHOW GRANTS ON SCHEMA BANK_HEALTH.MARTS;
 SHOW FUTURE GRANTS IN SCHEMA BANK_HEALTH.MARTS;
 
--- Rollback (if ever needed): GRANT OWNERSHIP ON SCHEMA BANK_HEALTH.MARTS TO ROLE ACCOUNTADMIN COPY CURRENT GRANTS;
+-- 3. Database-level future grants for the reporter role (option C).
+SHOW FUTURE GRANTS IN DATABASE BANK_HEALTH;       -- before: CI_ROLE (TABLE, VIEW) and BANK_PIPELINE_ROLE
+GRANT SELECT ON FUTURE TABLES IN DATABASE BANK_HEALTH TO ROLE BANK_REPORTER_ROLE;
+GRANT SELECT ON FUTURE VIEWS  IN DATABASE BANK_HEALTH TO ROLE BANK_REPORTER_ROLE;
+SHOW FUTURE GRANTS IN DATABASE BANK_HEALTH;       -- after: also SELECT on TABLE and VIEW for BANK_REPORTER_ROLE
+
+-- Rollback (if ever needed):
+--   GRANT OWNERSHIP ON SCHEMA BANK_HEALTH.MARTS TO ROLE ACCOUNTADMIN COPY CURRENT GRANTS;
+--   REVOKE SELECT ON FUTURE TABLES IN DATABASE BANK_HEALTH FROM ROLE BANK_REPORTER_ROLE;
+--   REVOKE SELECT ON FUTURE VIEWS  IN DATABASE BANK_HEALTH FROM ROLE BANK_REPORTER_ROLE;
