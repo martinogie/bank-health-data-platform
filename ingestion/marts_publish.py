@@ -8,8 +8,12 @@
               the schema being swapped in. Last week's marts stay in MARTS_NEXT until the next
               run (a rollback is one more swap).
 
-Grants on a schema don't survive a clone, so publish re-applies them: USAGE on the schema, SELECT
-on its tables and views, and SELECT on future tables and views, for every reader role.
+Grants on a schema don't survive a clone, so publish re-applies them: USAGE on the schema and
+SELECT on every table and view in it, for every reader role. Every mart exists by then (dbt built
+them all in MARTS_NEXT), and nothing is created in the published MARTS afterwards, so each table is
+readable the moment it is published. Schema-level FUTURE grants are not re-applied: Snowflake
+allows them only with the account-wide MANAGE GRANTS privilege, even for the schema's owner (tested
+in dev, 31 Oct 2026), and the pipeline role is not given that.
 Swapping needs ownership of both schemas: BANK_PIPELINE_ROLE owns MARTS (snowflake/marts_ownership.sql)
 and creates MARTS_NEXT itself. Pure functions over a DB-API cursor, so they are unit-tested offline.
 """
@@ -86,8 +90,6 @@ def publish_sql(database: str, readers: tuple[str, ...]) -> list[str]:
             f"GRANT USAGE ON SCHEMA {nxt} TO ROLE {r}",
             f"GRANT SELECT ON ALL TABLES IN SCHEMA {nxt} TO ROLE {r}",
             f"GRANT SELECT ON ALL VIEWS IN SCHEMA {nxt} TO ROLE {r}",
-            f"GRANT SELECT ON FUTURE TABLES IN SCHEMA {nxt} TO ROLE {r}",
-            f"GRANT SELECT ON FUTURE VIEWS IN SCHEMA {nxt} TO ROLE {r}",
         ]
     stmts.append(f"ALTER SCHEMA {db}.{PUBLISHED} SWAP WITH {nxt}")
     return stmts

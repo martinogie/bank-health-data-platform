@@ -66,10 +66,14 @@ def test_publish_grants_every_reader_before_the_swap():
             f"GRANT USAGE ON SCHEMA BANK_HEALTH.MARTS_NEXT TO ROLE {role}",
             f"GRANT SELECT ON ALL TABLES IN SCHEMA BANK_HEALTH.MARTS_NEXT TO ROLE {role}",
             f"GRANT SELECT ON ALL VIEWS IN SCHEMA BANK_HEALTH.MARTS_NEXT TO ROLE {role}",
-            f"GRANT SELECT ON FUTURE TABLES IN SCHEMA BANK_HEALTH.MARTS_NEXT TO ROLE {role}",
-            f"GRANT SELECT ON FUTURE VIEWS IN SCHEMA BANK_HEALTH.MARTS_NEXT TO ROLE {role}",
         ):
             assert cur.sql.index(grant) < cur.sql.index(swap)
+
+
+def test_publish_never_needs_manage_grants():
+    """Schema-level FUTURE grants need the account-wide MANAGE GRANTS privilege (even for the
+    schema owner), which the pipeline role doesn't have: publish must not send them."""
+    assert not any("FUTURE" in s for s in mp.publish_sql("BANK_HEALTH", mp.READERS["prod"]))
 
 
 def test_prod_readers_are_power_bi_and_ci():
