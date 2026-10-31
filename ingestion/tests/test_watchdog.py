@@ -78,7 +78,24 @@ def test_warehouse_quota_is_named_in_the_alert(monkeypatch, sent):
         ),
     )
     assert watchdog.main(NOON_PAST) == 2
-    assert sent[0][0].endswith("(the CI warehouse's monthly credit cap is used up)")
+    assert sent[0][0].endswith("(Snowflake credit cap reached: BANK_DEV_WH_MONITOR)")
+
+
+def test_the_account_cap_says_prod_is_stopped_too(monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_WAREHOUSE", "BANK_OPS_WH")
+    seen = []
+    monkeypatch.setattr(watchdog, "notify", lambda title, lines=None, env=None: seen.append((title, lines)))
+    use(
+        monkeypatch,
+        error=RuntimeError(
+            "090073 (22000): Warehouse 'BANK_OPS_WH' cannot be resumed because resource monitor "
+            "'ACCOUNT_MONTHLY_CAP' has exceeded its quota."
+        ),
+    )
+    assert watchdog.main(NOON_PAST) == 2
+    ((title, lines),) = seen
+    assert title.endswith("(Snowflake credit cap reached: ACCOUNT_MONTHLY_CAP)")
+    assert "BANK_OPS_WH could not start" in lines[1] and "prod is stopped too" in lines[1]
 
 
 def test_cannot_check_alerts_without_leaking_secrets(monkeypatch, sent, capsys):

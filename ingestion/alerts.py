@@ -46,6 +46,18 @@ _QUOTA_RE = re.compile(
     re.I,
 )
 QUOTA_LINE = "Databricks Free Edition daily quota reached"
+QUOTA_RUNBOOK = "docs/runbooks/quota_errors.md#databricks-free-edition-daily-quota"
+
+# Snowflake stops a warehouse whose resource monitor has used its credit quota, e.g.
+#   090073 (22000): Warehouse 'BANK_DEV_WH' cannot be resumed because resource monitor
+#   'BANK_DEV_WH_MONITOR' has exceeded its quota.
+# It contains the word "quota" too, so it is recognised first and never called a Databricks stop.
+_SNOWFLAKE_MONITOR_RE = re.compile(
+    r"\b090073\b|resource monitor\s+'?(?P<monitor>[\w$]+)'?\s+has exceeded its quota", re.I
+)
+_MONITOR_NAME_RE = re.compile(r"resource monitor\s+'?(?P<monitor>[\w$]+)'?", re.I)
+SNOWFLAKE_CAP_LINE = "Snowflake credit cap reached"
+SNOWFLAKE_CAP_RUNBOOK = "docs/runbooks/quota_errors.md#snowflake-credit-cap-reached"
 
 
 def mask(text: Any, secrets: list[str] | None = None) -> str:
@@ -61,8 +73,27 @@ def _webhook_urls() -> list[str]:
     return [os.environ.get(var, "").strip() for var in CHANNELS.values()]
 
 
+def snowflake_monitor_name(text: Any) -> str | None:
+    """The resource monitor named in a Snowflake credit-cap error ('?' if unnamed), else None."""
+    text = str(text or "")
+    if not _SNOWFLAKE_MONITOR_RE.search(text):
+        return None
+    m = _MONITOR_NAME_RE.search(text)
+    return m.group("monitor") if m else "?"
+
+
 def is_databricks_quota_error(text: Any) -> bool:
-    return bool(_QUOTA_RE.search(str(text or "")))
+    return snowflake_monitor_name(text) is None and bool(_QUOTA_RE.search(str(text or "")))
+
+
+def quota_reason(text: Any) -> tuple[str, str] | None:
+    """(label, runbook section) when an error is a credit or compute cap, else None."""
+    monitor = snowflake_monitor_name(text)
+    if monitor is not None:
+        return f"{SNOWFLAKE_CAP_LINE} ({monitor})", SNOWFLAKE_CAP_RUNBOOK
+    if is_databricks_quota_error(text):
+        return QUOTA_LINE, QUOTA_RUNBOOK
+    return None
 
 
 def first_lines(text: Any, n: int = ERROR_LINES, width: int = 300) -> str:
@@ -144,8 +175,9 @@ def failure_lines(
         f"Failed task: {task_id} (try {try_number or '?'} of {total_tries or '?'})",
         f"Started: {started}",
     ]
-    if is_databricks_quota_error(error):
-        lines.append(f"{QUOTA_LINE}. See docs/runbooks/quota_errors.md.")
+    reason = quota_reason(error)
+    if reason:
+        lines.append(f"{reason[0]}. See {reason[1]}.")
     lines.append("Error:\n" + (first_lines(error) or "(no message)"))
     lines.append(f"Log: {task_log_url(dag_id, run_id, task_id, try_number)}")
     return lines
@@ -173,8 +205,9 @@ def task_failure_callback(context: Mapping[str, Any]) -> None:
         retries = getattr(task, "retries", None)
         error = f"{type(exc).__name__}: {exc}" if exc is not None else "(no exception in context)"
         title = f"FAILED: {dag_id} / {task_id}"
-        if is_databricks_quota_error(error):
-            title = f"FAILED: {dag_id} / {task_id}: {QUOTA_LINE}"
+        reason = quota_reason(error)
+        if reason:
+            title = f"{title}: {reason[0]}"
         notify(
             title,
             failure_lines(
