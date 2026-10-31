@@ -125,7 +125,10 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert tasks["download_fdic"]["upstream"] == ["check_environment"]
     assert tasks["download_cfpb"]["upstream"] == ["check_environment"]
     assert tasks["sync_databricks_job"]["upstream"] == ["check_environment"]
-    assert tasks["upload_raw"]["upstream"] == ["download_cfpb", "download_fdic"]
+    # data contracts are checked before anything is uploaded (no retries: a broken contract stays broken)
+    assert tasks["check_contracts"]["upstream"] == ["download_cfpb", "download_fdic"]
+    assert tasks["check_contracts"]["retries"] == 0 and tasks["check_contracts"]["has_doc_md"]
+    assert tasks["upload_raw"]["upstream"] == ["check_contracts", "download_cfpb", "download_fdic"]
     # watermarks only move after the upload succeeded
     assert "upload_raw" in tasks["save_watermarks"]["upstream"]
     assert {"save_watermarks", "sync_databricks_job", "decide_retrain"} <= set(

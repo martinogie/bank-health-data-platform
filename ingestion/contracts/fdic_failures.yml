@@ -1,0 +1,41 @@
+# Data contract: FDIC BankFind `failures` (full list, all fields, JSON Lines).
+# Levels: see fdic_financials.yml. Fields silver doesn't use are `info`.
+source: fdic_failures
+format: jsonl
+null_tokens: [""]   # the FDIC returns some empty text values as "" instead of null
+row_id: ID
+fields:
+  ID: {type: str, level: key}
+  NAME: {type: str, level: key}
+  FAILDATE: {type: str, level: key, pattern: '^\d{1,2}/\d{1,2}/\d{4}$'}
+  CITY: {type: str, level: measure}
+  PSTALP: {type: str, level: measure}
+  RESTYPE: {type: str, level: measure, codes: [FAILURE, ASSISTANCE]}
+  RESTYPE1: {type: str, level: measure, codes: [PA, A/A, PO, IDT, P&A, PI, MGR, ABT, OBAM, DINB, REP]}
+  CHCLASS1: {type: str, level: measure, codes: [NM, SL, N, SB, SM, SI, MI]}
+  CERT: {type: int, level: nullable, usual_null_rate: 0.12}   # null for pre-FDIC-era records
+  QBFASSET: {type: number, level: nullable, usual_null_rate: 0.04}
+  QBFDEP: {type: number, level: nullable, usual_null_rate: 0.01}
+  COST: {type: number, level: nullable, usual_null_rate: 0.16}
+  BIDNAME: {type: str, level: nullable, usual_null_rate: 0.01}
+  # not used by silver
+  BANKNO: {type: str, level: info}
+  BIDCITY: {type: str, level: info}
+  BIDSTATE: {type: str, level: info}
+  BRDATE: {type: str, level: info}
+  BSTATUS: {type: str, level: info}
+  CHCLASS: {type: str, level: info}
+  CITYST: {type: str, level: info}
+  CLOSCD: {type: str, level: info}
+  COMMENTS: {type: str, level: info}
+  COSTMOSTRECENTASOF: {type: str, level: info}
+  FAILYR: {type: str, level: info}
+  FIN: {type: str, level: info}
+  FSL_PROG: {type: str, level: info}
+  FUND: {type: str, level: info}
+  PTRDATE: {type: str, level: info}
+  RESDATE: {type: str, level: info}
+  SAVR: {type: str, level: info}
+  TERMI: {type: str, level: info}
+  UNINSDEP: {type: str, level: info}
+  URL: {type: str, level: info}

@@ -38,3 +38,19 @@ vars:
   #   26028 The Bank of East Asia Ltd., NY: class NC, IBA 0, both capital ratios 0 in all 53
   #         quarters it reports (2013 Q2 to 2026 Q2). Reviewed 2026-10-25.
   foreign_office_overrides: [26028]
+  # CFPB products the marts know. Any other product (CFPB renames one now and then) becomes
+  # 'Unmapped' in staging, with the original text in product_original, so no complaint is ever
+  # dropped; the warn test assert_no_unmapped_cfpb_products reports how many. Same list as
+  # ingestion/contracts/cfpb_complaints.yml (a unit test keeps the two equal).
+  cfpb_known_products:
+    - Credit reporting or other personal consumer reports
+    - Debt collection
+    - Checking or savings account
+    - Credit card
+    - Money transfer, virtual currency, or money service
+    - Mortgage
+    - Vehicle loan or lease
+    - Student loan
+    - Payday loan, title loan, personal loan, or advance loan
+    - Prepaid card
+    - Debt or credit management
