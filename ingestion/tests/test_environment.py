@@ -299,6 +299,11 @@ def test_dev_uploads_notebooks_and_never_touches_a_git_folder():
     assert not any(m == "PATCH" or "/repos" in url for m, url, _ in session.calls)
     imports = [kw["json"]["path"] for m, url, kw in session.calls if url.endswith("/workspace/import")]
     assert f"{root}/databricks/notebooks/05_score" in imports
+    # sub-folders keep their layout (dev test notebooks in tools/ use %run ../_common)
+    assert f"{root}/databricks/notebooks/tools/test_silver_merge" in imports
+    folders = [kw["json"]["path"] for m, url, kw in session.calls if url.endswith("/workspace/mkdirs")]
+    assert f"{root}/databricks/notebooks/tools" in folders
+    assert not any("__pycache__" in p for p in imports)
 
 
 def test_upload_never_overwrites_the_prod_git_folder():

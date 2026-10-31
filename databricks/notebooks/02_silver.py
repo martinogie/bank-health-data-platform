@@ -10,8 +10,16 @@
 # MAGIC | `company_bank_map` | CFPB company | CFPB company name → FDIC `cert` (entity resolution) |
 # MAGIC | `cfpb_complaints` | complaint | types, blanks → NULL, newest load wins, matched `cert` added |
 # MAGIC
-# MAGIC Silver tables are rebuilt in full each run (small enough on serverless), so they always
-# MAGIC reflect everything in bronze. Data-quality results go to `silver.dq_results`.
+# MAGIC **How each table is loaded (D-02).**
+# MAGIC - `fdic_financials` and `cfpb_complaints`: **incremental**. Only bronze rows ingested since the
+# MAGIC   last load are read; a Delta MERGE on the key (`cert, report_date` / `complaint_id`) inserts
+# MAGIC   new keys and updates amended ones (`_silver_merge`). Re-running with nothing new changes nothing.
+# MAGIC - `fdic_institutions`, `fdic_failures`, `company_bank_map`: rebuilt in full each run (small
+# MAGIC   snapshots). When the map changes, only the affected complaints get a new `cert`.
+# MAGIC - `silver_mode=full` rebuilds everything from all of bronze (also done automatically when a
+# MAGIC   table is missing or its columns changed). Both modes give identical tables.
+# MAGIC
+# MAGIC Data-quality results go to `silver.dq_results`.
 
 # COMMAND ----------
 
@@ -19,13 +27,54 @@
 
 # COMMAND ----------
 
+# MAGIC %run ./_silver_merge
+
+# COMMAND ----------
+
 NOTEBOOK = "02_silver"
+
+dbutils.widgets.text("silver_mode", "incremental", "incremental, or full (rebuild from all of bronze)")
+# Dev checks only: write a full rebuild into another schema to compare it with the incremental tables.
+dbutils.widgets.text("silver_schema", "silver", "Target schema (dev comparisons only)")
+SILVER_MODE = dbutils.widgets.get("silver_mode").strip().lower() or "incremental"
+if SILVER_MODE not in SILVER_MODES:
+    raise ValueError(f"silver_mode must be one of {SILVER_MODES}, not {SILVER_MODE!r}")
+SILVER_SCHEMA = dbutils.widgets.get("silver_schema").strip() or "silver"
+if SILVER_SCHEMA != "silver" and IS_PROD:
+    raise ValueError("silver_schema can only be changed in dev")
+OUT = f"{CATALOG}.{SILVER_SCHEMA}"
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {OUT}")
+LOADS = {}  # per table: how it was loaded, rows inserted/updated
+print(f"silver_mode={SILVER_MODE}, writing {OUT}")
 
 
 def save(df, table):
-    df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{SILVER}.{table}")
-    n = spark.table(f"{SILVER}.{table}").count()
-    print(f"{SILVER}.{table}: {n} rows")
+    df.write.mode("overwrite").option("overwriteSchema", "true").saveAsTable(f"{OUT}.{table}")
+    n = spark.table(f"{OUT}.{table}").count()
+    print(f"{OUT}.{table}: {n} rows")
+    return n
+
+
+def load_incrementally(table, bronze_df, bronze_keys, project, silver_keys, keep_on_update=()):
+    """Full rebuild or MERGE, as the module docs describe. `project` turns bronze rows into silver
+    columns. Returns the silver row count."""
+    target = f"{OUT}.{table}"
+    reason = (
+        "silver_mode=full"
+        if SILVER_MODE == "full"
+        else schema_difference(target, project(bronze_df.limit(0)))
+    )
+    order = ["_ingested_at", "_file_modified_at"]
+    if reason:
+        print(f"{target}: full rebuild ({reason})")
+        n = save(project(latest_per_key(bronze_df, bronze_keys, order)), table)
+        LOADS[table] = {"mode": "full", "reason": reason, "rows": n}
+        return n
+    batch = project(latest_per_key(newer_than(bronze_df, target), bronze_keys, order))
+    stats = merge_newest(target, batch, silver_keys, keep_on_update)
+    n = spark.table(target).count()
+    print(f"{target}: incremental, {stats['inserted']} inserted, {stats['updated']} updated, {n} rows")
+    LOADS[table] = {"mode": "incremental", **stats, "rows": n}
     return n
 
 
@@ -69,18 +118,25 @@ FINANCIAL_COLUMNS = {
 }
 
 fin_bronze = spark.table(f"{BRONZE}.fdic_financials")
-fin = latest_per_key(fin_bronze, ["cert", "repdte"], ["_ingested_at", "_file_modified_at"]).select(
-    F.col("cert").cast("int").alias("cert"),
-    F.to_date("repdte", "yyyyMMdd").alias("report_date"),
-    *[F.col(src).cast("double").alias(dst) for src, dst in FINANCIAL_COLUMNS.items()],
-    # Reporting flags (0/1). CBLRIND is NULL before 2020, when the CBLR framework did not exist.
-    F.col("cblrind").cast("int").alias("cblr_indicator"),
-    F.col("iba").cast("int").alias("iba_flag"),
-    "_source_file",
-    "_ingested_at",
+
+
+def project_financials(df):
+    return df.select(
+        F.col("cert").cast("int").alias("cert"),
+        F.to_date("repdte", "yyyyMMdd").alias("report_date"),
+        *[F.col(src).cast("double").alias(dst) for src, dst in FINANCIAL_COLUMNS.items()],
+        # Reporting flags (0/1). CBLRIND is NULL before 2020, when the CBLR framework did not exist.
+        F.col("cblrind").cast("int").alias("cblr_indicator"),
+        F.col("iba").cast("int").alias("iba_flag"),
+        "_source_file",
+        "_ingested_at",
+    )
+
+
+n_fin = load_incrementally(
+    "fdic_financials", fin_bronze, ["cert", "repdte"], project_financials, ["cert", "report_date"]
 )
-n_fin = save(fin, "fdic_financials")
-fin = spark.table(f"{SILVER}.fdic_financials")
+fin = spark.table(f"{OUT}.fdic_financials")
 
 T = "silver.fdic_financials"
 dq_check(T, "row_count > 0", int(n_fin == 0))
@@ -153,8 +209,8 @@ inst = latest_per_key(
     "_source_file",
     "_ingested_at",
 )
-save(inst, "fdic_institutions")
-inst = spark.table(f"{SILVER}.fdic_institutions")
+LOADS["fdic_institutions"] = {"mode": "full", "reason": "snapshot", "rows": save(inst, "fdic_institutions")}
+inst = spark.table(f"{OUT}.fdic_institutions")
 
 T = "silver.fdic_institutions"
 dq_not_null(inst, T, ["cert", "bank_name"])
@@ -197,8 +253,8 @@ fail = latest_per_key(
     "_source_file",
     "_ingested_at",
 )
-save(fail, "fdic_failures")
-fail = spark.table(f"{SILVER}.fdic_failures")
+LOADS["fdic_failures"] = {"mode": "full", "reason": "snapshot", "rows": save(fail, "fdic_failures")}
+fail = spark.table(f"{OUT}.fdic_failures")
 
 T = "silver.fdic_failures"
 dq_not_null(fail, T, ["failure_id", "fail_date"])
@@ -217,29 +273,45 @@ display(fail.orderBy(F.col("fail_date").desc()).limit(5))
 
 # COMMAND ----------
 
-comp = latest_per_key(
-    spark.table(f"{BRONZE}.cfpb_complaints"), ["complaint_id"], ["_ingested_at", "_file_modified_at"]
-).select(
-    F.col("complaint_id").cast("bigint").alias("complaint_id"),
-    F.to_date(F.to_timestamp("date_received")).alias("date_received"),
-    F.to_date(F.to_timestamp("date_sent_to_company")).alias("date_sent_to_company"),
-    clean_str("company").alias("company"),
-    clean_str("product").alias("product"),
-    clean_str("sub_product").alias("sub_product"),
-    clean_str("issue").alias("issue"),
-    clean_str("sub_issue").alias("sub_issue"),
-    clean_str("company_response_to_consumer").alias("company_response"),
-    clean_str("company_public_response").alias("company_public_response"),
-    F.when(F.col("timely_response") == "Yes", True)
-    .when(F.col("timely_response") == "No", False)
-    .alias("timely_response"),
-    clean_str("submitted_via").alias("submitted_via"),
-    clean_str("state").alias("state_code"),
-    clean_str("zip_code").alias("zip_code"),
-    clean_str("tags").alias("tags"),
-    "_source_file",
-    "_ingested_at",
+
+def project_complaints(df):
+    # Column order as before (company first). cert and match_method start empty and are set from
+    # company_bank_map below, for new complaints and for any whose company's match changed.
+    return df.select(
+        clean_str("company").alias("company"),
+        F.col("complaint_id").cast("bigint").alias("complaint_id"),
+        F.to_date(F.to_timestamp("date_received")).alias("date_received"),
+        F.to_date(F.to_timestamp("date_sent_to_company")).alias("date_sent_to_company"),
+        clean_str("product").alias("product"),
+        clean_str("sub_product").alias("sub_product"),
+        clean_str("issue").alias("issue"),
+        clean_str("sub_issue").alias("sub_issue"),
+        clean_str("company_response_to_consumer").alias("company_response"),
+        clean_str("company_public_response").alias("company_public_response"),
+        F.when(F.col("timely_response") == "Yes", True)
+        .when(F.col("timely_response") == "No", False)
+        .alias("timely_response"),
+        clean_str("submitted_via").alias("submitted_via"),
+        clean_str("state").alias("state_code"),
+        clean_str("zip_code").alias("zip_code"),
+        clean_str("tags").alias("tags"),
+        "_source_file",
+        "_ingested_at",
+        F.lit(None).cast("int").alias("cert"),
+        F.lit(None).cast("string").alias("match_method"),
+    )
+
+
+comp_bronze = spark.table(f"{BRONZE}.cfpb_complaints")
+load_incrementally(
+    "cfpb_complaints",
+    comp_bronze,
+    ["complaint_id"],
+    project_complaints,
+    ["complaint_id"],
+    keep_on_update=("cert", "match_method"),  # an amended complaint keeps its match until rematch
 )
+comp = spark.table(f"{OUT}.cfpb_complaints")  # every complaint; the map below is built from all of them
 
 # COMMAND ----------
 
@@ -333,8 +405,12 @@ company_map = (
         "company", "company_key", "cert", "matched_bank_name", "match_method", "override_note", "complaints"
     )
 )
-save(company_map, "company_bank_map")
-company_map = spark.table(f"{SILVER}.company_bank_map")
+LOADS["company_bank_map"] = {
+    "mode": "full",
+    "reason": "small; built from all complaints",
+    "rows": save(company_map, "company_bank_map"),
+}
+company_map = spark.table(f"{OUT}.company_bank_map")
 
 T = "silver.company_bank_map"
 dq_unique(company_map, T, ["company"])
@@ -359,9 +435,11 @@ display(company_map.orderBy(F.col("complaints").desc()).limit(40))
 
 # COMMAND ----------
 
-comp = comp.join(company_map.select("company", "cert", "match_method"), "company", "left")
-n_comp = save(comp, "cfpb_complaints")
-comp = spark.table(f"{SILVER}.cfpb_complaints")
+# Matches for new complaints, and for old ones whose company's match changed; others untouched.
+LOADS["cfpb_complaints"]["rematched"] = rematch(f"{OUT}.cfpb_complaints", company_map)
+comp = spark.table(f"{OUT}.cfpb_complaints")
+n_comp = comp.count()
+print(f"{OUT}.cfpb_complaints: {LOADS['cfpb_complaints']['rematched']} complaints (re)matched, {n_comp} rows")
 
 T = "silver.cfpb_complaints"
 dq_not_null(comp, T, ["complaint_id", "date_received", "company"])
@@ -391,7 +469,7 @@ dq_summary = dq_finish()
 matched = comp.filter("cert is not null").count()
 summary = {
     "rows": {
-        t: spark.table(f"{SILVER}.{t}").count()
+        t: spark.table(f"{OUT}.{t}").count()
         for t in (
             "fdic_financials",
             "fdic_institutions",
@@ -402,6 +480,8 @@ summary = {
     },
     "complaints_matched_to_bank_pct": round(100 * matched / n_comp, 1) if n_comp else None,
     "companies_matched": company_map.filter("cert is not null").count(),
+    "silver_mode": SILVER_MODE,
+    "loads": LOADS,  # per table: full or incremental, rows inserted/updated/rematched
     "data_quality": dq_summary,
 }
 print(json.dumps(summary, indent=2))

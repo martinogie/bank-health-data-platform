@@ -103,18 +103,21 @@ def upload_notebooks(api: DatabricksAPI, folder: str, notebook_dir: Path = NOTEB
     workspace folder). Returns the folder root. Refuses prod's Git folder."""
     if folder == SETTINGS["prod"].databricks_folder:
         raise ProdWriteRefused(f"refusing to upload notebooks over the prod Git folder {folder}")
-    files = sorted(Path(notebook_dir).glob("*.py"))
+    # the notebooks and their sub-folders (tools/, e.g. dev test notebooks), keeping the layout
+    files = sorted(p for p in Path(notebook_dir).rglob("*.py") if "__pycache__" not in p.parts)
     if not files:
         raise FileNotFoundError(f"no notebooks in {notebook_dir}")
     root = f"/Users/{_me(api)}/{folder}"
     target = f"{root}/databricks/notebooks"
-    api.call("POST", "/api/2.0/workspace/mkdirs", json={"path": target})
+    folders = sorted({f.relative_to(notebook_dir).parent.as_posix() for f in files} - {"."})
+    for sub in [""] + folders:
+        api.call("POST", "/api/2.0/workspace/mkdirs", json={"path": f"{target}/{sub}".rstrip("/")})
     for f in files:
         api.call(
             "POST",
             "/api/2.0/workspace/import",
             json={
-                "path": f"{target}/{f.stem}",
+                "path": f"{target}/{f.relative_to(notebook_dir).with_suffix('').as_posix()}",
                 "format": "SOURCE",
                 "language": "PYTHON",
                 "overwrite": True,
