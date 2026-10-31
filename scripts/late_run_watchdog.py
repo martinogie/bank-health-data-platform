@@ -11,6 +11,7 @@ tell), 1 = late (alert sent), 2 = couldn't check (alert sent).
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from ingestion import slo  # noqa: E402
-from ingestion.alerts import mask, notify  # noqa: E402
+from ingestion.alerts import mask, notify, snowflake_monitor_name  # noqa: E402
 
 TABLE = "BANK_HEALTH.OPS.PIPELINE_RUNS"
 
@@ -39,12 +40,19 @@ def main(now: datetime | None = None) -> int:
         print(f"could not check: {problem}")
         title = "WATCHDOG: could not check this week's run"
         hint = "Check Snowflake and the CI service user; see docs/runbooks/alerts.md."
-        if "resource monitor" in problem.lower() or "cannot be resumed" in problem.lower():
-            title += " (the CI warehouse's monthly credit cap is used up)"
+        monitor = snowflake_monitor_name(problem)
+        if monitor is not None or "cannot be resumed" in problem.lower():
+            monitor = monitor or "?"
+            warehouse = os.environ.get("SNOWFLAKE_WAREHOUSE", "?")
+            title += f" (Snowflake credit cap reached: {monitor})"
             hint = (
-                "BANK_DEV_WH could not start: its resource monitor quota is reached. The prod run may "
-                "be fine; check it in Airflow. Raise the dev cap or wait for its monthly reset "
-                "(docs/runbooks/alerts.md, Watchdog)."
+                f"{warehouse} could not start: resource monitor {monitor} has used its credits. "
+                + (
+                    "That is the account cap, so prod is stopped too: check Airflow now. "
+                    if monitor == "ACCOUNT_MONTHLY_CAP"
+                    else "The prod run may be fine; check it in Airflow. "
+                )
+                + "See docs/runbooks/quota_errors.md#snowflake-credit-cap-reached."
             )
         notify(title, [problem, hint], env="prod watchdog")
         return 2

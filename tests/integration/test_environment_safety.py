@@ -98,6 +98,12 @@ def test_cannot_switch_to_the_prod_pipeline_role(session):
     _refused(cur, "use role BANK_PIPELINE_ROLE")
 
 
+def test_cannot_use_the_watchdog_warehouse(session):
+    """BANK_OPS_WH is only for the watchdog's own role: dev and CI work can't get around the dev cap."""
+    _, cur = session
+    _refused(cur, "use warehouse BANK_OPS_WH")
+
+
 def test_cannot_write_the_manifest_stage(session):
     _, cur = session
     _refused(cur, "remove @BANK_HEALTH.RAW.DBT_ARTIFACTS/does_not_exist.json")
