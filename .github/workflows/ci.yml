@@ -1,21 +1,25 @@
-# CI for every push and pull request. Nothing here deploys or writes prod: the only cloud
-# access is dbt slim CI, as SVC_BANK_CI / CI_ROLE (read-only on BANK_HEALTH, builds only in a
-# temporary BANK_HEALTH_DEV.CI_<run_id> schema that is dropped at the end).
+# CI runs once per change: on pull requests, and on pushes to main (after a merge; the deploy
+# workflow waits for that run). A branch push without a pull request doesn't run CI, so a PR's
+# checks no longer run twice and dbt slim CI no longer spends dev credits twice.
+# Nothing here deploys or writes prod: the only cloud access is dbt slim CI, as SVC_BANK_CI /
+# CI_ROLE (read-only on BANK_HEALTH, builds only in a temporary BANK_HEALTH_DEV.CI_<run_id>
+# schema that is dropped at the end).
 #
 # Required checks on main (branch protection): lint, types, unit, dag-import,
-# docker (linux/amd64), docker (linux/arm64), secrets, dbt-slim-ci.
+# docker (linux/amd64), docker (linux/arm64), secrets, dbt-slim-ci. They are matched by job
+# name, so the pull_request run reports them.
 name: CI
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
-# A newer run on the same branch (and event) cancels the older one. Push and pull_request runs
-# are kept apart so one doesn't cancel the other.
+# A newer run on the same branch (and event) cancels the older one. The push run on main and
+# the pull_request runs are kept apart so one doesn't cancel the other.
 concurrency:
   group: ci-${{ github.event_name }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true

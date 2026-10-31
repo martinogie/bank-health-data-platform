@@ -149,6 +149,55 @@ def test_other_errors_are_not_quota_errors(text):
     assert not alerts.is_databricks_quota_error(text)
 
 
+# The exact error from the dev run of 30 Oct 2026 (load_snowflake), which was mislabelled as a
+# Databricks quota stop because it contains the word "quota".
+SNOWFLAKE_CAP_ERROR = (
+    "ProgrammingError: 090073 (22000): Warehouse 'BANK_DEV_WH' cannot be resumed because resource "
+    "monitor 'BANK_DEV_WH_MONITOR' has exceeded its quota."
+)
+
+
+def test_a_snowflake_credit_cap_is_its_own_case_naming_the_monitor():
+    assert alerts.snowflake_monitor_name(SNOWFLAKE_CAP_ERROR) == "BANK_DEV_WH_MONITOR"
+    assert not alerts.is_databricks_quota_error(SNOWFLAKE_CAP_ERROR)
+    assert alerts.quota_reason(SNOWFLAKE_CAP_ERROR) == (
+        "Snowflake credit cap reached (BANK_DEV_WH_MONITOR)",
+        "docs/runbooks/quota_errors.md#snowflake-credit-cap-reached",
+    )
+    # the error code alone is enough (wording can change)
+    assert alerts.snowflake_monitor_name("090073 (22000): warehouse stopped") == "?"
+
+
+def test_a_databricks_quota_stop_keeps_its_label():
+    assert alerts.quota_reason("RESOURCE_EXHAUSTED: Free Edition quota") == (
+        "Databricks Free Edition daily quota reached",
+        "docs/runbooks/quota_errors.md#databricks-free-edition-daily-quota",
+    )
+    assert alerts.snowflake_monitor_name("RESOURCE_EXHAUSTED: Free Edition quota") is None
+    assert alerts.quota_reason("Snowflake: table not found") is None
+
+
+def test_a_snowflake_cap_alert_says_snowflake_in_title_and_body(webhooks, monkeypatch):
+    sent = []
+    monkeypatch.setattr(alerts, "notify", lambda title, lines=None, **k: sent.append((title, lines)))
+
+    class ProgrammingError(Exception):
+        pass
+
+    ti = types.SimpleNamespace(dag_id="bank_health_weekly", run_id="manual__x", task_id="load_snowflake")
+    alerts.task_failure_callback(
+        {"ti": ti, "exception": ProgrammingError(SNOWFLAKE_CAP_ERROR.split(": ", 1)[1])}
+    )
+    ((title, lines),) = sent
+    assert (
+        title
+        == "FAILED: bank_health_weekly / load_snowflake: Snowflake credit cap reached (BANK_DEV_WH_MONITOR)"
+    )
+    body = "\n".join(lines)
+    assert "See docs/runbooks/quota_errors.md#snowflake-credit-cap-reached." in body
+    assert "Databricks" not in body
+
+
 def test_failure_message_has_everything_needed(monkeypatch):
     monkeypatch.setenv("AIRFLOW_UI_URL", "http://localhost:8080")
     lines = alerts.failure_lines(
