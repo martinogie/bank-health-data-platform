@@ -38,7 +38,7 @@ def run_notebook(db: dj.DatabricksAPI, repo_path: str, notebook: str, params: di
             "environments": ENVIRONMENTS,  # same serverless environment as the scheduled job
             "tasks": [
                 {
-                    "task_key": notebook,
+                    "task_key": notebook.replace("/", "__"),  # task keys allow only letters, digits, - and _
                     "environment_key": "pinned",
                     "notebook_task": {
                         "notebook_path": f"{repo_path}/databricks/notebooks/{notebook}",
