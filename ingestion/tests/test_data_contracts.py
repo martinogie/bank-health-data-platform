@@ -238,11 +238,20 @@ def test_enforce_mode_stops_the_run_and_warn_mode_does_not(tmp_path, capsys):
     summary = dc.enforce([bad], "warn")
     assert summary["errors"] == 1 and summary["would_fail"]
     assert "WOULD FAIL" in capsys.readouterr().out
-    assert dc.summary_line(summary).startswith("Data contracts (warn): ") and "would fail" in dc.summary_line(
-        summary
+    # the success message quotes the first would-fail finding itself, not just a count
+    assert dc.summary_line(summary) == (
+        "Data contracts (warn): 1 would fail in enforce mode, first: financials_20260630.jsonl.gz: "
+        "fdic_financials.NIMY is null in all 150 rows (retired at the source?)"
     )
     with pytest.raises(ValueError, match="CONTRACTS_MODE"):
         dc.enforce([bad], "off")
+
+
+def test_the_success_message_quotes_long_findings_shortly():
+    long = "x" * 1000
+    line = dc.summary_line({"mode": "warn", "would_fail": [long], "warnings": [long], "warning_count": 1})
+    assert line.count("…") == 2 and len(line) < 2 * dc.QUOTE_CHARS + 120
+    assert line.index("would fail") < line.index("warning(s)")  # the would-fail finding comes first
 
 
 def test_a_clean_run_has_no_summary_line(tmp_path):
@@ -266,3 +275,123 @@ def test_the_observed_schema_is_saved_and_diffed_with_the_last_one(tmp_path):
     assert "field added: NEWFIELD" in diff2 and "ROA: types ['float'] -> ['str']" in diff2
     saved = json.loads(path1.read_text(encoding="utf-8"))
     assert saved["rows"] == 150 and saved["fields"]["ASSET"]["types"] == {"int": 150}
+
+
+# --------------------------------------------------------------------------- warn mode is fail-open
+# In warn mode an exception inside the checker itself must become a warning and never fail
+# check_contracts (which would block the upload and the whole run). Each test breaks the checker
+# in a different place. In enforce mode the same breakage stops the run: a file that couldn't be
+# checked isn't let through.
+
+
+def run(tmp_path, paths, mode):
+    return dc.run_checks(paths, mode, tmp_path / "_schemas", "20261102T110000")
+
+
+def test_warn_mode_survives_an_unreadable_file(tmp_path):
+    good = write_financials(tmp_path, clean_financials())
+    bad = tmp_path / "fdic" / "institutions" / "institutions_2026-11-02.jsonl.gz"
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"this is not gzip")
+    summary = run(tmp_path, [good, bad], "warn")
+    assert summary["files"] == 1 and summary["errors"] == 0
+    assert any("contract checker error (institutions_2026-11-02.jsonl.gz)" in w for w in summary["warnings"])
+    assert len(summary["schema_files"]) == 1  # the good file was still checked and recorded
+    with pytest.raises(dc.ContractViolation, match="could not be checked"):
+        run(tmp_path, [good, bad], "enforce")
+
+
+def test_warn_mode_survives_a_broken_contract_or_missing_library(tmp_path, monkeypatch):
+    path = write_financials(tmp_path, clean_financials())
+
+    def broken(source, contract_dir=dc.CONTRACT_DIR):
+        raise ModuleNotFoundError("No module named 'yaml'")
+
+    monkeypatch.setattr(dc, "load_contract", broken)
+    summary = run(tmp_path, [path], "warn")
+    assert summary["warning_count"] == 1 and "ModuleNotFoundError" in summary["warnings"][0]
+    assert summary["schema_files"] == []
+    with pytest.raises(dc.ContractViolation):
+        run(tmp_path, [path], "enforce")
+
+
+def test_warn_mode_survives_a_failure_saving_the_schema(tmp_path, monkeypatch):
+    path = write_financials(tmp_path, clean_financials())
+
+    def disk_full(*a, **k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(dc, "save_schema", disk_full)
+    summary = run(tmp_path, [path], "warn")
+    assert summary["files"] == 1 and any("saving the schema" in w for w in summary["warnings"])
+    # the schema history is a record, never a reason to stop, in either mode
+    assert run(tmp_path, [path], "enforce")["errors"] == 0
+
+
+def test_warn_mode_survives_a_bug_anywhere_in_the_run(tmp_path, monkeypatch):
+    path = write_financials(tmp_path, clean_financials())
+
+    def bug(results, mode):
+        raise KeyError("oops")
+
+    monkeypatch.setattr(dc, "enforce", bug)
+    summary = run(tmp_path, [path], "warn")
+    assert summary["errors"] == 0 and "contract checker error (run): KeyError" in summary["warnings"][0]
+    assert summary["schema_files"]  # still returned, so upload_raw gets its list
+    with pytest.raises(dc.ContractViolation):
+        run(tmp_path, [path], "enforce")
+
+
+def test_warn_mode_never_raises_even_a_contract_violation(tmp_path, monkeypatch):
+    path = write_financials(tmp_path, clean_financials())
+
+    def raises_violation(results, mode):
+        raise dc.ContractViolation("raised by mistake")
+
+    monkeypatch.setattr(dc, "enforce", raises_violation)
+    summary = run(tmp_path, [path], "warn")
+    assert "ContractViolation" in summary["warnings"][0]
+
+
+def test_a_broken_contract_in_warn_mode_is_reported_not_raised(tmp_path):
+    path = write_financials(tmp_path, [fin_row(1000 + i, NIMY=None) for i in range(150)])
+    summary = run(tmp_path, [path], "warn")
+    assert summary["errors"] == 1 and summary["would_fail"]
+    with pytest.raises(dc.ContractViolation, match="NIMY is null in all"):
+        run(tmp_path, [path], "enforce")
+
+
+def test_an_unknown_mode_runs_as_warn_with_a_warning(tmp_path):
+    path = write_financials(tmp_path, [fin_row(1000 + i, NIMY=None) for i in range(150)])
+    summary = run(tmp_path, [path], "enforse")  # a typo must not stop a run, nor go unnoticed
+    assert summary["mode"] == "warn" and "CONTRACTS_MODE='enforse'" in summary["warnings"][0]
+
+
+def test_files_without_a_contract_are_skipped(tmp_path):
+    other = tmp_path / "_schemas" / "fdic_financials" / "x.json"
+    other.parent.mkdir(parents=True)
+    other.write_text("{}")
+    assert run(tmp_path, [other], "enforce")["files"] == 0
+
+
+def test_the_module_imports_nothing_outside_the_standard_library():
+    """Importing data_contracts can't fail (e.g. PyYAML missing): the import is in load_contract."""
+    import ast
+
+    tree = ast.parse(open(dc.__file__, encoding="utf-8").read())
+    top = [n for n in tree.body if isinstance(n, ast.Import | ast.ImportFrom)]
+    names = {
+        (n.module or "").split(".")[0] if isinstance(n, ast.ImportFrom) else n.names[0].name for n in top
+    }
+    assert names <= {
+        "__future__",
+        "csv",
+        "gzip",
+        "json",
+        "re",
+        "collections",
+        "dataclasses",
+        "datetime",
+        "pathlib",
+        "typing",
+    }

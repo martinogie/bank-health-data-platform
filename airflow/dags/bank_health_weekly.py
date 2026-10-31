@@ -329,29 +329,24 @@ def bank_health_weekly():
         doc_md="Check each freshly downloaded file against its data contract (ingestion/contracts/*.yml) "
         "before anything reaches bronze, and save each file's observed schema under data/raw/_schemas. "
         "CONTRACTS_MODE=enforce fails the run (with an alert naming the field) on a breaking change; "
-        "warn mode reports what would fail and carries on. Warnings go in the success message.",
+        "warn mode reports what would fail and carries on, and is fail-open: an error inside the "
+        "checker itself is a warning, never a failure. Warnings go in the success message.",
     )
     def check_contracts(fdic_result: dict, cfpb_result: dict) -> dict:
         from airflow.sdk.exceptions import AirflowFailException
 
-        from ingestion import data_contracts as dc
+        from ingestion import data_contracts as dc  # stdlib-only at import, so this can't fail
 
-        mode = os.environ.get("CONTRACTS_MODE", "enforce").strip().lower()
-        stamp = pendulum.now("UTC").strftime("%Y%m%dT%H%M%S")
-        results, schema_files = [], []
-        for path in (Path(p) for p in fdic_result["fresh"] + cfpb_result["fresh"]):
-            if dc.source_for(path) is None:
-                continue
-            res = dc.check_file(path)
-            results.append(res)
-            saved, diff = dc.save_schema(res, RAW_DIR / "_schemas", stamp)
-            schema_files.append(str(saved))
-            print(f"schema {res.source} {res.file}: " + "; ".join(diff[:10]))
+        # warn mode is fail-open: run_checks never raises in it, even if the checker itself breaks
         try:
-            summary = dc.enforce(results, mode)
-        except dc.ContractViolation as exc:
+            return dc.run_checks(
+                fdic_result["fresh"] + cfpb_result["fresh"],
+                os.environ.get("CONTRACTS_MODE", "enforce"),
+                RAW_DIR / "_schemas",
+                pendulum.now("UTC").strftime("%Y%m%dT%H%M%S"),
+            )
+        except dc.ContractViolation as exc:  # enforce mode only
             raise AirflowFailException(str(exc)) from None
-        return {**summary, "schema_files": schema_files}
 
     @task(doc_md="Upload fresh files to the Databricks Volume; reused files only if the Volume lacks them.")
     def upload_raw(fdic_result: dict, cfpb_result: dict, contracts: dict) -> dict:

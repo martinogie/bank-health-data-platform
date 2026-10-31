@@ -27,7 +27,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
+# No third-party import at module level: importing this module must never fail, so that warn
+# mode can stay fail-open (PyYAML is imported in load_contract).
 
 CONTRACT_DIR = Path(__file__).with_name("contracts")
 LEVELS = ("key", "measure", "nullable", "info")
@@ -86,6 +87,8 @@ class Result:
 
 # --------------------------------------------------------------------------- contracts
 def load_contract(source: str, contract_dir: Path = CONTRACT_DIR) -> Contract:
+    import yaml  # here, not at module level: see the note at the top
+
     spec = yaml.safe_load((contract_dir / f"{source}.yml").read_text(encoding="utf-8"))
     fields = {}
     for name, f in spec["fields"].items():
@@ -382,13 +385,88 @@ def enforce(results: list[Result], mode: str) -> dict[str, Any]:
     return summary
 
 
+def _checker_error(where: str, exc: BaseException) -> str:
+    return f"contract checker error ({where}): {type(exc).__name__}: {str(exc)[:300]}; not checked"
+
+
+def run_checks(paths: Iterable[Path], mode: str, schema_dir: Path, run_stamp: str) -> dict[str, Any]:
+    """The check_contracts task: check each file that has a contract, save its schema, decide.
+
+    warn mode is FAIL-OPEN: an exception inside the checker itself (an unreadable file, a broken
+    contract, a missing library, a full disk, a bug) is reported as a warning and never raises, so
+    the run carries on as if no checker existed. Only enforce mode can stop a run: a broken
+    contract raises ContractViolation, and so does a checker error, because a file that couldn't
+    be checked can't be let through. An unknown mode counts as warn, with a warning.
+    Always returns 'schema_files' (the schema files saved, for upload)."""
+    checker_warnings: list[str] = []
+    schema_files: list[str] = []
+    mode = (mode or "").strip().lower()
+    if mode not in MODES:
+        checker_warnings.append(f"CONTRACTS_MODE={mode!r} is not one of {MODES}; running as warn")
+        mode = "warn"
+    try:
+        results: list[Result] = []
+        for path in (Path(p) for p in paths):
+            try:
+                if source_for(path) is None:
+                    continue
+                res = check_file(path)
+            except Exception as exc:
+                msg = _checker_error(path.name, exc)
+                if mode == "enforce":
+                    raise ContractViolation(f"data contract could not be checked: {msg}") from exc
+                checker_warnings.append(msg)
+                continue
+            results.append(res)
+            try:
+                saved, diff = save_schema(res, schema_dir, run_stamp)
+                schema_files.append(str(saved))
+                print(f"schema {res.source} {res.file}: " + "; ".join(diff[:10]))
+            except Exception as exc:  # the schema history is a record, never a reason to stop
+                checker_warnings.append(_checker_error(f"saving the schema of {path.name}", exc))
+        summary = enforce(results, mode)
+    except Exception as exc:
+        if mode == "enforce":
+            if isinstance(exc, ContractViolation):
+                raise
+            raise ContractViolation(
+                f"data contract could not be checked: {_checker_error('run', exc)}"
+            ) from exc
+        checker_warnings.append(_checker_error("run", exc))
+        summary = {
+            "mode": mode,
+            "files": 0,
+            "errors": 0,
+            "warnings": [],
+            "warning_count": 0,
+            "would_fail": [],
+        }
+    for w in checker_warnings:
+        print("WARN " + w)
+    summary["warnings"] = (checker_warnings + summary["warnings"])[:50]
+    summary["warning_count"] += len(checker_warnings)
+    summary["schema_files"] = schema_files
+    return summary
+
+
+QUOTE_CHARS = 300  # how much of a finding the success message quotes
+
+
+def _quote(text: str) -> str:
+    return text if len(text) <= QUOTE_CHARS else text[: QUOTE_CHARS - 1] + "…"
+
+
 def summary_line(summary: dict[str, Any] | None) -> str:
-    """One line for the success message ('' when there is nothing to say)."""
+    """One line for the success message ('' when there is nothing to say). In warn mode the first
+    would-fail finding is quoted, so the message alone shows what enforce mode would have stopped;
+    the task log and its XCom have all of them."""
     if not summary:
         return ""
     parts = []
-    if summary.get("warning_count"):
-        parts.append(f"{summary['warning_count']} warning(s), first: {summary['warnings'][0]}")
     if summary.get("would_fail"):
-        parts.append(f"{len(summary['would_fail'])} would fail in enforce mode")
+        parts.append(
+            f"{len(summary['would_fail'])} would fail in enforce mode, first: {_quote(summary['would_fail'][0])}"
+        )
+    if summary.get("warning_count"):
+        parts.append(f"{summary['warning_count']} warning(s), first: {_quote(summary['warnings'][0])}")
     return f"Data contracts ({summary['mode']}): " + "; ".join(parts) if parts else ""

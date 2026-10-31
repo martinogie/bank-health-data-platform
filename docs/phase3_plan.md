@@ -133,6 +133,8 @@ announced first. Databricks Free Edition has a daily quota: at most 2 dev pipeli
   rescoring with v5, and 2001–2019 is marked in-sample.
 - `OPS.MODEL_MONITORING` in prod and dev from a script Martins reviews and runs; alerts through
   the Phase 2 alerts; a monitoring block in the health data.
+- Also (agreed 31 Oct 2026): data-contract results in `OPS.PIPELINE_RUNS` (warning and would-fail
+  counts per run, from `check_contracts`), in the same SQL script.
 - **Stops:** the SQL script; both PSI comparisons shown in dev before the alert goes on.
 
 ## PR 9: gated promotion (M-09)
