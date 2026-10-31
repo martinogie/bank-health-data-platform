@@ -1,0 +1,33 @@
+# Data contract: FDIC BankFind `institutions` (full list, JSON Lines). Levels: see fdic_financials.yml.
+source: fdic_institutions
+format: jsonl
+null_tokens: [""]   # the FDIC returns some empty text values as "" instead of null
+row_id: CERT
+fields:
+  CERT: {type: int, level: key}
+  ID: {type: str, level: key}
+  NAME: {type: str, level: key}
+  ESTYMD: {type: str, level: key, pattern: '^\d{2}/\d{2}/\d{4}$'}
+  INSDATE: {type: str, level: key, pattern: '^\d{2}/\d{2}/\d{4}$'}
+  ENDEFYMD: {type: str, level: key, pattern: '^\d{2}/\d{2}/\d{4}$'}
+  CITY: {type: str, level: measure}
+  STALP: {type: str, level: measure}
+  STNAME: {type: str, level: measure}
+  ZIP: {type: str, level: measure}
+  CHARTER: {type: str, level: measure}
+  FED_RSSD: {type: str, level: measure}
+  ACTIVE: {type: int, level: measure, codes: [0, 1]}
+  INACTIVE: {type: int, level: measure, codes: [0, 1]}
+  REGAGNT: {type: str, level: measure, codes: [FDIC, OCC, OTS, FED, STATE]}
+  BKCLASS: {type: str, level: nullable, usual_null_rate: 0.001, codes: [N, NM, SM, SB, SL, SI, NC, OI, NS]}
+  # null for closed banks
+  ASSET: {type: int, level: nullable, usual_null_rate: 0.15}
+  DEP: {type: int, level: nullable, usual_null_rate: 0.15}
+  REPDTE: {type: str, level: nullable, usual_null_rate: 0.15}
+  SPECGRP: {type: int, level: nullable, usual_null_rate: 0.15, codes: [1, 2, 3, 4, 5, 6, 7, 8, 9]}
+  SPECGRPN: {type: str, level: nullable, usual_null_rate: 0.15}
+  NAMEHCR: {type: str, level: nullable, usual_null_rate: 0.39}
+  RSSDHCR: {type: str, level: nullable, usual_null_rate: 0.39}
+  CHANGEC1: {type: int, level: nullable, usual_null_rate: 0.13}
+  OFFICES: {type: int, level: nullable, usual_null_rate: 0.85}
+  WEBADDR: {type: str, level: nullable, usual_null_rate: 0.86}

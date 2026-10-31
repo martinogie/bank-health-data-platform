@@ -9,7 +9,16 @@ select
     company,
     cast(cert as integer)                 as cert,
     match_method,
-    product,
+    -- a product the marts don't know (or a missing one) becomes 'Unmapped', never dropped
+    case
+        when product in (
+            {%- for p in var('cfpb_known_products') %}
+            '{{ p | replace("'", "''") }}'{{ "," if not loop.last }}
+            {%- endfor %}
+        ) then product
+        else 'Unmapped'
+    end                                   as product,
+    product                               as product_original,
     sub_product,
     issue,
     sub_issue,

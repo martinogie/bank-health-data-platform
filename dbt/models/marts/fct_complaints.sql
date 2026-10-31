@@ -10,6 +10,7 @@ select
     match_method,
     cert is not null                                            as is_matched_bank,
     product,
+    product_original,
     sub_product,
     issue,
     sub_issue,

@@ -1,0 +1,46 @@
+# Data contract: CFPB complaints (one CSV per date window). Levels: see fdic_financials.yml.
+# Every CSV value is text, so types are all `str`; formats are checked with patterns. CFPB writes
+# the word "None" for an empty value, so "None" and "" both count as null.
+source: cfpb_complaints
+format: csv
+row_id: Complaint ID
+null_tokens: ["", "None"]
+fields:
+  Complaint ID: {type: str, level: key, pattern: '^\d+$'}
+  Date received: {type: str, level: key, pattern: '^\d{4}-\d{2}-\d{2}T'}
+  Company: {type: str, level: key}
+  Date sent to company: {type: str, level: measure, pattern: '^\d{4}-\d{2}-\d{2}T'}
+  Issue: {type: str, level: measure}
+  # A new product only warns: staging maps it to "Unmapped" and a dbt test reports the count.
+  Product:
+    type: str
+    level: measure
+    codes:
+      - Credit reporting or other personal consumer reports
+      - Debt collection
+      - Checking or savings account
+      - Credit card
+      - Money transfer, virtual currency, or money service
+      - Mortgage
+      - Vehicle loan or lease
+      - Student loan
+      - Payday loan, title loan, personal loan, or advance loan
+      - Prepaid card
+      - Debt or credit management
+  Submitted via: {type: str, level: measure, codes: [Web, Phone, Referral, Postal mail]}
+  Company response to consumer:
+    type: str
+    level: measure
+    codes:
+      - Closed with explanation
+      - Closed with non-monetary relief
+      - Closed with monetary relief
+      - In progress
+      - Untimely response
+  Timely response?: {type: str, level: measure, codes: ["Yes", "No"]}
+  Tags: {type: str, level: nullable, usual_null_rate: 0.93, codes: [Servicemember, Older American, "Older American, Servicemember"]}
+  Sub-product: {type: str, level: nullable, usual_null_rate: 0.01}
+  Sub-issue: {type: str, level: nullable, usual_null_rate: 0.60}
+  Company public response: {type: str, level: nullable, usual_null_rate: 0.86}
+  State: {type: str, level: nullable, usual_null_rate: 0.03}
+  ZIP code: {type: str, level: nullable, usual_null_rate: 0.03}

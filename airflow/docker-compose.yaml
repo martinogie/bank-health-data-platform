@@ -39,6 +39,9 @@ x-airflow-common:
     BANK_HEALTH_ENV: prod
     # Base of the Airflow UI links in alerts (through the SSH tunnel on the VM). Not a secret.
     AIRFLOW_UI_URL: ${AIRFLOW_UI_URL:-http://localhost:8080}
+    # Data contracts (ingestion/contracts/): warn = report what would fail; enforce = stop the run.
+    # Prod starts in warn for one clean run, then this line changes to enforce (Phase 3, PR 2).
+    CONTRACTS_MODE: warn
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__PARALLELISM: 4
     # Low-memory settings for a PC where Docker gets ~4 GB
