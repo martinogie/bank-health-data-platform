@@ -83,3 +83,14 @@ warnings are surfaced: stored failures with row keys, the audit table, and the h
 
 1. The classes are approved as above: 92 critical, 4 warn.
 2. The publishing gap is closed in Phase 3, PR 4, with write, audit, publish.
+
+## Added in Phase 3
+
+| Test | Class | Why | PR |
+|---|---|---|---|
+| `assert_no_unmapped_cfpb_products` | warn | a new CFPB product name is real; its complaints stay in the marts as `Unmapped`, and the count is reported | PR 2 |
+| `assert_audit_gate` | critical | fault injection for write, audit, publish: passes unless a dev check sets `audit_fail_for_test`, to show a failing test stops the publish; the pipeline never sets it | PR 4 |
+
+So 93 critical and 5 warn. With write, audit, publish (PR 4), a critical failure on a mart no
+longer replaces the published mart: the marts are built and tested in `MARTS_NEXT` and swapped in
+only after every test passed (docs/runbooks/marts_publish.md).

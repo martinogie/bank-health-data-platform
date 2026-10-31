@@ -20,7 +20,9 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
 | `sanity_check_top20` | fails if the 20 riskiest scored banks include a new bank, a foreign-bank office or a 0% capital ratio | read-only |
-| `dbt_build` | Cosmos: one task per dbt model with its tests, plus source freshness | dbt rebuilds models |
+| `prepare_marts` | write, audit, publish: clone MARTS into MARTS_NEXT; `full_refresh=true` rebuilds the incremental marts | MARTS_NEXT is recreated; MARTS untouched |
+| `dbt_build` | Cosmos: one task per dbt model with its tests, plus source freshness. Marts are built in MARTS_NEXT; `fct_bank_quarter` and `fct_complaints` merge only new or changed rows | dbt rebuilds models; incremental merges are idempotent |
+| `publish_marts` | only if every model and critical test passed: grant the readers on MARTS_NEXT, then swap it with MARTS | a re-run after a swap would swap back: clear `prepare_marts` and downstream instead |
 | `dbt_docs_generate` | dbt docs site (for GitHub Pages) | regenerates files |
 | `publish_dbt_manifest` | prod only: upload `manifest.json` to `@BANK_HEALTH.RAW.DBT_ARTIFACTS` for dbt slim CI | overwrites the file |
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
@@ -231,7 +233,14 @@ def _record_run() -> dict:
         "retry_delay": timedelta(minutes=5),
         "on_failure_callback": task_failure_callback,  # alert once, after the last retry
     },
-    params={"retrain_model": Param(False, type="boolean", description="Retrain and re-register the model")},
+    params={
+        "retrain_model": Param(False, type="boolean", description="Retrain and re-register the model"),
+        "full_refresh": Param(
+            False,
+            type="boolean",
+            description="Rebuild the incremental marts in full (fct_bank_quarter, fct_complaints)",
+        ),
+    },
     doc_md=__doc__,
     tags=["bank-health", ENV.name, "fdic", "cfpb", "databricks", "snowflake", "dbt"],
 )
@@ -450,9 +459,49 @@ def bank_health_weekly():
             should_detach_multiple_parents_tests=True,
         ),
         # AIRFLOW_RUN_ID tags every dbt result in OPS.DBT_RESULTS (macros/record_dbt_results.sql).
-        operator_args={"install_deps": False, "env": {"AIRFLOW_RUN_ID": "{{ run_id }}"}, "append_env": True},
+        # marts_schema: write, audit, publish. The marts are built and tested in MARTS_NEXT (a clone
+        # made by prepare_marts); publish_marts swaps it in only if every critical test passed.
+        operator_args={
+            "install_deps": False,
+            "env": {"AIRFLOW_RUN_ID": "{{ run_id }}"},
+            "append_env": True,
+            "vars": {"marts_schema": "MARTS_NEXT"},
+        },
         default_args={"retries": 1, "on_failure_callback": task_failure_callback},
     )
+
+    @task(
+        retries=1,
+        doc_md="Write, audit, publish, step 1: clone MARTS into MARTS_NEXT (zero-copy) for dbt to build "
+        "and test in. With full_refresh=true, or for an incremental mart that has no _ROW_HASH yet, "
+        "that mart is dropped from the clone so dbt rebuilds it in full. The published MARTS is not "
+        "touched. Safe to re-run: MARTS_NEXT is recreated.",
+    )
+    def prepare_marts() -> dict:
+        from airflow.sdk import get_current_context
+
+        from ingestion import marts_publish
+
+        full = bool(get_current_context()["params"].get("full_refresh", False))
+        with _snowflake_cursor() as cur:
+            out = marts_publish.prepare(cur, ENV.snowflake_database, full_refresh=full)
+        print(out)
+        return out
+
+    @task(
+        retries=1,
+        doc_md="Write, audit, publish, step 3: runs only if every dbt model and critical test passed. "
+        "Grants the readers (prod: BANK_REPORTER_ROLE for Power BI, CI_ROLE for slim CI) on MARTS_NEXT, "
+        "then swaps it with MARTS in one step, so readers never lose access. Last week's marts stay in "
+        "MARTS_NEXT until the next run (rollback: swap again; docs/runbooks/marts_publish.md).",
+    )
+    def publish_marts() -> dict:
+        from ingestion import marts_publish
+
+        with _snowflake_cursor() as cur:
+            out = marts_publish.publish(cur, ENV.snowflake_database, marts_publish.READERS[ENV.name])
+        print(out)
+        return out
 
     dbt_docs_generate = BashOperator(
         task_id="dbt_docs_generate",
@@ -612,7 +661,10 @@ def bank_health_weekly():
     env_checked >> [fdic_result, cfpb_result, job]
     [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
-    run_databricks_job >> loaded >> sanity_check_top20() >> dbt_build >> dbt_docs_generate
+    # write, audit, publish: build and test in MARTS_NEXT, swap in only after every test passed;
+    # docs (and the manifest slim CI defers to) are generated after the swap, against MARTS
+    run_databricks_job >> loaded >> sanity_check_top20() >> prepare_marts() >> dbt_build
+    dbt_build >> publish_marts() >> dbt_docs_generate
     manifest = publish_dbt_manifest()
     dbt_docs_generate >> manifest
     metrics = collect_metrics()

@@ -147,6 +147,13 @@ def test_dag_tasks_retries_docs_and_order(dag_facts):
     assert all(t["has_failure_alert"] for t in tasks.values()), "every task must alert on failure"
     # prod-only publish of the dbt manifest for slim CI, after the docs (full manifest) are built
     assert tasks["publish_dbt_manifest"]["upstream"] == ["dbt_docs_generate"]
+    # write, audit, publish: clone after the top-20 check; swap only after the whole dbt group;
+    # docs (and the manifest) after the swap, so they name MARTS, not MARTS_NEXT
+    assert tasks["prepare_marts"]["upstream"] == ["sanity_check_top20"]
+    assert tasks["prepare_marts"]["has_doc_md"] and tasks["publish_marts"]["has_doc_md"]
+    assert tasks["publish_marts"]["trigger_rule"] in ("all_success", "TriggerRule.ALL_SUCCESS")
+    assert tasks["dbt_docs_generate"]["upstream"] == ["publish_marts"]
+    assert all(u.startswith("dbt_build.") for u in tasks["publish_marts"]["upstream"])
 
 
 def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
@@ -155,6 +162,6 @@ def test_cosmos_renders_dbt_models_as_tasks(dag_facts):
     for model in ("stg_fdic__financials", "fct_bank_quarter", "mart_early_warning"):
         assert any(model in t for t in dbt_tasks), f"no Cosmos task for {model}"
     assert all(tasks[t]["retries"] == 1 for t in dbt_tasks)
-    assert any(
-        t.endswith("sanity_check_top20") for t in (u for t in dbt_tasks for u in tasks[t]["upstream"])
-    ), "dbt group must run after the top-20 check"
+    assert any(t.endswith("prepare_marts") for t in (u for t in dbt_tasks for u in tasks[t]["upstream"])), (
+        "dbt group must run after prepare_marts (which runs after the top-20 check)"
+    )
