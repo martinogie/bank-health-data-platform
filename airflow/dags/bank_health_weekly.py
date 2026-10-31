@@ -12,7 +12,8 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `check_environment` | logs the environment; checks the Snowflake session is in that environment's database; in prod, stops unless this machine is the one named in `OPS.PROD_SCHEDULER` (one scheduler only) | read-only |
 | `download_fdic` | new FDIC quarters (last 2 re-pulled for amendments), institutions, failures | fixed file names; complete quarters already on disk are reused |
 | `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded | complete months already on disk are reused |
-| `upload_raw` | fresh files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
+| `check_contracts` | each fresh file against its data contract (`ingestion/contracts/`) before anything reaches bronze; saves the observed schema. `CONTRACTS_MODE=enforce` fails the run on a breaking change; `warn` only reports | read-only on the data; schema files are new each run |
+| `upload_raw` | fresh files and their schema files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
 | `save_watermarks` | remember how far we got (after the upload succeeded) | writes the same values again |
 | `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true | pure decision |
 | `sync_databricks_job` | prod: pull the Git folder to main; dev: upload this checkout's notebooks. Create/update the job | both idempotent |
@@ -204,7 +205,11 @@ def _record_run() -> dict:
         f"recorded {dag_run.run_id}: {state}, failed {failed or 'none'}; final credits filled for {backfilled} run(s)"
     )
     if state == "success":
-        notify(*run_log.success_message(row))
+        from ingestion.data_contracts import summary_line
+
+        title, lines = run_log.success_message(row)
+        contract_line = summary_line(ti.xcom_pull(task_ids="check_contracts"))
+        notify(title, lines + [contract_line] if contract_line else lines)
     if state == "failed":
         # record_run is the run's last task and succeeds after failures (all_done), which would
         # make Airflow show the whole run as a success. Fail it, so the run is red in Airflow;
@@ -319,12 +324,42 @@ def bank_health_weekly():
             "watermark": (today - timedelta(days=1)).isoformat(),
         }
 
+    @task(
+        retries=0,  # a broken contract won't fix itself on a retry
+        doc_md="Check each freshly downloaded file against its data contract (ingestion/contracts/*.yml) "
+        "before anything reaches bronze, and save each file's observed schema under data/raw/_schemas. "
+        "CONTRACTS_MODE=enforce fails the run (with an alert naming the field) on a breaking change; "
+        "warn mode reports what would fail and carries on. Warnings go in the success message.",
+    )
+    def check_contracts(fdic_result: dict, cfpb_result: dict) -> dict:
+        from airflow.sdk.exceptions import AirflowFailException
+
+        from ingestion import data_contracts as dc
+
+        mode = os.environ.get("CONTRACTS_MODE", "enforce").strip().lower()
+        stamp = pendulum.now("UTC").strftime("%Y%m%dT%H%M%S")
+        results, schema_files = [], []
+        for path in (Path(p) for p in fdic_result["fresh"] + cfpb_result["fresh"]):
+            if dc.source_for(path) is None:
+                continue
+            res = dc.check_file(path)
+            results.append(res)
+            saved, diff = dc.save_schema(res, RAW_DIR / "_schemas", stamp)
+            schema_files.append(str(saved))
+            print(f"schema {res.source} {res.file}: " + "; ".join(diff[:10]))
+        try:
+            summary = dc.enforce(results, mode)
+        except dc.ContractViolation as exc:
+            raise AirflowFailException(str(exc)) from None
+        return {**summary, "schema_files": schema_files}
+
     @task(doc_md="Upload fresh files to the Databricks Volume; reused files only if the Volume lacks them.")
-    def upload_raw(fdic_result: dict, cfpb_result: dict) -> dict:
+    def upload_raw(fdic_result: dict, cfpb_result: dict, contracts: dict) -> dict:
         from ingestion.databricks_files import DatabricksFiles
 
         dbx = DatabricksFiles.from_env()
-        fresh = [Path(p) for p in fdic_result["fresh"] + cfpb_result["fresh"]]
+        # the schema files go to _schemas/ in the Volume, outside the folders Auto Loader reads
+        fresh = [Path(p) for p in fdic_result["fresh"] + cfpb_result["fresh"] + contracts["schema_files"]]
         cached = [Path(p) for p in fdic_result["cached"] + cfpb_result["cached"]]
         uploaded = dbx.upload_files(fresh, RAW_DIR)
         backfilled = dbx.upload_if_missing(cached, RAW_DIR)
@@ -574,7 +609,8 @@ def bank_health_weekly():
     env_checked = check_environment()
     fdic_result = download_fdic()
     cfpb_result = download_cfpb()
-    uploads = upload_raw(fdic_result, cfpb_result)
+    contracts = check_contracts(fdic_result, cfpb_result)
+    uploads = upload_raw(fdic_result, cfpb_result, contracts)
     watermarks = save_watermarks(fdic_result, cfpb_result, uploads)
     retrain = decide_retrain(fdic_result)
     job = sync_databricks_job()

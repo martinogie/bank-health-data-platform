@@ -1,0 +1,52 @@
+# Data contract: FDIC BankFind `financials` (one file per quarter, JSON Lines).
+# Checked on each new download before it goes to bronze (ingestion/data_contracts.py).
+#
+# Levels:  key      any null fails the run
+#          measure  nulls warn (naming up to 20 rows); more than 0.5% of rows null fails
+#          nullable nulls are normal; warns if the null rate jumps (over 2x usual and +5 points)
+#          info     not used downstream; missing only warns
+# Any field except `info` that is missing, or entirely null in a file of 100+ rows, fails the
+# run: the FDIC returns a retired field as all nulls, not as a missing field.
+# Types: int, number (int or decimal), str. usual_null_rate = the worst rate seen in 2000-2026.
+source: fdic_financials
+format: jsonl
+null_tokens: [""]   # the FDIC returns some empty text values as "" instead of null
+row_id: CERT
+fields:
+  CERT: {type: int, level: key}
+  REPDTE: {type: str, level: key, pattern: '^\d{8}$'}   # also must equal the quarter requested
+  ID: {type: str, level: key}
+  # size and balance sheet ($ thousands)
+  ASSET: {type: int, level: measure}
+  DEP: {type: int, level: measure}
+  DEPDOM: {type: int, level: measure}
+  LNLSNET: {type: int, level: measure}
+  LNLSGR: {type: int, level: measure}
+  LNRE: {type: int, level: measure}
+  LNCI: {type: int, level: measure}
+  LNRECONS: {type: int, level: measure}
+  LNREMULT: {type: int, level: measure}
+  LNRENRES: {type: int, level: measure}
+  LNRERES: {type: int, level: measure}
+  NAASSET: {type: int, level: measure}
+  P9ASSET: {type: int, level: measure}
+  BRO: {type: int, level: nullable, usual_null_rate: 0.004}
+  EQ: {type: int, level: nullable, usual_null_rate: 0.004}
+  ORE: {type: int, level: nullable, usual_null_rate: 0.004}
+  NETINC: {type: int, level: nullable, usual_null_rate: 0.004}
+  ELNATR: {type: int, level: nullable, usual_null_rate: 0.004}
+  LNCON: {type: int, level: nullable, usual_null_rate: 0.004}
+  LNAG: {type: int, level: nullable, usual_null_rate: 0.109}
+  P3ASSET: {type: int, level: nullable, usual_null_rate: 0.004, empty_before: 2001-03-31}
+  # ratios (%)
+  ROA: {type: number, level: measure}
+  ROE: {type: number, level: nullable, usual_null_rate: 0.008}
+  NIMY: {type: number, level: measure}
+  EEFFR: {type: number, level: measure}
+  NCLNLSR: {type: number, level: measure}
+  NTLNLSR: {type: number, level: measure}
+  RBC1AAJ: {type: number, level: measure}
+  RBCRWAJ: {type: number, level: measure}   # 0 (not null) for CBLR banks; handled in silver
+  # reporting framework flags
+  IBA: {type: int, level: measure, codes: [0, 1]}
+  CBLRIND: {type: int, level: nullable, usual_null_rate: 0.004, codes: [0, 1], empty_before: 2020-03-31}

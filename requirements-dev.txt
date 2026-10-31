@@ -12,3 +12,4 @@ pytest-cov>=7.1.0
 # label/feature tests run _features.py on local Spark (needs Java 8/11/17). Stays on 3.5.x to
 # match Databricks serverless environment 2; see .github/dependabot.yml.
 pyspark==3.5.9
+PyYAML>=6.0

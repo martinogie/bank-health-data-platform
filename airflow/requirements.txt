@@ -9,3 +9,4 @@ astronomer-cosmos==1.15.1
 pandas
 pyarrow
 requests
+PyYAML  # data contracts (ingestion/contracts/*.yml); version pinned by the Airflow constraints
