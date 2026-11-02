@@ -11,7 +11,7 @@ r"""Snapshots for the D-02 acceptance runs: take one after a pipeline run, then 
   --snowflake-only skips Databricks. --marts-schema MARTS_FULLCHECK reads the marts from another
   schema (e.g. a full-refresh build to compare with the incremental MARTS).
 Snapshots are saved in data/acceptance/<name>.json (git-ignored). `compare` exits 1 if any table
-differs (bronze on distinct keys only; ingestion/checksums.py).
+differs (bronze on distinct keys only; ingestion/checksums.py); `--only SNOWFLAKE.MARTS` limits it.
 """
 
 from __future__ import annotations
@@ -83,12 +83,15 @@ def take(name: str, snowflake_only: bool, marts_schema: str | None) -> None:
     print(f"saved {path} ({len(snap['tables'])} tables)")
 
 
-def compare(a_name: str, b_name: str) -> int:
+def compare(a_name: str, b_name: str, only: str | None = None) -> int:
     a, b = (json.loads((OUT / f"{n}.json").read_text(encoding="utf-8")) for n in (a_name, b_name))
-    print(f"{a_name} ({a['taken_at']}) vs {b_name} ({b['taken_at']})")
-    for line in checksums.summary_lines(a["tables"], b["tables"]):
+    ta, tb = a["tables"], b["tables"]
+    if only:  # e.g. SNOWFLAKE.MARTS: compare just those tables
+        ta, tb = ({k: v for k, v in t.items() if k.startswith(only)} for t in (ta, tb))
+    print(f"{a_name} ({a['taken_at']}, {a['marts_schema']}) vs {b_name} ({b['taken_at']}, {b['marts_schema']})")
+    for line in checksums.summary_lines(ta, tb):
         print(" ", line)
-    diff = checksums.differences(a["tables"], b["tables"])
+    diff = checksums.differences(ta, tb)
     print("IDENTICAL" if not diff else f"DIFFERENT: {len(diff)} table(s)")
     return 1 if diff else 0
 
@@ -103,11 +106,12 @@ def main() -> int:
     c = sub.add_parser("compare")
     c.add_argument("a")
     c.add_argument("b")
+    c.add_argument("--only", help="compare only tables starting with this, e.g. SNOWFLAKE.MARTS")
     args = parser.parse_args()
     if args.cmd == "take":
         take(args.name, args.snowflake_only, args.marts_schema)
         return 0
-    return compare(args.a, args.b)
+    return compare(args.a, args.b, args.only)
 
 
 if __name__ == "__main__":
