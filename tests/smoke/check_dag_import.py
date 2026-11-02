@@ -92,6 +92,7 @@ def main() -> int:
         for needed in (
             "check_environment", "publish_dbt_manifest", "export_watchlist",
             "collect_metrics", "check_freshness", "check_volumes", "record_run",
+            "check_contracts", "prepare_marts", "publish_marts",
         ):  # fmt: skip
             if needed not in r["tasks"]:
                 problems.append(f"{env}: task {needed} missing")

@@ -95,3 +95,31 @@ def test_command_line_exit_codes(monkeypatch, tmp_path, capsys, content, code):
         assert out.out.strip().endswith("manifest.json")
     else:
         assert "no manifest.json" in out.err
+
+
+def _node(schema):
+    return {"schema": schema, "relation_name": f"BANK_HEALTH.{schema}.FCT_BANK_QUARTER"}
+
+
+def test_a_manifest_pointing_at_the_published_marts_is_accepted(tmp_path):
+    path = tmp_path / "manifest.json"
+    path.write_text(
+        json.dumps({**MANIFEST, "nodes": {"model.fct": _node("MARTS"), "model.stg": _node("STAGING")}})
+    )
+    assert dbt_manifest.check_manifest(path)["nodes"] == 2
+
+
+@pytest.mark.parametrize(
+    "node",
+    [
+        _node("MARTS_NEXT"),
+        {"schema": "marts_next"},
+        {"relation_name": '"BANK_HEALTH"."MARTS_NEXT"."FCT_COMPLAINTS"'},
+    ],
+)
+def test_a_manifest_pointing_at_marts_next_is_refused(tmp_path, node):
+    """After write-audit-publish, MARTS_NEXT holds last week's marts: slim CI must never defer to it."""
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps({**MANIFEST, "nodes": {"model.fct": node}}))
+    with pytest.raises(ValueError, match="MARTS_NEXT, not the published MARTS"):
+        dbt_manifest.check_manifest(path)

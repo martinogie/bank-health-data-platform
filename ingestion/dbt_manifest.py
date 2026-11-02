@@ -31,11 +31,31 @@ MANIFEST = "manifest.json"
 NOT_FOUND_EXIT_CODE = 3
 
 
+BUILD_SCHEMA = "MARTS_NEXT"  # where the pipeline builds the marts before publishing (marts_publish)
+
+
 def check_manifest(path: Path) -> dict:
-    """Read a manifest and return a short summary; raises ValueError if it isn't one."""
+    """Read a manifest and return a short summary; raises ValueError if it isn't one, or if any
+    node points at MARTS_NEXT. Slim CI defers to these relations, and MARTS_NEXT holds last week's
+    marts after a publish (and is replaced by the next run), so the manifest must name MARTS."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or "nodes" not in data or "metadata" not in data:
         raise ValueError(f"{path} is not a dbt manifest (no nodes/metadata)")
+    staged = sorted(
+        node_id
+        for node_id, node in data["nodes"].items()
+        if isinstance(node, dict)
+        and (
+            str(node.get("schema", "")).upper() == BUILD_SCHEMA
+            or f".{BUILD_SCHEMA}." in str(node.get("relation_name", "")).replace('"', "").upper()
+        )
+    )
+    if staged:
+        raise ValueError(
+            f"{path} points {len(staged)} node(s) at {BUILD_SCHEMA}, not the published MARTS "
+            f"(e.g. {staged[0]}); slim CI would defer to last week's marts. Regenerate it without "
+            "var marts_schema."
+        )
     meta = data["metadata"]
     return {
         "nodes": len(data["nodes"]),
