@@ -28,7 +28,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
 | `collect_metrics` | row counts per layer (Databricks notebook summaries, Snowflake MARTS), latest FDIC quarter | read-only |
 | `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
-| `check_volumes` | row counts vs the median of the last 4 successful runs (thresholds in `ingestion/volume_checks.py`) | read-only |
+| `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts); silver, gold, marts and scored banks vs the median of the last 4 successful runs (`ingestion/volume_checks.py`) | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 
@@ -619,9 +619,10 @@ def bank_health_weekly():
 
     @task(
         retries=0,
-        doc_md="Row counts vs the median of the last 4 successful runs in OPS.PIPELINE_RUNS. Fails (and "
-        "alerts) on a drop or jump beyond the thresholds in ingestion/volume_checks.py; passes with a note "
-        "while there are fewer than 3 earlier runs.",
+        doc_md="Rows added to bronze per source (alert if 0, under 50% or over 3x the usual; a new FDIC "
+        "quarter may add more) and silver, gold, marts and scored-bank totals vs the median of the last 4 "
+        "successful runs in OPS.PIPELINE_RUNS (ingestion/volume_checks.py). Fails and alerts on an anomaly; "
+        "passes with a note while there are fewer than 3 earlier runs.",
     )
     def check_volumes(metrics: dict) -> dict:
         from airflow.sdk import get_current_context
@@ -631,7 +632,13 @@ def bank_health_weekly():
         ctx = get_current_context()
         with _snowflake_cursor() as cur:
             history = volume_checks.fetch_history(cur, ctx["dag_run"].run_id)
-        result = volume_checks.compare(metrics["current"], history)
+        detail = (metrics.get("layers") or {}).get("detail") or {}
+        result = volume_checks.compare(
+            {**metrics["current"], "ROWS_DETAIL": detail},
+            history,
+            current_added=detail.get("bronze_added"),
+            new_quarter=volume_checks.is_new_quarter(metrics.get("latest_quarter"), history),
+        )
         ctx["ti"].xcom_push(key="volume_result", value=result)  # record_run keeps it even on failure
         print(result["note"])
         if result["anomalies"]:

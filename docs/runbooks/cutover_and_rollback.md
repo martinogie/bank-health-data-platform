@@ -133,6 +133,13 @@ VM commands run as `deploy` in `/srv/bank-health/app/airflow` (`ssh bank-health-
 three successful `HOST_ID = 'oracle-vm'` rows, on three consecutive Mondays, in
 `OPS.PIPELINE_RUNS`.
 
+- **Mon 2 Nov 2026: succeeded with a manual override, so it doesn't count as unattended.** The
+  run's data and marts were fine, but `check_volumes` failed on normal bronze growth (+5.61% vs
+  a +5% limit; the total-bronze rule was replaced by rows added per source the same day). With
+  Martins' approval, `check_volumes` was marked success with a note, and `export_watchlist` and
+  `record_run` were re-run; the anomaly is kept in the run's `VOLUME_ANOMALIES`.
+- **The three clean Mondays start on 9 Nov 2026** (9, 16 and 23 Nov).
+
 ## Rollback to the PC (within the 3 weeks)
 
 1. **(stop)** On the VM, pause both DAGs (step 1's commands). Check that no run is in progress.
@@ -151,9 +158,13 @@ The PostgreSQL mirror and pgAdmin stay on the PC. They only **read** Snowflake a
 they don't need the prod stack. After each Monday run, refresh the mirror on the PC as today:
 
 ```powershell
-cd C:\Users\marti\projects\bank-health-data-platform
-docker compose -f postgres\docker-compose.yaml up -d
-.venv\Scripts\python scripts/mirror_to_postgres.py
+cd C:\Users\marti\projects\bank-health-data-platform\postgres
+docker compose --env-file ../.env up -d          # start PostgreSQL and pgAdmin (from this folder)
+cd ..
+.venv\Scripts\python scripts/mirror_to_postgres.py --source snowflake
 ```
 
 It uses the prod `.env` on the PC, read-only; the one-scheduler guard doesn't affect it.
+`--source snowflake` mirrors only Snowflake (RAW and MARTS). Without it, the mirror also reads the
+Databricks tables through a SQL warehouse, which uses the Databricks Free Edition daily quota: run
+the full mirror only on a day when the quota isn't needed for a pipeline run.

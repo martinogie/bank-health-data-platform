@@ -121,7 +121,16 @@ used up by dev work (30 Oct 2026) also stopped the watchdog.
 
 ## Thresholds
 
-The volume thresholds and their reasons are in `ingestion/volume_checks.py` (cumulative layers:
-−0.5% / +5%; scored banks: ±3%; baseline: the median of the last 4 successful runs, needing at
-least 3). Review them after about 8 weeks of `OPS.PIPELINE_RUNS` history: if real weeks trip
-them, widen them in a pull request, with the evidence.
+The volume thresholds and their reasons are in `ingestion/volume_checks.py`:
+- **Bronze: rows added per source** (CFPB, FDIC financials, institutions, failures), against the
+  usual rows added (the median over the last 4 successful runs, needing 3). An alert when a source
+  adds nothing, under 50% of the usual (a broken or partial download), or over 3x the usual (a
+  full re-download or duplication); when a new FDIC quarter arrives, FDIC financials may add more.
+  Rows added per source are stored in `OPS.PIPELINE_RUNS.ROWS_DETAIL:bronze_added`.
+  Bronze **totals** are not checked: bronze is append-only and grows on every run by design
+  (re-downloads), which made the old total-bronze rule fire on 2 Nov 2026.
+- **Silver, gold, marts:** −0.5% / +5% against the median of the last 4 successful runs (needs 3).
+- **Scored banks:** ±3% against the same median.
+
+Review them after about 8 weeks of `OPS.PIPELINE_RUNS` history: if real weeks trip them, change
+them in a pull request, with the evidence.
