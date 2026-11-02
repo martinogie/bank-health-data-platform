@@ -70,7 +70,10 @@ def databricks_outputs(api, run_id: int | str) -> dict[str, dict]:
 
 def layer_rows(outputs: dict[str, dict]) -> dict[str, Any]:
     """Row totals per layer, data-quality warnings and the scoring model, from the summaries."""
-    bronze = {k: v.get("total_rows") for k, v in (outputs.get("bronze") or {}).items() if isinstance(v, dict)}
+    bronze_out = {k: v for k, v in (outputs.get("bronze") or {}).items() if isinstance(v, dict)}
+    bronze = {k: v.get("total_rows") for k, v in bronze_out.items()}
+    # rows this run's bronze load added per source (Auto Loader's count), for the volume check
+    bronze_added = {k: v["new_rows"] for k, v in bronze_out.items() if v.get("new_rows") is not None}
     silver = dict((outputs.get("silver") or {}).get("rows") or {})
     gold = (outputs.get("gold") or {}).get("bank_quarter_rows")
     score = outputs.get("score") or {}
@@ -87,7 +90,12 @@ def layer_rows(outputs: dict[str, dict]) -> dict[str, Any]:
         "MODEL_NAME": model["name"] if model else None,
         "MODEL_VERSION": model["version"] if model else None,
         "MODEL_ALIAS": model["alias"] if model else None,
-        "detail": {"bronze": bronze or None, "silver": silver or None, "gold": {"bank_quarter": gold}},
+        "detail": {
+            "bronze": bronze or None,
+            "bronze_added": bronze_added or None,
+            "silver": silver or None,
+            "gold": {"bank_quarter": gold},
+        },
     }
 
 

@@ -161,14 +161,120 @@ def test_freshness_names_every_problem():
 
 # ------------------------------------------------------------------ volume checks
 def hist(**kw):
-    base = {
-        "BRONZE_ROWS": 3_000_000,
-        "SILVER_ROWS": 2_800_000,
-        "GOLD_ROWS": 750_000,
-        "MARTS_ROWS": 3_500_000,
-        "SCORED_BANKS": 4250,
-    }
+    base = {"SILVER_ROWS": 2_800_000, "GOLD_ROWS": 750_000, "MARTS_ROWS": 3_500_000, "SCORED_BANKS": 4250}
     return {**base, **kw}
+
+
+# The five prod runs of 29 Oct - 2 Nov 2026 (OPS.PIPELINE_RUNS), oldest first: latest FDIC quarter,
+# silver and marts rows, and bronze totals per source as recorded in ROWS_DETAIL. The last one is
+# the scheduled run whose total-bronze check fired (+5.61% vs the median of 4) on normal growth.
+REAL_RUNS = [
+    ("2026-06-30", 2_778_000, 3_509_026, {"cfpb_complaints": 2_146_551, "fdic_failures": 24_702, "fdic_financials": 1_537_308, "fdic_institutions": 167_010}),
+    ("2026-06-30", 2_787_583, 3_518_607, {"cfpb_complaints": 2_202_964, "fdic_failures": 28_819, "fdic_financials": 1_545_974, "fdic_institutions": 194_845}),
+    ("2026-06-30", 2_787_583, 3_518_607, {"cfpb_complaints": 2_254_310, "fdic_failures": 32_936, "fdic_financials": 1_554_640, "fdic_institutions": 222_680}),
+    ("2026-06-30", 2_787_933, 3_518_957, {"cfpb_complaints": 2_303_193, "fdic_failures": 37_053, "fdic_financials": 1_563_306, "fdic_institutions": 250_515}),
+    ("2026-06-30", 2_788_226, 3_519_248, {"cfpb_complaints": 2_352_367, "fdic_failures": 41_170, "fdic_financials": 1_571_972, "fdic_institutions": 278_350}),
+]  # fmt: skip
+
+
+def run_row(quarter, silver, marts, bronze, added=None):
+    detail = {"bronze": bronze, **({"bronze_added": added} if added else {})}
+    return {
+        **hist(SILVER_ROWS=silver, GOLD_ROWS=743_802, MARTS_ROWS=marts, SCORED_BANKS=4257),
+        "ROWS_DETAIL": detail,
+        "LATEST_FDIC_QUARTER": quarter,
+    }
+
+
+def real_history(upto):
+    """The successful runs before run number `upto` (0-based), newest first, as fetch_history returns them."""
+    return [run_row(*r) for r in reversed(REAL_RUNS[:upto])][: volume_checks.BASELINE_RUNS + 1]
+
+
+def test_the_five_real_runs_replay_without_an_alert():
+    for k in range(1, len(REAL_RUNS)):
+        out = volume_checks.compare(run_row(*REAL_RUNS[k]), real_history(k))
+        assert out["anomalies"] == [], (k, out)
+    # the last run is judged against a real baseline: 3 earlier runs with rows added
+    out = volume_checks.compare(run_row(*REAL_RUNS[4]), real_history(4))
+    assert out["added"] == {
+        "cfpb_complaints": 49_174,
+        "fdic_failures": 4_117,
+        "fdic_financials": 8_666,
+        "fdic_institutions": 27_835,
+    }
+    assert out["usual_added"] == {
+        "cfpb_complaints": 51_346,
+        "fdic_financials": 8_666,
+        "fdic_institutions": 27_835,
+        "fdic_failures": 4_117,
+    }
+
+
+def next_run(**added_overrides):
+    """A sixth run after the five real ones, adding the usual rows except where overridden."""
+    added = {
+        "cfpb_complaints": 50_000,
+        "fdic_financials": 8_666,
+        "fdic_institutions": 27_835,
+        "fdic_failures": 4_117,
+    }
+    added.update(added_overrides)
+    last = REAL_RUNS[-1]
+    bronze = {k: last[3][k] + added[k] for k in added}
+    return run_row(last[0], last[1], last[2], bronze), real_history(5), added
+
+
+def test_a_broken_download_adding_nothing_alerts():
+    current, history, added = next_run(cfpb_complaints=0)
+    anomalies = volume_checks.compare(current, history, current_added=added)["anomalies"]
+    assert [a["metric"] for a in anomalies] == ["BRONZE_ADDED.cfpb_complaints"]
+    assert volume_checks.describe(anomalies[0]) == (
+        "rows added to bronze cfpb_complaints: 0 vs usual 50,260 (0x; limit 0.5x-3x of usual)"
+    )
+
+
+def test_a_partial_download_under_half_the_usual_alerts():
+    current, history, added = next_run(fdic_institutions=10_000)
+    anomalies = volume_checks.compare(current, history, current_added=added)["anomalies"]
+    assert [a["metric"] for a in anomalies] == ["BRONZE_ADDED.fdic_institutions"]
+
+
+def test_a_tenfold_re_download_alerts():
+    current, history, added = next_run(fdic_institutions=278_350)  # the whole history again
+    anomalies = volume_checks.compare(current, history, current_added=added)["anomalies"]
+    assert [a["metric"] for a in anomalies] == ["BRONZE_ADDED.fdic_institutions"]
+    assert anomalies[0]["ratio"] == 10.0
+
+
+def test_a_new_fdic_quarter_may_add_more_financials_but_nothing_else():
+    current, history, added = next_run(fdic_financials=8_666 * 4, cfpb_complaints=500_000)
+    out = volume_checks.compare(current, history, current_added=added, new_quarter=True)
+    assert [a["metric"] for a in out["anomalies"]] == ["BRONZE_ADDED.cfpb_complaints"]
+    assert "new FDIC quarter" in out["note"]
+    out = volume_checks.compare(current, history, current_added=added, new_quarter=False)
+    assert {a["metric"] for a in out["anomalies"]} == {
+        "BRONZE_ADDED.fdic_financials",
+        "BRONZE_ADDED.cfpb_complaints",
+    }
+
+
+def test_rows_added_are_worked_out_from_totals_when_not_passed():
+    current, history, _ = next_run(cfpb_complaints=0)
+    anomalies = volume_checks.compare(current, history)["anomalies"]
+    assert [a["metric"] for a in anomalies] == ["BRONZE_ADDED.cfpb_complaints"]
+
+
+def test_stored_rows_added_are_used_before_totals():
+    runs = [run_row(*r, added={"cfpb_complaints": 40_000}) for r in reversed(REAL_RUNS)]
+    assert volume_checks.usual_added(runs)["cfpb_complaints"] == 40_000
+
+
+def test_a_new_quarter_is_detected_from_the_last_successful_run():
+    history = real_history(5)
+    assert volume_checks.is_new_quarter("2026-09-30", history)
+    assert not volume_checks.is_new_quarter("2026-06-30", history)
+    assert not volume_checks.is_new_quarter(None, history)
 
 
 def test_no_baseline_with_fewer_than_three_runs():
@@ -177,8 +283,8 @@ def test_no_baseline_with_fewer_than_three_runs():
 
 
 def test_normal_growth_is_not_an_anomaly():
-    history = [hist(), hist(BRONZE_ROWS=2_990_000), hist(BRONZE_ROWS=2_980_000), hist()]
-    current = hist(BRONZE_ROWS=3_030_000, MARTS_ROWS=3_540_000, SCORED_BANKS=4240)
+    history = [hist(), hist(SILVER_ROWS=2_790_000), hist(SILVER_ROWS=2_780_000), hist()]
+    current = hist(SILVER_ROWS=2_830_000, MARTS_ROWS=3_540_000, SCORED_BANKS=4240)
     assert volume_checks.compare(current, history)["anomalies"] == []
 
 
@@ -193,17 +299,29 @@ def test_drops_and_jumps_are_flagged_with_their_limits():
     )
 
 
+def test_bronze_totals_are_no_longer_compared():
+    assert "BRONZE_ROWS" not in volume_checks.RULES
+
+
 def test_baseline_is_a_median_so_one_odd_week_doesnt_move_it():
     history = [hist(), hist(), hist(), hist(GOLD_ROWS=10)]
     assert volume_checks.baseline(history)["GOLD_ROWS"] == 750_000
 
 
 def test_history_query_excludes_this_run_and_failed_runs():
-    cur = FakeCursor({"PIPELINE_RUNS": [(1, 2, 3, 4, 5)]})
+    detail = json.dumps({"bronze": {"cfpb_complaints": 1}})
+    cur = FakeCursor({"PIPELINE_RUNS": [(1, 2, 3, 4, detail, "2026-06-30")]})
     rows = volume_checks.fetch_history(cur, "this-run")
     sql, params = cur.queries[0]
-    assert "STATE = 'success'" in sql and params == {"run_id": "this-run", "limit": 4}
-    assert rows == [dict(zip(volume_checks.RULES, (1, 2, 3, 4, 5), strict=True))]
+    assert "STATE = 'success'" in sql and params == {"run_id": "this-run", "limit": 5}
+    assert rows[0]["SILVER_ROWS"] == 1 and rows[0]["ROWS_DETAIL"] == {"bronze": {"cfpb_complaints": 1}}
+
+
+def test_the_run_log_stores_rows_added_per_source():
+    outputs = {"bronze": {"cfpb_complaints": {"new_rows": 49_174, "total_rows": 2_352_367, "files": 43}}}
+    detail = run_log.layer_rows(outputs)["detail"]
+    assert detail["bronze_added"] == {"cfpb_complaints": 49_174}
+    assert detail["bronze"] == {"cfpb_complaints": 2_352_367}
 
 
 # ------------------------------------------------------------------ run log

@@ -1,24 +1,36 @@
 """Volume checks: compare this run's row counts with recent successful runs.
 
-Baseline: the median of the last 4 successful runs in OPS.PIPELINE_RUNS (a median, so one odd
-week doesn't move it). With fewer than 3 earlier runs there is no baseline: the check passes
-and says so.
+Two kinds of check:
 
-Thresholds, and why:
-- Cumulative layers (BRONZE, SILVER, GOLD, MARTS): these only grow. A new FDIC quarter adds
-  about 0.6% to the bank-quarter tables; a week of CFPB complaints adds about 1-2% to the
-  complaint tables. So: a drop of more than 0.5% is an alert (a little room for de-duplicated
-  amendments), and a jump of more than 5% is an alert (a backfill, a duplicate load, or a
-  broken filter).
-- SCORED_BANKS (the watchlist): one row per active bank, about 4,250. It changes by closures,
-  mergers and new charters, well under 1% a week. More than 3% either way is an alert.
-Review these against real PIPELINE_RUNS history after a few weeks (docs/runbooks/alerts.md).
+1. Rows ADDED to bronze, per source (CFPB complaints, FDIC financials, institutions, failures).
+   Bronze is append-only and every run re-downloads part of each source (30 days of CFPB, the last
+   2 FDIC quarters, the full institutions and failures lists), so its TOTAL grows on every run by
+   design. What a broken or doubled download changes is how many rows a run adds:
+   - added = 0, or under 50% of the usual: a broken or partial download;
+   - added over 3x the usual: a full re-download or a duplicated load.
+   "Usual" = the median rows added per run over the last 4 successful runs (needs 3). When a new
+   FDIC quarter arrives, FDIC financials may add more (one more quarter file), so their upper limit
+   is not applied in that run. The total-bronze rule this replaces fired on 2 Nov 2026 on normal
+   growth (each run adds ~90k rows; the median of 4 runs sits ~2.5 runs back).
+2. Totals of the other layers (SILVER, GOLD, MARTS) and SCORED_BANKS against the median of the
+   last 4 successful runs:
+   - SILVER, GOLD, MARTS only grow. A new FDIC quarter adds about 0.6% to the bank-quarter tables;
+     a week of CFPB complaints adds about 1-2% to the complaint tables. A drop of more than 0.5%
+     or a jump of more than 5% is an alert.
+   - SCORED_BANKS (the watchlist): about 4,250 active banks, changing well under 1% a week. More
+     than 3% either way is an alert.
+
+Rows added per source are stored in the run log (OPS.PIPELINE_RUNS.ROWS_DETAIL:bronze_added, from
+the bronze notebook's own count). For runs recorded before that, they are worked out from the
+change in each source's bronze total since the previous successful run.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from statistics import median
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -28,7 +40,6 @@ class Rule:
 
 
 RULES = {
-    "BRONZE_ROWS": Rule(max_drop=0.005, max_jump=0.05),
     "SILVER_ROWS": Rule(max_drop=0.005, max_jump=0.05),
     "GOLD_ROWS": Rule(max_drop=0.005, max_jump=0.05),
     "MARTS_ROWS": Rule(max_drop=0.005, max_jump=0.05),
@@ -37,38 +48,125 @@ RULES = {
 BASELINE_RUNS = 4
 MIN_BASELINE_RUNS = 3
 
+BRONZE_SOURCES = ("cfpb_complaints", "fdic_financials", "fdic_institutions", "fdic_failures")
+ADDED_MIN_RATIO = 0.5  # under half the usual rows added: a broken or partial download
+ADDED_MAX_RATIO = 3.0  # over three times the usual: a full re-download or a duplicated load
+QUARTER_STEP_SOURCE = "fdic_financials"  # may add a whole new quarter when one arrives
+
+
+def _detail(value: Any) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            out = json.loads(value)
+            return out if isinstance(out, dict) else {}
+        except ValueError:
+            return {}
+    return {}
+
 
 def fetch_history(cur, exclude_run_id: str, limit: int = BASELINE_RUNS) -> list[dict]:
-    cols = list(RULES)
+    """The last successful runs, newest first: the RULES metrics plus ROWS_DETAIL and the latest
+    FDIC quarter. One extra run is read so that rows added can be worked out for `limit` runs."""
+    cols = [*RULES, "ROWS_DETAIL", "LATEST_FDIC_QUARTER"]
     cur.execute(
         f"select {', '.join(cols)} from OPS.PIPELINE_RUNS "
         "where STATE = 'success' and RUN_ID <> %(run_id)s order by STARTED_AT desc limit %(limit)s",
-        {"run_id": exclude_run_id, "limit": limit},
+        {"run_id": exclude_run_id, "limit": limit + 1},
     )
-    return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+    rows = [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+    for r in rows:
+        r["ROWS_DETAIL"] = _detail(r.get("ROWS_DETAIL"))
+    return rows
 
 
 def baseline(history: list[dict]) -> dict[str, float]:
-    """Median per metric over the runs that have a value for it (needs MIN_BASELINE_RUNS)."""
+    """Median per metric over the last BASELINE_RUNS runs that have it (needs MIN_BASELINE_RUNS)."""
     out = {}
     for metric in RULES:
-        values = [h[metric] for h in history if h.get(metric) is not None]
+        values = [h[metric] for h in history[:BASELINE_RUNS] if h.get(metric) is not None]
         if len(values) >= MIN_BASELINE_RUNS:
             out[metric] = float(median(values))
     return out
 
 
-def compare(current: dict, history: list[dict]) -> dict:
-    """{"anomalies": [...], "baseline": {...}, "note": str}. An anomaly names the metric, the
-    value, the baseline, the change and the threshold it crossed."""
+def added_in(run: dict, older: dict | None) -> dict[str, int]:
+    """Rows added to bronze per source by one run: its stored count, else the change in each
+    source's bronze total since the older run (empty if neither is known)."""
+    detail = _detail(run.get("ROWS_DETAIL"))
+    stored = detail.get("bronze_added")
+    if isinstance(stored, dict) and stored:
+        return {k: int(v) for k, v in stored.items() if v is not None}
+    now = detail.get("bronze") or {}
+    before = _detail((older or {}).get("ROWS_DETAIL")).get("bronze") or {}
+    return {
+        k: int(now[k]) - int(before[k])
+        for k in now
+        if k in before and now[k] is not None and before[k] is not None
+    }
+
+
+def usual_added(history: list[dict]) -> dict[str, float]:
+    """Median rows added per source over the last BASELINE_RUNS runs that have it (needs 3)."""
+    per_run = [
+        added_in(run, history[i + 1] if i + 1 < len(history) else None) for i, run in enumerate(history)
+    ]
+    out = {}
+    for source in BRONZE_SOURCES:
+        values = [a[source] for a in per_run[:BASELINE_RUNS] if source in a]
+        if len(values) >= MIN_BASELINE_RUNS:
+            out[source] = float(median(values))
+    return out
+
+
+def check_added(current: dict[str, int], usual: dict[str, float], new_quarter: bool = False) -> list[dict]:
+    """Anomalies in the rows added to bronze this run, per source."""
+    anomalies = []
+    for source in BRONZE_SOURCES:
+        value, ref = current.get(source), usual.get(source)
+        if value is None or not ref:
+            continue
+        ratio = value / ref
+        too_few = value == 0 or ratio < ADDED_MIN_RATIO
+        too_many = ratio > ADDED_MAX_RATIO and not (new_quarter and source == QUARTER_STEP_SOURCE)
+        if too_few or too_many:
+            anomalies.append(
+                {
+                    "metric": f"BRONZE_ADDED.{source}",
+                    "value": value,
+                    "usual_added": ref,
+                    "ratio": round(ratio, 2),
+                    "limit": f"{ADDED_MIN_RATIO:g}x-{ADDED_MAX_RATIO:g}x of usual",
+                }
+            )
+    return anomalies
+
+
+def compare(
+    current: dict,
+    history: list[dict],
+    current_added: dict[str, int] | None = None,
+    new_quarter: bool = False,
+) -> dict:
+    """{"anomalies": [...], "baseline": {...}, "usual_added": {...}, "added": {...}, "note": str}.
+    `current_added` = rows added to bronze per source in this run (worked out from the bronze
+    totals in current["ROWS_DETAIL"] if missing). An anomaly names the metric, the value, its
+    reference and the limit."""
     base = baseline(history)
-    if not base:
+    if not current_added and history:
+        current_added = added_in({"ROWS_DETAIL": current.get("ROWS_DETAIL")}, history[0])
+    current_added = current_added or {}
+    usual = usual_added(history)
+    if not base and not usual:
         return {
             "anomalies": [],
             "baseline": {},
+            "usual_added": {},
+            "added": current_added,
             "note": f"no baseline yet ({len(history)} earlier successful runs, need {MIN_BASELINE_RUNS})",
         }
-    anomalies = []
+    anomalies = check_added(current_added, usual, new_quarter)
     for metric, rule in RULES.items():
         value, ref = current.get(metric), base.get(metric)
         if value is None or not ref:
@@ -85,11 +183,33 @@ def compare(current: dict, history: list[dict]) -> dict:
                     "limit_pct": round(100 * (-limit if change < 0 else limit), 2),
                 }
             )
-    return {"anomalies": anomalies, "baseline": base, "note": f"compared with {len(history)} earlier runs"}
+    note = f"compared with {min(len(history), BASELINE_RUNS)} earlier runs" + (
+        "; new FDIC quarter: no upper limit on FDIC financials added" if new_quarter else ""
+    )
+    return {
+        "anomalies": anomalies,
+        "baseline": base,
+        "usual_added": usual,
+        "added": current_added,
+        "note": note,
+    }
 
 
 def describe(anomaly: dict) -> str:
+    if "usual_added" in anomaly:
+        source = anomaly["metric"].split(".", 1)[1]
+        return (
+            f"rows added to bronze {source}: {anomaly['value']:,} vs usual {anomaly['usual_added']:,.0f} "
+            f"({anomaly['ratio']:g}x; limit {anomaly['limit']})"
+        )
     return (
         f"{anomaly['metric']}: {anomaly['value']:,} vs median {anomaly['baseline_median']:,.0f} "
         f"({anomaly['change_pct']:+.2f}%, limit {anomaly['limit_pct']:+.2f}%)"
     )
+
+
+def is_new_quarter(latest_quarter: Any, history: list[dict]) -> bool:
+    """True when this run's latest FDIC quarter is newer than the last successful run's."""
+    if not latest_quarter or not history or not history[0].get("LATEST_FDIC_QUARTER"):
+        return False
+    return str(latest_quarter)[:10] > str(history[0]["LATEST_FDIC_QUARTER"])[:10]
