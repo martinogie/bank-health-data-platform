@@ -10,12 +10,13 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | Task | What it does | Why a re-run is safe |
 |---|---|---|
 | `check_environment` | logs the environment; checks the Snowflake session is in that environment's database; in prod, stops unless this machine is the one named in `OPS.PROD_SCHEDULER` (one scheduler only) | read-only |
-| `download_fdic` | new FDIC quarters (last 2 re-pulled for amendments), institutions, failures | fixed file names; complete quarters already on disk are reused |
-| `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded | complete months already on disk are reused |
+| `check_backfill` | weekly run, or a backfill? Checks the backfill dates (below) before anything is downloaded | read-only |
+| `download_fdic` | new FDIC quarters (last 2 re-pulled for amendments), institutions, failures. Backfill: only the chosen quarters | fixed file names; complete quarters already on disk are reused |
+| `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded. Backfill: only the chosen dates | complete months already on disk are reused |
 | `check_contracts` | each fresh file against its data contract (`ingestion/contracts/`) before anything reaches bronze; saves the observed schema. `CONTRACTS_MODE=enforce` fails the run on a breaking change; `warn` only reports | read-only on the data; schema files are new each run |
 | `upload_raw` | fresh files and their schema files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
-| `save_watermarks` | remember how far we got (after the upload succeeded) | writes the same values again |
-| `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true | pure decision |
+| `save_watermarks` | remember how far we got (after the upload succeeded). Backfill: not moved | writes the same values again |
+| `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true. Backfill: never | pure decision |
 | `sync_databricks_job` | prod: pull the Git folder to main; dev: upload this checkout's notebooks. Create/update the job | both idempotent |
 | `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
@@ -28,13 +29,20 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
 | `collect_metrics` | row counts per layer (Databricks notebook summaries, Snowflake MARTS), latest FDIC quarter | read-only |
 | `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
-| `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts); silver, gold, marts and scored banks vs the median of the last 4 successful runs (`ingestion/volume_checks.py`) | read-only |
+| `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs (`ingestion/volume_checks.py`) | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 
 **Alerts** (Slack and Discord, `ingestion/alerts.py`): any task failing after its last retry, the
 freshness and volume checks, a run not finished by Monday 12:00 CT (`bank_health_slo_check`), and
 one success message per run. Response guide: `docs/runbooks/alerts.md`.
+
+**Redo a past period (backfill):** Trigger, fill in the FDIC quarter dates and/or the CFPB dates,
+Trigger (or `scripts/backfill.py`; `docs/runbooks/backfill.md`). Every step runs as usual for that
+period only. Rules (`ingestion/backfill.py`): each range needs both dates, from <= to, nothing in
+the future or newer than what the weekly run has loaded; the watermarks are never moved; the
+model is never retrained; in prod, no backfills on Mondays. One run at a time (max_active_runs=1),
+so a backfill never runs alongside the weekly run.
 
 The model retrains automatically when a new FDIC quarter arrives; trigger with
 `{"retrain_model": true}` to force a retrain. A retrained model is registered as `@candidate`;
@@ -77,6 +85,32 @@ JOB_NAME = ENV.databricks_job_name
 # Airflow Variables used as watermarks (visible under Admin -> Variables)
 FDIC_WATERMARK = "fdic_last_repdte"  # e.g. "2026-06-30"
 CFPB_WATERMARK = "cfpb_last_date_received"  # e.g. "2026-10-18"
+
+# The Trigger form. Empty dates (the default, and every scheduled run) mean the normal weekly run.
+BACKFILL_SECTION = "Redo a past period (backfill): leave empty for the normal weekly run"
+OPTIONS_SECTION = "Other options"
+BACKFILL_FIELDS = (
+    (
+        "backfill_fdic_from",
+        "FDIC quarters: from",
+        "First quarter-end to redo, e.g. 2026-03-31. Quarters end on Mar 31, Jun 30, Sep 30 and Dec 31.",
+    ),
+    (
+        "backfill_fdic_to",
+        "FDIC quarters: to",
+        "Last quarter-end to redo, e.g. 2026-06-30. Not newer than the newest quarter already loaded.",
+    ),
+    (
+        "backfill_cfpb_from",
+        "CFPB complaints: from",
+        "First day of complaints (date received) to redo, e.g. 2026-09-01. At most 3 years back.",
+    ),
+    (
+        "backfill_cfpb_to",
+        "CFPB complaints: to",
+        "Last day to redo, e.g. 2026-09-30. Not after the last day already loaded.",
+    ),
+)
 
 
 def _as_date(value: str | None) -> date | None:
@@ -200,6 +234,7 @@ def _record_run() -> dict:
             credits=credits,
             latest_quarter=metrics.get("latest_quarter"),
             volume_anomalies=volume.get("anomalies"),
+            backfill=ti.xcom_pull(task_ids="check_backfill"),
         )
         run_log.write_row(cur, row)
         backfilled = run_log.backfill_final_credits(cur, warehouse, ended)
@@ -233,12 +268,32 @@ def _record_run() -> dict:
         "retry_delay": timedelta(minutes=5),
         "on_failure_callback": task_failure_callback,  # alert once, after the last retry
     },
+    description="Weekly bank data pipeline. To redo a past period, Trigger and fill in the backfill dates.",
     params={
-        "retrain_model": Param(False, type="boolean", description="Retrain and re-register the model"),
+        **{
+            name: Param(
+                None,
+                type=["null", "string"],
+                format="date",
+                title=title,
+                description=text,
+                section=BACKFILL_SECTION,
+            )
+            for name, title, text in BACKFILL_FIELDS
+        },
+        "retrain_model": Param(
+            False,
+            type="boolean",
+            title="Retrain the model",
+            description="Retrain and register a new @candidate model. Not allowed in a backfill.",
+            section=OPTIONS_SECTION,
+        ),
         "full_refresh": Param(
             False,
             type="boolean",
-            description="Rebuild the incremental marts in full (fct_bank_quarter, fct_complaints)",
+            title="Rebuild the incremental marts in full",
+            description="fct_bank_quarter and fct_complaints are rebuilt from scratch instead of merged.",
+            section=OPTIONS_SECTION,
         ),
     },
     doc_md=__doc__,
@@ -276,15 +331,50 @@ def bank_health_weekly():
         return {"env": ENV.name, "snowflake_database": database, "databricks_catalog": CATALOG, "host": host}
 
     @task(
-        doc_md="FDIC: new quarters (+ last 2 refreshed), institutions, failures -> data/raw/fdic. "
-        "Complete quarters already on disk are reused, so retries are cheap."
+        retries=0,  # wrong dates don't fix themselves
+        doc_md="Weekly run or backfill? With no backfill dates in the trigger form (every scheduled run): "
+        "the weekly run. With dates: checks them (ingestion/backfill.py) against today and the watermarks, "
+        "and fails with every reason before anything is downloaded. Read-only.",
     )
-    def download_fdic() -> dict:
+    def check_backfill() -> dict:
+        from airflow.sdk import get_current_context
+        from airflow.sdk.exceptions import AirflowFailException
+
+        from ingestion import backfill
+
+        try:
+            plan = backfill.plan(
+                dict(get_current_context()["params"]),
+                pendulum.now(TZ).date(),
+                _as_date(Variable.get(FDIC_WATERMARK, default=None)),
+                _as_date(Variable.get(CFPB_WATERMARK, default=None)),
+                ENV.is_prod,
+            )
+        except backfill.BackfillRefused as exc:
+            raise AirflowFailException(str(exc)) from None
+        print(backfill.describe(plan))
+        return plan
+
+    @task(
+        doc_md="FDIC: new quarters (+ last 2 refreshed), institutions, failures -> data/raw/fdic. "
+        "Complete quarters already on disk are reused, so retries are cheap. Backfill: downloads only "
+        "the chosen quarters again, and leaves the watermark where it is."
+    )
+    def download_fdic(plan: dict) -> dict:
         from ingestion import fdic
 
         today = pendulum.now(TZ).date()
         out = RAW_DIR / "fdic"
         last = _as_date(Variable.get(FDIC_WATERMARK, default=None))
+        if plan["mode"] == "backfill":
+            fresh = fdic.download_financials([date.fromisoformat(q) for q in plan["fdic_quarters"]], out)
+            unchanged = plan["fdic_watermark"]
+            return {
+                "fresh": [str(p) for p in fresh],
+                "cached": [],
+                "watermark": unchanged,
+                "previous": unchanged,
+            }
         latest = fdic.latest_financials_quarter()
         quarters = fdic.quarters_to_download(last, latest)
         to_fetch, cached = fdic.split_cached_quarters(quarters, out, latest)
@@ -303,11 +393,14 @@ def bank_health_weekly():
         "triggered with retrain_model=true; other weeks just re-score with @champion. "
         "Text values like 'False'/'false'/'0' count as false."
     )
-    def decide_retrain(fdic_result: dict) -> str:
+    def decide_retrain(fdic_result: dict, plan: dict) -> str:
         from airflow.sdk import get_current_context
 
         from ingestion.pipeline_flags import should_retrain
 
+        if plan["mode"] == "backfill":
+            print("backfill: no retrain; scoring uses @champion")
+            return "false"
         requested = get_current_context()["params"].get("retrain_model", False)
         previous = _as_date(fdic_result["previous"])
         latest = date.fromisoformat(fdic_result["watermark"])  # always set by download_fdic
@@ -319,12 +412,26 @@ def bank_health_weekly():
 
     @task(
         doc_md="CFPB complaints since the watermark (bureaus excluded) -> data/raw/cfpb. "
-        "Complete months already on disk are reused."
+        "Complete months already on disk are reused. Backfill: downloads only the chosen dates again, "
+        "and leaves the watermark where it is."
     )
-    def download_cfpb() -> dict:
+    def download_cfpb(plan: dict) -> dict:
         from ingestion import cfpb
 
         today = pendulum.now(TZ).date()
+        if plan["mode"] == "backfill":
+            result = {"fresh": [], "cached": []}
+            if plan["cfpb_from"]:
+                result = cfpb.download_range(
+                    date.fromisoformat(plan["cfpb_from"]),
+                    date.fromisoformat(plan["cfpb_to"]),
+                    RAW_DIR / "cfpb",
+                )
+            return {
+                "fresh": [str(p) for p in result["fresh"]],
+                "cached": [],
+                "watermark": plan["cfpb_watermark"],
+            }
         last = _as_date(Variable.get(CFPB_WATERMARK, default=None))
         result = cfpb.download_complaints(last, today, RAW_DIR / "cfpb")
         return {
@@ -373,8 +480,16 @@ def bank_health_weekly():
             "cached_already_in_volume": len(cached) - len(backfilled),
         }
 
-    @task(doc_md="Advance the FDIC and CFPB watermarks once the files are safely in Databricks.")
-    def save_watermarks(fdic_result: dict, cfpb_result: dict, upload_result: dict) -> dict:
+    @task(
+        doc_md="Advance the FDIC and CFPB watermarks once the files are safely in Databricks. "
+        "Backfill: the watermarks are not touched (they only ever move forward, with the weekly run)."
+    )
+    def save_watermarks(fdic_result: dict, cfpb_result: dict, upload_result: dict, plan: dict) -> dict:
+        if plan["mode"] == "backfill":
+            print(
+                f"backfill: watermarks not moved (FDIC {fdic_result['watermark']}, CFPB {cfpb_result['watermark']})"
+            )
+            return {"fdic": fdic_result["watermark"], "cfpb": cfpb_result["watermark"]}
         Variable.set(FDIC_WATERMARK, fdic_result["watermark"])
         Variable.set(CFPB_WATERMARK, cfpb_result["watermark"])
         return {"fdic": fdic_result["watermark"], "cfpb": cfpb_result["watermark"]}
@@ -621,10 +736,11 @@ def bank_health_weekly():
         retries=0,
         doc_md="Rows added to bronze per source (alert if 0, under 50% or over 3x the usual; a new FDIC "
         "quarter may add more) and silver, gold, marts and scored-bank totals vs the median of the last 4 "
-        "successful runs in OPS.PIPELINE_RUNS (ingestion/volume_checks.py). Fails and alerts on an anomaly; "
-        "passes with a note while there are fewer than 3 earlier runs.",
+        "successful weekly runs in OPS.PIPELINE_RUNS (ingestion/volume_checks.py). Fails and alerts on an "
+        "anomaly; passes with a note while there are fewer than 3 earlier runs. In a backfill, rows added "
+        "are only reported (a backfill adds more by design); every other check applies.",
     )
-    def check_volumes(metrics: dict) -> dict:
+    def check_volumes(metrics: dict, plan: dict) -> dict:
         from airflow.sdk import get_current_context
 
         from ingestion import volume_checks
@@ -638,9 +754,12 @@ def bank_health_weekly():
             history,
             current_added=detail.get("bronze_added"),
             new_quarter=volume_checks.is_new_quarter(metrics.get("latest_quarter"), history),
+            backfill=plan["mode"] == "backfill",
         )
         ctx["ti"].xcom_push(key="volume_result", value=result)  # record_run keeps it even on failure
         print(result["note"])
+        for finding in result["reported"]:
+            print("reported, not checked (backfill):", volume_checks.describe(finding))
         if result["anomalies"]:
             raise ValueError(
                 "Volume anomaly: " + "; ".join(volume_checks.describe(a) for a in result["anomalies"])
@@ -658,14 +777,15 @@ def bank_health_weekly():
         return _record_run()
 
     env_checked = check_environment()
-    fdic_result = download_fdic()
-    cfpb_result = download_cfpb()
+    plan = check_backfill()
+    fdic_result = download_fdic(plan)
+    cfpb_result = download_cfpb(plan)
     contracts = check_contracts(fdic_result, cfpb_result)
     uploads = upload_raw(fdic_result, cfpb_result, contracts)
-    watermarks = save_watermarks(fdic_result, cfpb_result, uploads)
-    retrain = decide_retrain(fdic_result)
+    watermarks = save_watermarks(fdic_result, cfpb_result, uploads, plan)
+    retrain = decide_retrain(fdic_result, plan)
     job = sync_databricks_job()
-    env_checked >> [fdic_result, cfpb_result, job]
+    env_checked >> [plan, job]
     [watermarks, job, retrain] >> run_databricks_job
     loaded = load_snowflake()
     # write, audit, publish: build and test in MARTS_NEXT, swap in only after every test passed;
@@ -677,7 +797,7 @@ def bank_health_weekly():
     metrics = collect_metrics()
     dbt_docs_generate >> verify_pipeline(watermarks) >> metrics
     watchlist = export_watchlist()
-    [check_freshness(metrics), check_volumes(metrics)] >> watchlist
+    [check_freshness(metrics), check_volumes(metrics, plan)] >> watchlist
     [watchlist, manifest] >> record_run()
 
 

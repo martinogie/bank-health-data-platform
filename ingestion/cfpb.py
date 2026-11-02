@@ -236,6 +236,18 @@ def download_complaints(
     return {"fresh": fresh, "cached": cached}
 
 
+def download_range(
+    start: date, end: date, out_dir: Path, session: requests.Session | None = None
+) -> dict[str, list[Path]]:
+    """Backfill: download every complaint received in [start, end] again, in month windows,
+    ignoring files already on disk (re-downloading the period is the point). A window the
+    weekly run already has gets the same file name, so it is overwritten and re-read by bronze."""
+    session = session or requests.Session()
+    fresh = [p for a, b in month_windows(start, end) for p in download_window_parts(a, b, out_dir, session)]
+    log.info("CFPB backfill %s..%s: %s files downloaded", start, end, len(fresh))
+    return {"fresh": fresh, "cached": []}
+
+
 def read_csv_header(path: Path) -> list[str]:
     """Column names of a downloaded file (used by tests and sanity checks)."""
     with gzip.open(path, "rt", encoding="utf-8", newline="") as fh:

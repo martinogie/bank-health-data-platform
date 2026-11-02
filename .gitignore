@@ -18,6 +18,7 @@ dbt/dbt_packages/
 dbt/logs/
 # data files pulled locally
 data/raw/
+data/acceptance/
 *.parquet
 .DS_Store
 .pytest_cache/

@@ -202,11 +202,13 @@ def build_row(
     credits: float | None = None,
     latest_quarter=None,
     volume_anomalies: list[dict] | None = None,
+    backfill: dict | None = None,
 ) -> dict[str, Any]:
     """One PIPELINE_RUNS row. Times are stored in UTC. A run that ended before it started
     (e.g. `airflow dags test` with a future logical date) raises InvalidRunTimes instead of
     writing a misleading row. SLO_MET is judged only for scheduled runs (NULL for manual ones:
-    a manual run is not 'this week's run')."""
+    a manual run is not 'this week's run'). A backfill's plan (ingestion/backfill.py) is stored in
+    ROWS_DETAIL:backfill, which keeps the run out of the volume-check history."""
     started = _to_utc(started_at, "STARTED_AT")
     ended = _to_utc(ended_at, "ENDED_AT")
     if ended < started:
@@ -247,6 +249,8 @@ def build_row(
     detail = dict(layers.get("detail") or {})
     if marts:
         detail["marts"] = marts
+    if backfill and backfill.get("mode") == "backfill":
+        detail["backfill"] = {k: v for k, v in backfill.items() if k != "mode"}
     row["ROWS_DETAIL"] = detail or None
     return row
 
@@ -294,4 +298,11 @@ def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:
         "Data ready before Monday 12:00 CT: "
         + {True: "yes", False: "no", None: "n/a (manual run)"}[row.get("SLO_MET")],
     ]
+    detail = row.get("ROWS_DETAIL")
+    backfill = detail.get("backfill") if isinstance(detail, dict) else None
+    if backfill:
+        from ingestion.backfill import describe
+
+        lines.insert(1, describe({"mode": "backfill", **backfill}))
+        return f"OK: {row['DAG_ID']} backfill succeeded", [line for line in lines if line]
     return f"OK: {row['DAG_ID']} succeeded", [line for line in lines if line]
