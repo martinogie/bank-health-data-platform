@@ -71,6 +71,23 @@ rollback plus a model rollback, not just an alias move.
 
 To return to v5 later, revert the revert, set the pin back to `"2"`, and move `@champion` to 5.
 
+## How to redo a period
+
+Re-download one past period and run it through the whole pipeline (a backfill). Not on a Monday.
+Full steps, rules and what to expect: [runbooks/backfill.md](runbooks/backfill.md).
+
+1. `ssh bank-health-vm`, open <http://localhost:8090> → **Dags** → **bank_health_weekly**.
+2. **Trigger** → keep **Single Run** (not *Backfill*).
+3. Under **Redo a past period (backfill)** fill in *FDIC quarters: from / to* (quarter-ends, e.g.
+   2026-03-31 to 2026-06-30) and/or *CFPB complaints: from / to* (e.g. 2026-09-01 to 2026-09-30).
+4. **Trigger**. Within a minute `check_backfill` is green and names the period, or red with every
+   reason (nothing downloaded; fix the dates and trigger again).
+5. About 30 minutes later: **"OK: bank_health_weekly backfill succeeded"** in both channels. The
+   watermarks are unchanged; the model was not retrained.
+
+Command line: `python3 scripts/backfill.py --fdic 2026-03-31:2026-06-30 --cfpb 2026-09-01:2026-09-30`
+(add `--dry-run` to check first).
+
 ## Databricks environment
 
 Training and scoring must run in the same serverless environment version, or a saved model may

@@ -334,7 +334,8 @@ def bank_health_weekly():
         retries=0,  # wrong dates don't fix themselves
         doc_md="Weekly run or backfill? With no backfill dates in the trigger form (every scheduled run): "
         "the weekly run. With dates: checks them (ingestion/backfill.py) against today and the watermarks, "
-        "and fails with every reason before anything is downloaded. Read-only.",
+        "and fails with every reason before anything is downloaded. Refuses runs made by Airflow's own "
+        "Backfill (they would only repeat plain weekly runs). Read-only.",
     )
     def check_backfill() -> dict:
         from airflow.sdk import get_current_context
@@ -342,13 +343,16 @@ def bank_health_weekly():
 
         from ingestion import backfill
 
+        ctx = get_current_context()
+        run_type = ctx["dag_run"].run_type
         try:
             plan = backfill.plan(
-                dict(get_current_context()["params"]),
+                dict(ctx["params"]),
                 pendulum.now(TZ).date(),
                 _as_date(Variable.get(FDIC_WATERMARK, default=None)),
                 _as_date(Variable.get(CFPB_WATERMARK, default=None)),
                 ENV.is_prod,
+                run_type=str(getattr(run_type, "value", run_type)).lower(),
             )
         except backfill.BackfillRefused as exc:
             raise AirflowFailException(str(exc)) from None

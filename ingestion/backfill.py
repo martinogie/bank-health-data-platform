@@ -30,6 +30,7 @@ FIELDS = {
 }
 LABELS = {"fdic": "FDIC quarters", "cfpb": "CFPB complaints"}
 MONDAY = 0
+AIRFLOW_BACKFILL = "backfill"  # DagRunType.BACKFILL_JOB
 
 
 class BackfillRefused(ValueError):
@@ -83,12 +84,22 @@ def plan(
     fdic_watermark: date | None,
     cfpb_watermark: date | None,
     is_prod: bool,
+    run_type: str = "manual",
 ) -> dict:
     """What this run downloads. A scheduled or plain manual run (no dates): {"mode": "weekly"}.
     A backfill: {"mode": "backfill", "fdic_quarters": [...], "cfpb_from", "cfpb_to", and the
-    watermarks it leaves alone}. Raises BackfillRefused with every problem found."""
+    watermarks it leaves alone}. Raises BackfillRefused with every problem found.
+
+    `run_type` "backfill" is Airflow's own Backfill (the Trigger dialog's second choice): it re-runs
+    plain weekly runs for past dates, which redoes nothing and uses the Databricks quota, so it
+    is refused with a pointer to the right way."""
     from ingestion import cfpb, fdic
 
+    if run_type == AIRFLOW_BACKFILL:
+        raise BackfillRefused(
+            "Airflow's own Backfill is not used here: it repeats plain weekly runs. To redo a period, "
+            "Trigger -> Single Run, and fill in the backfill dates (docs/runbooks/backfill.md)"
+        )
     chosen = ranges(params)
     if not chosen:
         return {"mode": "weekly"}

@@ -132,6 +132,14 @@ def test_every_problem_is_listed_at_once():
         assert part in msg
 
 
+def test_airflows_own_backfill_is_refused_with_the_right_way():
+    with pytest.raises(backfill.BackfillRefused, match="Trigger -> Single Run"):
+        backfill.plan({}, TUESDAY, FDIC_WM, CFPB_WM, is_prod=False, run_type="backfill")
+    assert backfill.plan({}, TUESDAY, FDIC_WM, CFPB_WM, is_prod=False, run_type="scheduled") == {
+        "mode": "weekly"
+    }
+
+
 def test_a_date_that_is_not_a_date_is_refused():
     with pytest.raises(backfill.BackfillRefused, match="not a date"):
         plan(backfill_cfpb_from="Sept 1", backfill_cfpb_to="2026-09-30")
