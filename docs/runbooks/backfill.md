@@ -117,4 +117,12 @@ incremental against full refresh, all leaving identical row counts and checksums
 `_source_file`, `_ingested_at`, `_file_modified_at`, `_LOADED_AT` and `SCORED_AT` are left out,
 since they say where and when a row was loaded, not what it says).
 
-Results: *filled in after the dev runs.*
+Results (dev, `bank_health_dev` / `BANK_HEALTH_DEV`):
+
+| Check | Date | Result |
+|---|---|---|
+| Refused backfill (reversed FDIC range, future CFPB date) | 2 Nov 2026 | `check_backfill` failed in about a minute, listing every reason; nothing downloaded; run recorded as failed at `check_backfill` |
+| The same week twice (two weekly runs, 18:10 and 18:34 UTC) | 2 Nov 2026 | **21 of 21 tables identical**: 4 bronze tables on distinct keys; 5 silver, gold, risk scores, 5 RAW and 5 marts on rows, keys and checksum (e.g. 127,932 complaints, 8,555 bank-quarters, 4,257 scored banks) |
+| Incremental against full refresh (`dbt build --full-refresh` into a scratch schema `MARTS_FULLCHECK`, same RAW) | 2 Nov 2026 | **5 of 5 marts identical**; dbt 52 passed, 2 warned, 0 errors |
+| Readers after the swaps | 2 Nov 2026 | `CI_ROLE` (dev's reader) has USAGE on `MARTS` and SELECT on its tables |
+| The same period backfilled twice | planned | |
