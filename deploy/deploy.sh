@@ -57,6 +57,11 @@ main() {
     # Versions are pinned in dbt/package-lock.yml, so this is repeatable.
     docker compose exec -T airflow-scheduler bash -c \
         'cd /opt/airflow/dbt && /home/airflow/dbt_venv/bin/dbt deps --profiles-dir . --quiet'
+    # The new containers start parsing the DAG as soon as they are up, which can overlap with
+    # dbt deps reinstalling dbt_packages: Cosmos then records an import error that stays until
+    # the next parse (seen on 2 Nov 2026). Parse again now that the packages are complete, so the
+    # smoke check judges the DAG as it really is.
+    docker compose exec -T airflow-dag-processor airflow dags reserialize >/dev/null
     "$app/deploy/smoke_check.sh"
     echo "DEPLOYED $(git rev-parse --short HEAD)"
 }
