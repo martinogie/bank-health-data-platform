@@ -337,10 +337,21 @@ comp = spark.table(f"{OUT}.cfpb_complaints")  # every complaint; the map below i
 # MAGIC    companies are not LLCs; avoids e.g. "Flagship Financial Group LLC" matching a bank HC).
 # MAGIC
 # MAGIC Normalising: upper-case, `&`→AND, punctuation removed, FDIC abbreviations expanded
-# MAGIC (BCORP→BANCORP, FINL→FINANCIAL), legal suffixes dropped (INC, CORP, CO, N.A., ...), spaces removed.
+# MAGIC (BCORP→BANCORP, FINL→FINANCIAL, ASSN→ASSOCIATION, NATL→NATIONAL, ...), legal suffixes dropped
+# MAGIC (INC, CORP, CO, N.A., ...), spaces removed.
 # MAGIC Only banks active at some point during the complaint period are candidates.
 # MAGIC Unmatched companies are mostly not FDIC-insured banks (debt collectors, fintechs,
 # MAGIC data brokers, servicers, credit unions).
+# MAGIC
+# MAGIC **Sent to review instead of matched** (`cert` empty, `match_method` = unmatched, the reason in
+# MAGIC `review_reason`, the bank it would have matched in `review_cert`; E-01, reviewed by Martins on
+# MAGIC 3 Nov 2026, `docs/investigations/e01_results.md`):
+# MAGIC - **excluded after review**: a short reviewed list of wrong matches;
+# MAGIC - **sense check**: a holding-company match to a bank under $10B where under 25% of the
+# MAGIC   complaints come from the bank's home state and at least half are about non-bank products
+# MAGIC   (debt collection, credit reporting, payday or personal loans, debt management);
+# MAGIC - **name vs holding company**: the name matches one bank and the holding-company name another.
+# MAGIC A reviewed decision for such a company goes into the override or exclusion list.
 
 # COMMAND ----------
 
@@ -354,12 +365,64 @@ MANUAL_OVERRIDES = [
     ("FIFTH THIRD FINANCIAL CORPORATION", 6672, "FDIC HC name is FIFTH THIRD BCORP"),
     ("NEW YORK COMMUNITY BANCORP INC", 32541, "Renamed Flagstar Financial; FDIC record has no HC name"),
     ("SANTANDER HOLDINGS USA, INC.", 29950, "FDIC HC name is BANCO SANTANDER SA"),
+    # E-01, reviewed by Martins on 3 Nov 2026
+    (
+        "Bread Financial Holdings, Inc.",
+        57570,
+        "Comenity Capital Bank (credit cards); FDIC lists no holding company for it",
+    ),
+    (
+        "INDEPENDENT BANK CORP.",
+        9712,
+        "Rockland Trust Company (MA); its name matched Independent Bank (TX) before its holding company",
+    ),
+    ("FIRSTBANK", 18714, "FirstBank (CO), reviewed correct; its holding-company name matches another bank"),
+]
+# E-01, reviewed by Martins on 3 Nov 2026: wrong holding-company matches (other companies, similar names)
+MANUAL_EXCLUSIONS = [
+    ("Cornerstone Holdings, Inc.", "debt collection from Alaska; not Cornerstone Bank (ND)"),
+    ("FIRST AMERICAN FINANCIAL CORPORATION", "title insurer; complaints not about its trust savings bank"),
+    (
+        "Eagle Financial Services, Inc.",
+        "credit reporting and collection in OH, KY, IN; not Bank of Clarke (VA)",
+    ),
+    ("Covington Capital Corporation", "collection complaints in UT and WY; not Covington County Bank (MS)"),
+    ("Woodlands Financial Services Inc", "Texas complaints; not Woodlands Bank (PA)"),
+    ("Town Financial Corporation", "payday loans in Iowa; not Citizens State Bank of New Castle (IN)"),
 ]
 ABBREVIATIONS = [
     ("FINL", "FINANCIAL"),
     ("SVCS", "SERVICES"),
     ("BANCORPORATION", "BANCORP"),
     ("BCORP", "BANCORP"),
+    # E-01: more FDIC abbreviations (ASSN caused the USAA miss); applied to both sides
+    ("ASSN", "ASSOCIATION"),
+    ("NATL", "NATIONAL"),
+    ("BKG", "BANKING"),
+    ("BK", "BANK"),
+    ("BCSHS", "BANCSHARES"),
+    ("BANCSHS", "BANCSHARES"),
+    ("SVGS", "SAVINGS"),
+    ("SVC", "SERVICES"),
+    ("GRP", "GROUP"),
+    ("INTL", "INTERNATIONAL"),
+    ("AMER", "AMERICAN"),
+    ("CMNTY", "COMMUNITY"),
+    ("FED", "FEDERAL"),
+    ("MUT", "MUTUAL"),
+    ("HLDGS", "HOLDINGS"),
+    ("HLDG", "HOLDING"),
+    ("MGMT", "MANAGEMENT"),
+]
+# Sense check on holding-company matches (E-01)
+SMALL_BANK_ASSETS_K = 10_000_000  # $10B, in $ thousands
+HOME_STATE_MIN_SHARE = 0.25
+NON_BANK_MIN_SHARE = 0.5
+NON_BANK_PRODUCTS = [
+    "Debt collection",
+    "Payday loan, title loan, personal loan, or advance loan",
+    "Credit reporting or other personal consumer reports",
+    "Debt or credit management",
 ]
 LEGAL_SUFFIXES = (
     r"\b(INCORPORATED|INC|CORPORATION|CORP|COMPANY|CO|LLC|L L C|LP|L P|LTD|THE|"
@@ -397,7 +460,8 @@ companies = (
     .withColumn("company_key", normalise("company"))
     .withColumn("is_llc_or_lp", F.upper("company").rlike(r"\b(LLC|L\.L\.C|LP|L\.P)\b"))
 )
-company_map = (
+exclusions = spark.createDataFrame(MANUAL_EXCLUSIONS, "company string, exclusion_note string")
+proposed = (
     companies.join(overrides, "company", "left")
     .join(by_bank_name, "company_key", "left")
     .join(by_holding_co, "company_key", "left")
@@ -410,10 +474,77 @@ company_map = (
         .when(F.col("cert_by_hc").isNotNull(), "holding_company")
         .otherwise("unmatched"),
     )
-    .join(inst.select("cert", F.col("bank_name").alias("matched_bank_name")), "cert", "left")
-    .select(
-        "company", "company_key", "cert", "matched_bank_name", "match_method", "override_note", "complaints"
+    .join(exclusions, "company", "left")
+)
+
+# Sense-check inputs per company: the share of complaints from the matched bank's home state, and
+# the share about non-bank products.
+bank_facts = inst.select("cert", F.col("state_code").alias("bank_state"), "total_assets_k")
+complaint_mix = (
+    comp.select("company", "state_code", "product")
+    .join(proposed.select("company", "cert"), "company")
+    .join(bank_facts, "cert", "left")
+    .groupBy("company")
+    .agg(
+        F.avg(F.when(F.col("state_code") == F.col("bank_state"), 1.0).otherwise(0.0)).alias(
+            "home_state_share"
+        ),
+        F.avg(F.when(F.col("product").isin(NON_BANK_PRODUCTS), 1.0).otherwise(0.0)).alias("non_bank_share"),
     )
+)
+sense_check = (
+    (F.col("match_method") == "holding_company")
+    & (F.col("total_assets_k") < SMALL_BANK_ASSETS_K)
+    & (F.col("home_state_share") < HOME_STATE_MIN_SHARE)
+    & (F.col("non_bank_share") >= NON_BANK_MIN_SHARE)
+)
+name_vs_hc = (
+    (F.col("match_method") != "manual_override")
+    & F.col("cert_by_name").isNotNull()
+    & F.col("cert_by_hc").isNotNull()
+    & (F.col("cert_by_name") != F.col("cert_by_hc"))
+)
+checked = (
+    proposed.join(bank_facts, "cert", "left")
+    .join(complaint_mix, "company", "left")
+    .withColumn(
+        "review_reason",
+        F.when(
+            F.col("exclusion_note").isNotNull(), F.concat(F.lit("excluded after review: "), "exclusion_note")
+        )
+        .when(
+            sense_check,
+            F.format_string(
+                "sense check: bank under $10B, %.0f%% of complaints from its home state, %.0f%% about non-bank products",
+                100 * F.col("home_state_share"),
+                100 * F.col("non_bank_share"),
+            ),
+        )
+        .when(
+            name_vs_hc,
+            F.format_string(
+                "name matches cert %d, holding company matches cert %d", "cert_by_name", "cert_by_hc"
+            ),
+        ),
+    )
+    .withColumn("review_cert", F.when(F.col("review_reason").isNotNull(), F.col("cert")))
+    .withColumn("cert", F.when(F.col("review_reason").isNull(), F.col("cert")))
+    .withColumn(
+        "match_method", F.when(F.col("review_reason").isNull(), F.col("match_method")).otherwise("unmatched")
+    )
+)
+company_map = checked.join(
+    inst.select("cert", F.col("bank_name").alias("matched_bank_name")), "cert", "left"
+).select(
+    "company",
+    "company_key",
+    "cert",
+    "matched_bank_name",
+    "match_method",
+    "override_note",
+    "review_reason",
+    "review_cert",
+    "complaints",
 )
 LOADS["company_bank_map"] = {
     "mode": "full",
@@ -434,6 +565,19 @@ dq_check(
     "manual override companies present in complaints",
     overrides.join(companies, "company", "left_anti").count(),
     level="warn",
+)
+dq_check(
+    T,
+    "manual exclusion companies present in complaints",
+    exclusions.join(companies, "company", "left_anti").count(),
+    level="warn",
+)
+for_review = company_map.filter("review_reason is not null")
+print(f"sent to review instead of matched: {for_review.count()} companies")
+display(
+    for_review.select("company", "complaints", "review_cert", "review_reason").orderBy(
+        F.col("complaints").desc()
+    )
 )
 
 display(
@@ -490,6 +634,7 @@ summary = {
     },
     "complaints_matched_to_bank_pct": round(100 * matched / n_comp, 1) if n_comp else None,
     "companies_matched": company_map.filter("cert is not null").count(),
+    "companies_for_review": company_map.filter("review_reason is not null").count(),
     "silver_mode": SILVER_MODE,
     "loads": LOADS,  # per table: full or incremental, rows inserted/updated/rematched
     "data_quality": dq_summary,
