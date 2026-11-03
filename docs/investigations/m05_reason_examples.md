@@ -5,7 +5,7 @@ Raw output: [m05_reason_examples.json](m05_reason_examples.json). Shown here in 
 
 - **Old** (today's method, kept as the fallback): the features whose move to the median of *all* scored banks lowers the probability most, compared with that all-bank median.
 - **New** (SHAP): the features that push this bank's log-odds up most (shap 0.46.0 `TreeExplainer`, exact to 2e-14), compared with the median of banks in the **same asset-size tier**.
-- Either way, a feature the bank doesn't report is never cited.
+- Either way, a feature the bank doesn't report is never cited, and a "change" feature (non-current loans, Tier 1, ROA) only when it moved the worsening way (approved by Martins, 3 Nov 2026; regenerated with that rule: only Pinnacle Bank's reason 3 changed).
 
 **What to look for:** do the new reasons read as the right explanation for each bank? Do any cite something odd?
 
@@ -86,7 +86,7 @@ Raw output: [m05_reason_examples.json](m05_reason_examples.json). Shown here in 
 | | Reason 1 | Reason 2 | Reason 3 |
 |---|---|---|---|
 | Old | Loans 30–89 days past due: 4.63% of loans (median of all US banks: 0.32% of loans) | Non-current loans: 2.30% of loans (median of all US banks: 0.41% of loans) | Change in non-current loans over the year: +0.84 pp (median of all US banks: +0.00 pp) |
-| New | Loans 30–89 days past due: 4.63% of loans (median of similar-size banks: 0.36% of loans) | Non-current loans: 2.30% of loans (median of similar-size banks: 0.36% of loans) | Change in non-current loans over the quarter: -1.45 pp (median of similar-size banks: -0.00 pp) |
+| New | Loans 30–89 days past due: 4.63% of loans (median of similar-size banks: 0.36% of loans) | Non-current loans: 2.30% of loans (median of similar-size banks: 0.36% of loans) | Change in non-current loans over the year: +0.84 pp (median of similar-size banks: +0.00 pp) |
 
 **12. The Donley County State Bank** (TX, <$100M), probability 73%
 

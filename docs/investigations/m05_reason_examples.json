@@ -119,7 +119,7 @@
    "old": [
     "log_total_assets = 15.68 (median 19.82)",
     "efficiency_ratio_pct = 99.01 (median 61.32)",
-    "roa_change_4q_pp = 2.47 (median 0.16)"
+    "net_income_qtr_to_assets_pct = -0.05 (median 0.32)"
    ],
    "new": [
     "log_total_assets = 15.68 (peer median 18.03)",
@@ -196,7 +196,7 @@
    "new": [
     "past_due_30_89_to_loans_pct = 4.63 (peer median 0.36)",
     "noncurrent_loans_pct = 2.30 (peer median 0.36)",
-    "noncurrent_change_1q_pp = -1.45 (peer median -0.00)"
+    "noncurrent_change_4q_pp = 0.84 (peer median 0.00)"
    ]
   },
   {
