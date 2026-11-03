@@ -113,3 +113,38 @@ corrected, so precision in the sample becomes 99/99; the two missed banks in the
 matched, so recall by volume rises from 94.8% to about 100% of the known misses, still with
 the same uncertainty about the companies outside the top 50. The match-rate alert (PR #29) will
 show the new level (about 31.7%) as a step up on the run that applies them.
+
+## 6. Applied (approved by Martins, 3 Nov 2026)
+
+Approved: the overrides, the extra abbreviations (a), the sense check in its broad variant (b),
+and sending name-vs-holding-company conflicts to review (c). In `02_silver`:
+
+- **Overrides:** Bread Financial → Comenity Capital Bank (57570); Independent Bank Corp. → Rockland
+  Trust Company (9712); FIRSTBANK → FirstBank, CO (18714), reviewed correct, kept matched because
+  its name and holding-company name point to different banks. USAA needs no override: it matches
+  USAA Federal Savings Bank (32188) through the expanded abbreviation ASSN.
+- **Exclusions:** the 6 reviewed wrong holding-company matches, kept as a list (the sense check
+  alone catches 5 of them).
+- **Review instead of matching:** excluded, sense-check and name-vs-holding-company cases get no
+  bank; `match_method` stays `unmatched` (so the dbt accepted values don't change), and
+  `company_bank_map` shows why (`review_reason`) and which bank it would have been
+  (`review_cert`). The silver summary reports `companies_for_review`.
+
+**Before/after, measured** (dev full rebuild from prod bronze on 3 Nov 2026, compared with prod
+silver; `tools/e01_map_diff`):
+
+| | Before (prod) | After | 
+|---|---|---|
+| Companies matched | 142 | **134** |
+| Complaints matched | 600,661 | **633,416** |
+| Match rate | 30.04% | **31.68%** |
+| Companies sent to review | n/a | 10 (6 excluded, 4 by the sense check) |
+
+All 13 changes: Bread Financial and USAA gained (33,170 complaints); Independent Bank Corp.
+moved to Rockland Trust; removed: Eagle Financial Services, Cornerstone Holdings, First American
+Financial, Town Financial, Woodlands Financial Services, Covington Capital (excluded), and ALCAR
+INC., Peoples Financial Corp., Oak Tree Financial, First State Financial (sense check). Silver's
+data-quality checks: 0 errors and the same 4 warnings as prod's last run.
+
+On the first prod run with this change, the match rate steps up by about 1.6 points; the
+match-rate alert (PR #29) only fires on drops.
