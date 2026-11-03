@@ -29,7 +29,10 @@ POLL_SECONDS = 15
 FIXED_PARAMS = ("env", "catalog")  # follow BANK_HEALTH_ENV; never passed by hand
 
 
-def run_notebook(db: dj.DatabricksAPI, repo_path: str, notebook: str, params: dict) -> bool:
+def run_notebook(
+    db: dj.DatabricksAPI, repo_path: str, notebook: str, params: dict, outputs: dict | None = None
+) -> bool:
+    """Run one notebook and wait. If `outputs` is given, its parsed exit value is stored there."""
     run = db.call(
         "POST",
         "/api/2.2/jobs/runs/submit",
@@ -66,7 +69,10 @@ def run_notebook(db: dj.DatabricksAPI, repo_path: str, notebook: str, params: di
     out = db.call("GET", "/api/2.2/jobs/runs/get-output", params={"run_id": task_run_id})
     if out.get("notebook_output", {}).get("result"):
         try:
-            print(json.dumps(json.loads(out["notebook_output"]["result"]), indent=2))
+            parsed = json.loads(out["notebook_output"]["result"])
+            if outputs is not None:
+                outputs[notebook] = parsed
+            print(json.dumps(parsed, indent=2))
         except json.JSONDecodeError:
             print(out["notebook_output"]["result"])
     if out.get("error"):

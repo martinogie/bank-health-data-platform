@@ -114,7 +114,7 @@ used up by dev work (30 Oct 2026) also stopped the watchdog.
 | FAILED, any task | Open the **Log** link (through the tunnel: `ssh bank-health-vm`, then the link). Fix the cause, then **clear** the failed task in the UI: Airflow re-runs it and everything after it. Every task is safe to re-run (the DAG's docs list why). |
 | … Databricks quota | Don't retry today. [quota_errors.md](quota_errors.md). |
 | FAILED check_freshness | Which check? *Not rebuilt:* dbt stopped early; look at the `dbt_build` tasks. *Old FDIC quarter:* the FDIC may be late (check BankFind), or the download missed it. *Scored banks out of range:* look at `05_score` in Databricks. The watchlist was **not** published. |
-| FAILED check_volumes | The message names the layer, its value, the median and the threshold. A real cause (e.g. a backfill) is fine: re-run `check_volumes` once you're satisfied. Otherwise find the layer that changed. The watchlist was **not** published. |
+| FAILED check_volumes | The message names the layer, its value, the median and the threshold. A backfill's extra bronze rows never fail it (they are only reported). Another real cause is fine: re-run `check_volumes` once you're satisfied. Otherwise find the layer that changed. The watchlist was **not** published. |
 | LATE | Is the run still going (Airflow UI)? Did it fail (there would be a FAILED alert)? Is the VM up (`ssh bank-health-vm`)? If the VM is down: [oracle_vm_setup.md](oracle_vm_setup.md); the PC is the rollback until three weeks after cutover. |
 | WATCHDOG could not check | GitHub couldn't read Snowflake as the CI user: Snowflake down, the trial or billing, or the CI key. Check the workflow log. |
 | No OK message by Monday afternoon | Treat it like LATE. |
@@ -129,6 +129,9 @@ The volume thresholds and their reasons are in `ingestion/volume_checks.py`:
   Rows added per source are stored in `OPS.PIPELINE_RUNS.ROWS_DETAIL:bronze_added`.
   Bronze **totals** are not checked: bronze is append-only and grows on every run by design
   (re-downloads), which made the old total-bronze rule fire on 2 Nov 2026.
+- **Backfill runs** ([backfill.md](backfill.md)): the rows-added check only reports (a backfill adds
+  more by design); every other check applies. Backfill runs are left out of the history, so they
+  never shift the usual rows added or the medians.
 - **Silver, gold, marts:** −0.5% / +5% against the median of the last 4 successful runs (needs 3).
 - **Scored banks:** ±3% against the same median.
 

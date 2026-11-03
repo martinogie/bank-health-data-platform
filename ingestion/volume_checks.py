@@ -23,6 +23,11 @@ Two kinds of check:
 Rows added per source are stored in the run log (OPS.PIPELINE_RUNS.ROWS_DETAIL:bronze_added, from
 the bronze notebook's own count). For runs recorded before that, they are worked out from the
 change in each source's bronze total since the previous successful run.
+
+Backfill runs (ingestion/backfill.py; ROWS_DETAIL:backfill is set) add far more rows than usual by
+design, so in a backfill the rows-added check only reports, and every other check still applies.
+Backfill runs are also left out of the history, so they never shift the usual rows added or the
+medians that the weekly runs are judged against.
 """
 
 from __future__ import annotations
@@ -67,12 +72,14 @@ def _detail(value: Any) -> dict:
 
 
 def fetch_history(cur, exclude_run_id: str, limit: int = BASELINE_RUNS) -> list[dict]:
-    """The last successful runs, newest first: the RULES metrics plus ROWS_DETAIL and the latest
-    FDIC quarter. One extra run is read so that rows added can be worked out for `limit` runs."""
+    """The last successful runs, newest first, backfills left out: the RULES metrics plus
+    ROWS_DETAIL and the latest FDIC quarter. One extra run is read so that rows added can be
+    worked out for `limit` runs."""
     cols = [*RULES, "ROWS_DETAIL", "LATEST_FDIC_QUARTER"]
     cur.execute(
         f"select {', '.join(cols)} from OPS.PIPELINE_RUNS "
-        "where STATE = 'success' and RUN_ID <> %(run_id)s order by STARTED_AT desc limit %(limit)s",
+        "where STATE = 'success' and RUN_ID <> %(run_id)s and ROWS_DETAIL:backfill is null "
+        "order by STARTED_AT desc limit %(limit)s",
         {"run_id": exclude_run_id, "limit": limit + 1},
     )
     rows = [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
@@ -148,11 +155,13 @@ def compare(
     history: list[dict],
     current_added: dict[str, int] | None = None,
     new_quarter: bool = False,
+    backfill: bool = False,
 ) -> dict:
-    """{"anomalies": [...], "baseline": {...}, "usual_added": {...}, "added": {...}, "note": str}.
-    `current_added` = rows added to bronze per source in this run (worked out from the bronze
-    totals in current["ROWS_DETAIL"] if missing). An anomaly names the metric, the value, its
-    reference and the limit."""
+    """{"anomalies": [...], "reported": [...], "baseline": {...}, "usual_added": {...},
+    "added": {...}, "note": str}. `current_added` = rows added to bronze per source in this run
+    (worked out from the bronze totals in current["ROWS_DETAIL"] if missing). An anomaly names the
+    metric, the value, its reference and the limit. In a backfill, rows-added findings go to
+    "reported" (shown, never failing the run); "anomalies" fail the run."""
     base = baseline(history)
     if not current_added and history:
         current_added = added_in({"ROWS_DETAIL": current.get("ROWS_DETAIL")}, history[0])
@@ -161,12 +170,15 @@ def compare(
     if not base and not usual:
         return {
             "anomalies": [],
+            "reported": [],
             "baseline": {},
             "usual_added": {},
             "added": current_added,
             "note": f"no baseline yet ({len(history)} earlier successful runs, need {MIN_BASELINE_RUNS})",
         }
-    anomalies = check_added(current_added, usual, new_quarter)
+    added_findings = check_added(current_added, usual, new_quarter)
+    reported = added_findings if backfill else []
+    anomalies = [] if backfill else added_findings
     for metric, rule in RULES.items():
         value, ref = current.get(metric), base.get(metric)
         if value is None or not ref:
@@ -183,11 +195,14 @@ def compare(
                     "limit_pct": round(100 * (-limit if change < 0 else limit), 2),
                 }
             )
-    note = f"compared with {min(len(history), BASELINE_RUNS)} earlier runs" + (
-        "; new FDIC quarter: no upper limit on FDIC financials added" if new_quarter else ""
+    note = (
+        f"compared with {min(len(history), BASELINE_RUNS)} earlier runs"
+        + ("; new FDIC quarter: no upper limit on FDIC financials added" if new_quarter else "")
+        + ("; backfill: rows added are reported, not checked" if backfill else "")
     )
     return {
         "anomalies": anomalies,
+        "reported": reported,
         "baseline": base,
         "usual_added": usual,
         "added": current_added,
