@@ -39,9 +39,9 @@ production. Never unpause it on the VM before the cutover runbook says so.
      Upgrade to Pay As You Go**. Add the card. Oracle may place a small temporary hold on it.
    - **What could cost money:** only resources above the Always Free limits, e.g. a second VM
      or more than 200 GB of disk. The budget alert below catches that.
-4. **$1 budget alert.** Console → **☰ → Billing & Cost Management → Budgets → Create Budget**:
+4. **$5 budget alert.** Console → **☰ → Billing & Cost Management → Budgets → Create Budget**:
    - Name `bank-health-1usd`; target: compartment, your root compartment.
-   - Schedule: monthly; budget amount `1` (USD).
+   - Schedule: monthly; budget amount `5` (USD).
    - Alert rule: type **Actual spend**, threshold **100%** of the budget, your email.
    - Add a second rule: **Forecast spend**, threshold **100%**, the same email.
 

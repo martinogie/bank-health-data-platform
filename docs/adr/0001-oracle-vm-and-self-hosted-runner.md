@@ -17,7 +17,7 @@ Compose stack, and an Airflow image that already builds for linux/arm64.
 1. **Run production on an OCI Always Free `VM.Standard.A1.Flex`** (Arm, 4 OCPU, 24 GB, Ubuntu
    24.04). The same Compose file runs prod on any machine; per-machine paths live in a git-ignored
    `airflow/.env`.
-2. **Upgrade the OCI account to Pay As You Go**, with a $1 budget alert. Oracle may reclaim
+2. **Upgrade the OCI account to Pay As You Go**, with a $5 budget alert. Oracle may reclaim
    *idle* Always Free instances, and this VM is busy for about 30 minutes a week. Pay As You Go
    accounts aren't reclaimed, and the Always Free resources stay free.
 3. **Access by SSH only**: port 22 from one IP. The Airflow UI listens on `127.0.0.1` and is

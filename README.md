@@ -404,12 +404,24 @@ tests/        integration, smoke, browser and end-to-end tests
 docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/, health page contract
 ```
 
+## Documentation
+
+- **Decisions:** [architecture decision records](docs/adr/) (0001–0009: the Oracle VM and runner,
+  alert channels, Databricks limits, Snowflake with a PostgreSQL mirror, write-audit-publish,
+  incremental loads, data contracts, monitoring thresholds, gated promotion).
+- **Operations:** [runbook index](docs/runbooks/README.md) (find the page by the alert you see) and
+  [service levels](docs/slos.md).
+- **Security:** [SECURITY.md](SECURITY.md): who can do what, where secrets live, network exposure,
+  what to do if something leaks.
+- **Model:** [model card](docs/model_card.md); **plans:** [Phase 3](docs/phase3_plan.md),
+  [Phase 4](docs/phase4_plan.md), [roadmap](docs/ROADMAP.md).
+
 ## Data quality and loading
 
 - **Data contracts.** Every downloaded file is checked against its contract
   (`ingestion/contracts/`: fields, types, allowed nulls, code lists) before it reaches bronze. A
-  removed, renamed or retyped field fails the run; a new field or code value warns. Prod reports
-  in warn mode; the counts go in the run log.
+  removed, renamed or retyped field fails the run; a new field or code value warns. Prod runs in
+  enforce mode since 3 Nov 2026 (after clean warn-mode runs); the counts go in the run log.
 - **Idempotent loading.** Silver merges on its keys (newest load wins); the incremental marts
   merge only changed rows; the marts are built and tested in `MARTS_NEXT` and swapped in only if
   every critical test passed (write, audit, publish). Checked in dev: the same week loaded twice,
