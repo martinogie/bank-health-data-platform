@@ -8,7 +8,8 @@
 # MAGIC
 # MAGIC - **population:** companies and complaints by match method (what the sample stands for);
 # MAGIC - **sample:** 100 matched and 100 unmatched companies, drawn at random with a fixed seed (the
-# MAGIC   order of `xxhash64(seed, company)`, so the same table gives the same sample), each with
+# MAGIC   order of `xxhash64(seed, company)`, so the same table gives the same sample), plus the 50
+# MAGIC   largest unmatched companies by complaints (group `top_unmatched`, not random), each with
 # MAGIC   evidence for labelling: complaint count, top states and products, the matched bank and its
 # MAGIC   holding company, and for unmatched companies the closest FDIC bank or holding-company name.
 # MAGIC
@@ -28,9 +29,11 @@ import re
 dbutils.widgets.text("source_catalog", "bank_health", "Catalog to read (read-only)")
 dbutils.widgets.text("seed", "20261029", "Sampling seed")
 dbutils.widgets.text("per_group", "100", "Companies per group (matched, unmatched)")
+dbutils.widgets.text("top_unmatched", "50", "Largest unmatched companies to list (by complaints)")
 SRC = dbutils.widgets.get("source_catalog").strip()
 SEED = int(dbutils.widgets.get("seed"))
 PER_GROUP = int(dbutils.widgets.get("per_group"))
+TOP_UNMATCHED = int(dbutils.widgets.get("top_unmatched"))
 
 cmap = spark.table(f"{SRC}.silver.company_bank_map")
 comp = spark.table(f"{SRC}.silver.cfpb_complaints")
@@ -65,11 +68,24 @@ def top_values(col, n):
     )
 
 
-sample = (
+random_draw = (
     cmap.withColumn("group", F.when(F.col("cert").isNotNull(), "matched").otherwise("unmatched"))
     .withColumn("draw", F.xxhash64(F.lit(SEED), F.col("company")))
     .withColumn("draw_rank", F.row_number().over(Window.partitionBy("group").orderBy("draw", "company")))
     .filter(F.col("draw_rank") <= PER_GROUP)
+    .drop("draw")
+)
+# Not random: the largest unmatched companies by complaints. A missed bank would be one company with
+# many complaints, which a random draw of companies (median a handful of complaints) rarely finds;
+# this list is what recall by complaint volume is judged on. A company can be in both lists.
+largest_unmatched = (
+    cmap.filter("cert is null")
+    .withColumn("group", F.lit("top_unmatched"))
+    .withColumn("draw_rank", F.row_number().over(Window.orderBy(F.col("complaints").desc(), "company")))
+    .filter(F.col("draw_rank") <= TOP_UNMATCHED)
+)
+sample = (
+    random_draw.unionByName(largest_unmatched)
     .join(
         inst.select(
             "cert",
@@ -149,7 +165,7 @@ for r in sample.to_dict("records"):
         "top_states": r["top_state_codes"],
         "top_products": r["top_products"],
     }
-    if r["group"] == "unmatched":
+    if r["group"] != "matched":
         out.update(best_candidate(r["company"]))
     rows.append({k: (None if isinstance(v, float) and v != v else v) for k, v in out.items()})
 
