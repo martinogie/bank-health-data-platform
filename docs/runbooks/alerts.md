@@ -13,6 +13,7 @@ never reaches the prod channel. Why both, and why webhooks:
 | **FAILED … check_volumes** | a layer's row count dropped or jumped beyond its threshold | task `check_volumes` |
 | **LATE: this week's bank data is not ready** | no successful run by Monday 12:00 CT | DAG `bank_health_slo_check` on the prod machine |
 | **LATE (seen from GitHub)** / **WATCHDOG: could not check** | the same, checked from outside the VM, Monday 12:30 CST (13:30 CDT) | GitHub Actions `late_run_watchdog.yml` |
+| **MODEL: monitoring found a shift or a weaker backtest** | score PSI above 0.25, or 3+ features above 0.25, vs the previous 4 quarters; or a quarter's top-10% capture more than 10 points below 52.6%. Never fails the run | task `check_model` (`ingestion/model_monitoring.py`; on/off: `MODEL_MONITOR_ALERTS`) |
 | **OK: bank_health_weekly succeeded** | every successful run: rows, duration, dbt results | task `record_run` |
 
 **Silence is not success.** Expect one *OK* message every Monday morning. No message by lunchtime
@@ -117,6 +118,7 @@ used up by dev work (30 Oct 2026) also stopped the watchdog.
 | FAILED check_volumes | The message names the layer, its value, the median and the threshold. A backfill's extra bronze rows never fail it (they are only reported). Another real cause is fine: re-run `check_volumes` once you're satisfied. Otherwise find the layer that changed. The watchlist was **not** published. |
 | LATE | Is the run still going (Airflow UI)? Did it fail (there would be a FAILED alert)? Is the VM up (`ssh bank-health-vm`)? If the VM is down: [oracle_vm_setup.md](oracle_vm_setup.md); the PC is the rollback until three weeks after cutover. |
 | WATCHDOG could not check | GitHub couldn't read Snowflake as the CI user: Snowflake down, the trial or billing, or the CI key. Check the workflow log. |
+| MODEL | Not urgent: this week's scores and watchlist are fine. Open `docs/investigations/m08_monitoring_dev.md` for what the numbers mean, then `SELECT * FROM BANK_HEALTH.OPS.MODEL_MONITORING WHERE RUN_ID = '<run>' ORDER BY VALUE DESC`. A large shift vs the previous 4 quarters after a real event (a new quarter after a crisis, a reporting change) can be expected; a sustained one, or a weaker backtest, is a reason to plan a retrain (v6). |
 | No OK message by Monday afternoon | Treat it like LATE. |
 
 ## Thresholds

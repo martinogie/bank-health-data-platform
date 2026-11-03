@@ -7,7 +7,8 @@ and vs 2001-2019 training) and a backtest (realised PR-AUC and top-10% capture p
 check_model (Airflow) writes one row per metric to OPS.MODEL_MONITORING and, when alerts are
 switched on (MODEL_MONITOR_ALERTS=on), sends a "MODEL" message to the alert channels. It never
 fails the run: drift doesn't make this week's scores wrong, and the watchlist still goes out.
-Alerts start switched off, until Martins has seen both PSI comparisons in dev (plan stop).
+Switched on in prod (docker-compose.yaml) by Martins on 3 Nov 2026, after reviewing both PSI
+comparisons in dev; the code default is off.
 """
 
 from __future__ import annotations
