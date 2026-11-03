@@ -61,13 +61,13 @@ Terraform describes what **already exists**, by importing it. It does not create
 | The 4 service users (`SVC_BANK_PIPELINE`, `SVC_BANK_DEV`, `SVC_BANK_CI`, `SVC_POWERBI`) | with provider 2.22.1 their import plans an update of read-only outputs only (`show_output`, `parameters`; no settable field changes). The import-only guard rightly blocks any update, and Martins chose (3 Nov 2026) to keep the users in the SQL scripts rather than loosen the guard |
 | Users' RSA public keys | rotation is a runbook step ([rotation.md](../runbooks/rotation.md)) |
 | Martins' own Snowflake user | a person, not platform infrastructure |
-| Grants | decided in PR 5: imported if the plan is clean, otherwise kept in the SQL scripts and recorded here |
+| Grants (about 100, including 10 future grants) | kept in the SQL scripts (`snowflake/setup*.sql`), decided by Martins on 3 Nov 2026. The grants on `MARTS` travel with the schema that write-audit-publish swaps every week (ADR 0005); the future grants are set by the setup scripts; the objects dbt creates are dbt's. Managing part of this in Terraform and part in SQL or dbt would have two tools fighting over the same grants, and each of the remaining ~60 grants needs a hand-built import ID |
 | The state bucket; Oracle's default "Tenant Admin Policy" | bootstrap and provider defaults |
 
 ## Consequences
 
 - Drift shows up as a non-empty plan; a clean plan is evidence the live setup matches the code.
-- Changes made on purpose (for example lowering the credit caps after the Phase 4 dev work) go
+- Changes made on purpose (for example lowering the credit caps around 15 Nov 2026) go
   through a plan Martins approves, then the apply.
 - The SQL scripts stay the record for what Terraform doesn't manage; the two must not both manage
   the same object.
