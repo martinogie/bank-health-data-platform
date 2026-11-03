@@ -63,6 +63,22 @@ def _fmt(v) -> str:
     return f"{v:,.2f}"
 
 
+# A "change" feature is cited as a reason only when it moved the worsening way (Martins, 3 Nov 2026):
+# +1 = an increase is worse, -1 = a decrease is worse. The waterfall keeps both directions.
+WORSENING_DIRECTION = {
+    "noncurrent_change_1q_pp": +1,
+    "noncurrent_change_4q_pp": +1,
+    "tier1_change_4q_pp": -1,
+    "roa_change_4q_pp": -1,
+}
+
+
+def worsened(feature: str, value) -> bool:
+    """True unless `feature` is a change feature that didn't move the worsening way."""
+    sign = WORSENING_DIRECTION.get(feature)
+    return sign is None or (pd.notna(value) and sign * float(value) > 0)
+
+
 def reason_texts(values: pd.Series, drops: pd.Series, medians: pd.Series, k: int = 3) -> list:
     """Top-k reasons as 'feature = value (median m)'.
 
@@ -70,7 +86,14 @@ def reason_texts(values: pd.Series, drops: pd.Series, medians: pd.Series, k: int
     that raise the risk (drop > 0) and that the bank actually reports (value not missing) qualify,
     so a reason never shows a value that isn't reported.
     """
-    usable = [f for f in drops.index if drops[f] > 0 and pd.notna(values.get(f)) and pd.notna(medians.get(f))]
+    usable = [
+        f
+        for f in drops.index
+        if drops[f] > 0
+        and pd.notna(values.get(f))
+        and pd.notna(medians.get(f))
+        and worsened(f, values.get(f))
+    ]
     top = drops[usable].sort_values(ascending=False).head(k)
     texts = [f"{f} = {_fmt(values[f])} (median {_fmt(medians[f])})" for f in top.index]
     return texts + [None] * (k - len(texts))
@@ -99,7 +122,10 @@ def shap_reason_texts(
     usable = [
         f
         for f in contributions.index
-        if contributions[f] > 0 and pd.notna(values.get(f)) and pd.notna(peer_medians.get(f))
+        if contributions[f] > 0
+        and pd.notna(values.get(f))
+        and pd.notna(peer_medians.get(f))
+        and worsened(f, values.get(f))
     ]
     top = contributions[usable].sort_values(ascending=False).head(k)
     texts = [f"{f} = {_fmt(values[f])} (peer median {_fmt(peer_medians[f])})" for f in top.index]
