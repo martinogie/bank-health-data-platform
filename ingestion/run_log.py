@@ -35,9 +35,12 @@ COLUMNS = (
     "FAILED_TASKS", "BRONZE_ROWS", "SILVER_ROWS", "GOLD_ROWS", "MARTS_ROWS", "SCORED_BANKS", "ROWS_DETAIL",
     "DBT_MODELS_OK", "DBT_MODELS_ERROR", "DBT_TESTS_PASS", "DBT_TESTS_WARN", "DBT_TESTS_FAIL", "DQ_WARNINGS",
     "CREDITS_ESTIMATE", "MODEL_NAME", "MODEL_VERSION", "MODEL_ALIAS", "LATEST_FDIC_QUARTER",
-    "VOLUME_ANOMALIES", "SLO_MET",
+    "VOLUME_ANOMALIES", "SLO_MET", "CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL",
 )  # fmt: skip
 VARIANT_COLUMNS = {"ROWS_DETAIL", "VOLUME_ANOMALIES"}
+# Added by snowflake/setup_monitoring.sql (PR 8). Until that script has run, a table without them is
+# written without them (with a warning), so the deploy order can't break a run.
+OPTIONAL_COLUMNS = ("CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL")
 _MODEL_RE = re.compile(r"^(?P<name>\S+) v(?P<version>\S+) \(@(?P<alias>[\w-]+)\)$")
 
 
@@ -211,6 +214,7 @@ def build_row(
     latest_quarter=None,
     volume_anomalies: list[dict] | None = None,
     backfill: dict | None = None,
+    contracts: dict | None = None,
 ) -> dict[str, Any]:
     """One PIPELINE_RUNS row. Times are stored in UTC. A run that ended before it started
     (e.g. `airflow dags test` with a future logical date) raises InvalidRunTimes instead of
@@ -242,6 +246,9 @@ def build_row(
         LATEST_FDIC_QUARTER=latest_quarter,
         VOLUME_ANOMALIES=volume_anomalies or None,
         SLO_MET=slo.slo_met(state, started, ended) if scheduled else None,
+        # check_contracts' summary: warnings, and (warn mode) the findings enforce mode would fail on
+        CONTRACT_WARNINGS=(contracts or {}).get("warning_count"),
+        CONTRACT_WOULD_FAIL=(contracts or {}).get("errors") if contracts else None,
     )
     for key in (
         "BRONZE_ROWS",
@@ -263,28 +270,43 @@ def build_row(
     return row
 
 
-def merge_sql() -> str:
+def merge_sql(columns: tuple[str, ...] = COLUMNS) -> str:
     """One MERGE on RUN_ID: inserts the run's row, or replaces it if record_run is retried.
     A single atomic statement, so a retry after a timeout can neither duplicate the row nor
     leave the run without one."""
     source = ", ".join(
-        (f"parse_json(%({c})s)" if c in VARIANT_COLUMNS else f"%({c})s") + f" as {c}" for c in COLUMNS
+        (f"parse_json(%({c})s)" if c in VARIANT_COLUMNS else f"%({c})s") + f" as {c}" for c in columns
     )
-    updates = ", ".join(f"t.{c} = s.{c}" for c in COLUMNS if c != "RUN_ID")
+    updates = ", ".join(f"t.{c} = s.{c}" for c in columns if c != "RUN_ID")
     return (
         f"merge into {TABLE} t using (select {source}) s on t.RUN_ID = s.RUN_ID "
         f"when matched then update set {updates}, t.RECORDED_AT = current_timestamp() "
-        f"when not matched then insert ({', '.join(COLUMNS)}) values ({', '.join('s.' + c for c in COLUMNS)})"
+        f"when not matched then insert ({', '.join(columns)}) values ({', '.join('s.' + c for c in columns)})"
     )
 
 
+def table_columns(cur) -> set[str]:
+    cur.execute(
+        "select COLUMN_NAME from INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA = 'OPS' and TABLE_NAME = 'PIPELINE_RUNS'"
+    )
+    return {r[0].upper() for r in cur.fetchall()}
+
+
 def write_row(cur, row: dict[str, Any]) -> None:
-    """Write this run's row with one MERGE on RUN_ID (idempotent under Airflow retries)."""
+    """Write this run's row with one MERGE on RUN_ID (idempotent under Airflow retries). Optional
+    columns the table doesn't have yet are left out, with a warning."""
+    present = table_columns(cur)
+    missing = [c for c in OPTIONAL_COLUMNS if c not in present]
+    if missing:
+        log.warning(
+            "OPS.PIPELINE_RUNS has no %s yet (run snowflake/setup_monitoring.sql): not written", missing
+        )
+    columns = tuple(c for c in COLUMNS if c not in missing)
     params = {
         c: (json.dumps(row[c], default=str) if c in VARIANT_COLUMNS and row[c] is not None else row[c])
-        for c in COLUMNS
+        for c in columns
     }
-    cur.execute(merge_sql(), params)
+    cur.execute(merge_sql(columns), params)
 
 
 def _match_line(detail: Any) -> str:

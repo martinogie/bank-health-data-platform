@@ -1,0 +1,576 @@
+{
+ "latest_quarter": "2026-06-30",
+ "model": "bank_health.ml.distress_model v5",
+ "history": {
+  "added": {
+   "weekly_run": 4222,
+   "rescored": 716566
+  },
+  "rows": 720788
+ },
+ "psi": [
+  {
+   "reference": "previous_4q",
+   "name": "score",
+   "psi": 0.0079,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "tier1_leverage_pct",
+   "psi": 0.0054,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "equity_to_assets_pct",
+   "psi": 0.0114,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "noncurrent_loans_pct",
+   "psi": 0.0034,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "net_chargeoff_rate_pct",
+   "psi": 0.0018,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "past_due_30_89_to_loans_pct",
+   "psi": 0.0055,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "past_due_90_to_loans_pct",
+   "psi": 0.0008,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "nonaccrual_to_assets_pct",
+   "psi": 0.0024,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "ore_to_assets_pct",
+   "psi": 0.0038,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "roa_pct",
+   "psi": 0.0342,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "roe_pct",
+   "psi": 0.0133,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "net_interest_margin_pct",
+   "psi": 0.0442,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "efficiency_ratio_pct",
+   "psi": 0.0166,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "net_income_qtr_to_assets_pct",
+   "psi": 0.038,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "loans_to_deposits_pct",
+   "psi": 0.0017,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "brokered_to_deposits_pct",
+   "psi": 0.0033,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "loan_growth_qoq_pct",
+   "psi": 0.0251,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "loan_growth_yoy_pct",
+   "psi": 0.0057,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "deposit_growth_yoy_pct",
+   "psi": 0.0022,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "asset_growth_yoy_pct",
+   "psi": 0.0078,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "cre_to_loans_pct",
+   "psi": 0.0002,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "cre_to_equity_pct",
+   "psi": 0.0025,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "construction_to_loans_pct",
+   "psi": 0.0011,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "ci_to_loans_pct",
+   "psi": 0.0022,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "consumer_to_loans_pct",
+   "psi": 0.002,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "residential_to_loans_pct",
+   "psi": 0.0007,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "ag_to_loans_pct",
+   "psi": 0.0006,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "log_total_assets",
+   "psi": 0.0012,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "noncurrent_change_1q_pp",
+   "psi": 0.0071,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "noncurrent_change_4q_pp",
+   "psi": 0.0073,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "tier1_change_4q_pp",
+   "psi": 0.0014,
+   "level": "stable"
+  },
+  {
+   "reference": "previous_4q",
+   "name": "roa_change_4q_pp",
+   "psi": 0.0013,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "score",
+   "psi": 0.3229,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "tier1_leverage_pct",
+   "psi": 0.4781,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "equity_to_assets_pct",
+   "psi": 0.0258,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "noncurrent_loans_pct",
+   "psi": 0.0596,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "net_chargeoff_rate_pct",
+   "psi": 0.253,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "past_due_30_89_to_loans_pct",
+   "psi": 0.4326,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "past_due_90_to_loans_pct",
+   "psi": 0.1421,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "nonaccrual_to_assets_pct",
+   "psi": 0.0144,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "ore_to_assets_pct",
+   "psi": 0.39,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "roa_pct",
+   "psi": 0.1632,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "roe_pct",
+   "psi": 0.1323,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "net_interest_margin_pct",
+   "psi": 0.0088,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "efficiency_ratio_pct",
+   "psi": 0.1033,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "net_income_qtr_to_assets_pct",
+   "psi": 0.2185,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "loans_to_deposits_pct",
+   "psi": 0.0261,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "brokered_to_deposits_pct",
+   "psi": 0.0592,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "loan_growth_qoq_pct",
+   "psi": 0.075,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "loan_growth_yoy_pct",
+   "psi": 0.2085,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "deposit_growth_yoy_pct",
+   "psi": 0.3568,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "asset_growth_yoy_pct",
+   "psi": 0.518,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "cre_to_loans_pct",
+   "psi": 0.1143,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "cre_to_equity_pct",
+   "psi": 0.0945,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "construction_to_loans_pct",
+   "psi": 0.1021,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "ci_to_loans_pct",
+   "psi": 0.0704,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "consumer_to_loans_pct",
+   "psi": 0.4252,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "residential_to_loans_pct",
+   "psi": 0.0132,
+   "level": "stable"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "ag_to_loans_pct",
+   "psi": 0.1691,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "log_total_assets",
+   "psi": 0.6727,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "noncurrent_change_1q_pp",
+   "psi": 0.2018,
+   "level": "moderate"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "noncurrent_change_4q_pp",
+   "psi": 0.5693,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "tier1_change_4q_pp",
+   "psi": 0.4972,
+   "level": "large"
+  },
+  {
+   "reference": "training_2001_2019",
+   "name": "roa_change_4q_pp",
+   "psi": 0.7551,
+   "level": "large"
+  }
+ ],
+ "backtest": [
+  {
+   "report_date": "2020-03-31",
+   "rows": 4507,
+   "positives": 268,
+   "judged": true,
+   "pr_auc": 0.3589,
+   "top10_capture": 0.5075
+  },
+  {
+   "report_date": "2020-06-30",
+   "rows": 4504,
+   "positives": 237,
+   "judged": true,
+   "pr_auc": 0.3472,
+   "top10_capture": 0.5738
+  },
+  {
+   "report_date": "2020-09-30",
+   "rows": 4505,
+   "positives": 211,
+   "judged": true,
+   "pr_auc": 0.3376,
+   "top10_capture": 0.5782
+  },
+  {
+   "report_date": "2020-12-31",
+   "rows": 4447,
+   "positives": 187,
+   "judged": true,
+   "pr_auc": 0.2866,
+   "top10_capture": 0.5989
+  },
+  {
+   "report_date": "2021-03-31",
+   "rows": 4435,
+   "positives": 193,
+   "judged": true,
+   "pr_auc": 0.3262,
+   "top10_capture": 0.5699
+  },
+  {
+   "report_date": "2021-06-30",
+   "rows": 4426,
+   "positives": 202,
+   "judged": true,
+   "pr_auc": 0.3305,
+   "top10_capture": 0.5594
+  },
+  {
+   "report_date": "2021-09-30",
+   "rows": 4415,
+   "positives": 194,
+   "judged": true,
+   "pr_auc": 0.2658,
+   "top10_capture": 0.5412
+  },
+  {
+   "report_date": "2021-12-31",
+   "rows": 4391,
+   "positives": 191,
+   "judged": true,
+   "pr_auc": 0.3185,
+   "top10_capture": 0.5916
+  },
+  {
+   "report_date": "2022-03-31",
+   "rows": 4363,
+   "positives": 190,
+   "judged": true,
+   "pr_auc": 0.267,
+   "top10_capture": 0.5211
+  },
+  {
+   "report_date": "2022-06-30",
+   "rows": 4350,
+   "positives": 174,
+   "judged": true,
+   "pr_auc": 0.2027,
+   "top10_capture": 0.477
+  },
+  {
+   "report_date": "2022-09-30",
+   "rows": 4359,
+   "positives": 204,
+   "judged": true,
+   "pr_auc": 0.2524,
+   "top10_capture": 0.451
+  },
+  {
+   "report_date": "2022-12-31",
+   "rows": 4362,
+   "positives": 258,
+   "judged": true,
+   "pr_auc": 0.2672,
+   "top10_capture": 0.4651
+  },
+  {
+   "report_date": "2023-03-31",
+   "rows": 4318,
+   "positives": 283,
+   "judged": true,
+   "pr_auc": 0.3847,
+   "top10_capture": 0.5053
+  },
+  {
+   "report_date": "2023-06-30",
+   "rows": 4284,
+   "positives": 308,
+   "judged": true,
+   "pr_auc": 0.3982,
+   "top10_capture": 0.5162
+  },
+  {
+   "report_date": "2023-09-30",
+   "rows": 4240,
+   "positives": 316,
+   "judged": true,
+   "pr_auc": 0.4202,
+   "top10_capture": 0.538
+  },
+  {
+   "report_date": "2023-12-31",
+   "rows": 4168,
+   "positives": 283,
+   "judged": true,
+   "pr_auc": 0.4203,
+   "top10_capture": 0.5442
+  },
+  {
+   "report_date": "2024-03-31",
+   "rows": 4115,
+   "positives": 275,
+   "judged": true,
+   "pr_auc": 0.3738,
+   "top10_capture": 0.5055
+  },
+  {
+   "report_date": "2024-06-30",
+   "rows": 4082,
+   "positives": 281,
+   "judged": true,
+   "pr_auc": 0.405,
+   "top10_capture": 0.4947
+  },
+  {
+   "report_date": "2024-09-30",
+   "rows": 4028,
+   "positives": 253,
+   "judged": true,
+   "pr_auc": 0.3547,
+   "top10_capture": 0.5178
+  },
+  {
+   "report_date": "2024-12-31",
+   "rows": 3997,
+   "positives": 253,
+   "judged": true,
+   "pr_auc": 0.3681,
+   "top10_capture": 0.5573
+  },
+  {
+   "report_date": "2025-03-31",
+   "rows": 3908,
+   "positives": 226,
+   "judged": true,
+   "pr_auc": 0.3461,
+   "top10_capture": 0.4912
+  },
+  {
+   "report_date": "2025-06-30",
+   "rows": 3894,
+   "positives": 236,
+   "judged": true,
+   "pr_auc": 0.3674,
+   "top10_capture": 0.5593
+  }
+ ],
+ "alerts": []
+}
