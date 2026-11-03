@@ -20,7 +20,7 @@ from pathlib import Path
 
 from ingestion.environment import assert_can_publish
 
-SCHEMA_VERSION = 2  # 2: bands N and F (not scored) replace the old "nb" new-bank flag
+SCHEMA_VERSION = 3  # 3: "w" SHAP waterfall and "d" distress lines; 2: bands N and F (not scored)
 HISTORY_QUARTERS = 8
 MAX_BYTES = 3 * 1024 * 1024
 
@@ -91,10 +91,72 @@ _UNIT_SUFFIX = {
     "pct_deposits": "% of deposits",
     "pct_equity": "% of equity",
 }
-# reason text written by 05_score: "<feature> = <value> (median <value>)", values like 1,234.56 or n/a
+# reason text written by 05_score, values like 1,234.56 or n/a:
+#   SHAP reasons:     "<feature> = <value> (peer median <value>)"  (median of the bank's asset-size tier)
+#   median fallback:  "<feature> = <value> (median <value>)"       (median of all scored banks)
 _REASON_RE = re.compile(
-    r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\(median\s+(n/a|-?[\d,]*\.?\d+)\)\s*$"
+    r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\((peer median|median)\s+(n/a|-?[\d,]*\.?\d+)\)\s*$"
 )
+_MEDIAN_WORDING = {"peer median": "median of similar-size banks", "median": "median of all US banks"}
+
+
+DISTRESS_LINE_LABELS = {
+    "noncurrent_loans_above": "Non-current loans above {t:g}% of loans",
+    "tier1_leverage_below": "Tier 1 leverage ratio below {t:g}%",
+    "two_quarterly_losses": "A net loss in each of the last two quarters",
+}
+
+
+def _json(value):
+    if value is None or isinstance(value, (list, dict)):
+        return value
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def waterfall(raw) -> dict | None:
+    """05_score's shap_waterfall -> {"b": base %, "i": [{"f", "l", "v", "m", "pp", "nr"?}], "o": other pp}:
+    the top 8 pushes in percentage points of probability, with plain labels. An item the bank
+    doesn't report has v = null and `nr`, a plain note saying that the missing figure itself
+    moved the score."""
+    w = _json(raw)
+    if not w:
+        return None
+    items = [
+        {
+            "f": i["f"],
+            "l": FEATURE_LABELS.get(i["f"], (i["f"].replace("_", " ").capitalize(), "num"))[0],
+            "v": round_or_none(i.get("v"), 2),
+            "m": round_or_none(i.get("m"), 2),
+            "pp": round_or_none(i.get("pp"), 2),
+            **(
+                {
+                    "nr": f"Not reported: the missing figure itself {'raised' if (i.get('pp') or 0) > 0 else 'lowered'} the score"
+                }
+                if i.get("v") is None
+                else {}
+            ),
+        }
+        for i in w.get("items", [])
+    ]
+    return {"b": round_or_none(w.get("base_pct"), 2), "i": items, "o": round_or_none(w.get("other_pp"), 2)}
+
+
+def distress(raw) -> list | None:
+    """05_score's distress_lines -> [{"k", "l", "v"}]: which lines a bank already in distress crossed."""
+    lines = _json(raw)
+    if lines is None:
+        return None
+    return [
+        {
+            "k": d["line"],
+            "l": DISTRESS_LINE_LABELS.get(d["line"], d["line"]).format(t=d.get("threshold") or 0),
+            "v": round_or_none(d.get("value"), 2),
+        }
+        for d in lines
+    ]
 
 
 # --------------------------------------------------------------- formatting
@@ -139,19 +201,24 @@ def _parse_number(text: str) -> float | None:
 
 
 def plain_reason(raw: str | None) -> str | None:
-    """'noncurrent_loans_pct = 2.73 (median 0.46)' ->
-    'Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)'.
+    """'noncurrent_loans_pct = 2.73 (peer median 0.46)' ->
+    'Non-current loans: 2.73% of loans (median of similar-size banks: 0.46% of loans)'.
 
-    The median comes from 05_score: the median of ALL scored banks that quarter. That is not
-    the size-tier peer median used for the trend lines (`peers`), so the wording says so."""
+    SHAP reasons (05_score, reason_method = shap) compare with the bank's asset-size-tier peers;
+    fallback reasons, '(median m)', with ALL scored banks that quarter. The wording says which."""
     if not raw:
         return None
     m = _REASON_RE.match(raw)
     if not m:
         return raw.strip()  # unknown format: show as-is rather than drop it
-    feature, value, median = m.group(1), _parse_number(m.group(2)), _parse_number(m.group(3))
+    feature, value, kind, median = (
+        m.group(1),
+        _parse_number(m.group(2)),
+        m.group(3),
+        _parse_number(m.group(4)),
+    )
     label, unit = FEATURE_LABELS.get(feature, (feature.replace("_", " ").capitalize(), "num"))
-    return f"{label}: {_fmt_value(value, unit)} (median of all US banks: {_fmt_value(median, unit)})"
+    return f"{label}: {_fmt_value(value, unit)} ({_MEDIAN_WORDING[kind]}: {_fmt_value(median, unit)})"
 
 
 # ------------------------------------------------------------------ dates
@@ -259,6 +326,11 @@ def build_payload(
             "r": [x for x in (plain_reason(r.get(f"reason_{i}")) for i in (1, 2, 3)) if x],
             "h": build_history(hist_by_cert.get(cert, []), quarters),
         }
+        w, d = waterfall(r.get("shap_waterfall")), distress(r.get("distress_lines"))
+        if w:
+            rec["w"] = w
+        if d is not None:
+            rec["d"] = d
         if r.get("has_cfpb_complaints"):
             rec["cx"] = round_or_none(r.get("complaints"), 0)
             rec["cr"] = round_or_none(r.get("complaints_per_1b_deposits"), 2)
@@ -324,6 +396,10 @@ def validate_payload(payload: dict) -> None:
         need(b["p"] is None or 0 <= b["p"] <= 1, f"bank {b['c']}: probability out of range")
         need(b.get("pp") is None or 0 <= b["pp"] <= 100, f"bank {b['c']}: percentile out of range")
         need(len(b["r"]) <= 3, f"bank {b['c']}: more than 3 reasons")
+        need("w" not in b or len(b["w"]["i"]) <= 8, f"bank {b['c']}: more than 8 waterfall items")
+        need(
+            "d" not in b or b["b"] == "D", f"bank {b['c']}: distress lines only for banks already in distress"
+        )
         need(
             set(b["h"]) == set(METRICS) and all(len(v) == n_hist for v in b["h"].values()),
             f"bank {b['c']}: history must have every metric with {n_hist} values",
@@ -360,7 +436,7 @@ with ew as (select * from MARTS.MART_EARLY_WARNING),
      )
 select ew.cert, ew.bank_name, ew.city, ew.state_code, ew.asset_size_tier, ew.total_assets_k,
        ew.distress_probability, ew.risk_band, ew.already_in_distress,
-       ew.reason_1, ew.reason_2, ew.reason_3,
+       ew.reason_1, ew.reason_2, ew.reason_3, ew.shap_waterfall, ew.distress_lines,
        ew.complaints, ew.complaints_per_1b_deposits,
        ew.report_date, ew.model_name, ew.model_version,
        d.established_date, d.has_cfpb_complaints,

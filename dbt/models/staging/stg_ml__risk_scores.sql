@@ -15,6 +15,10 @@ select
     reason_1,
     reason_2,
     reason_3,
+    -- added in Phase 3 (PR 7); NULL until prod's scoring has written them once
+    {{ column_or_null(source('raw', 'ml_risk_scores'), 'reason_method') }},
+    {{ column_or_null(source('raw', 'ml_risk_scores'), 'shap_waterfall') }},
+    {{ column_or_null(source('raw', 'ml_risk_scores'), 'distress_lines') }},
     model_name,
     cast(model_version as integer)        as model_version,
     scored_at,

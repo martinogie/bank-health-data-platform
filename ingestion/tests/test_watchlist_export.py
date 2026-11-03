@@ -309,3 +309,59 @@ def test_banks_sorted_by_probability_highest_first():
 def test_no_banks_is_an_error():
     with pytest.raises(ValueError, match="no scored banks"):
         wx.build_payload([], [], [], date(2026, 10, 21))
+
+
+def test_plain_reason_says_which_median_a_reason_uses():
+    from ingestion import watchlist_export as wx
+
+    assert wx.plain_reason("noncurrent_loans_pct = 2.73 (peer median 0.46)") == (
+        "Non-current loans: 2.73% of loans (median of similar-size banks: 0.46% of loans)"
+    )
+    assert wx.plain_reason("noncurrent_loans_pct = 2.73 (median 0.46)") == (
+        "Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)"
+    )
+
+
+def test_waterfall_and_distress_lines_for_the_website():
+    import json as _json
+
+    from ingestion import watchlist_export as wx
+
+    raw = _json.dumps(
+        {
+            "base_pct": 4.1,
+            "items": [{"f": "noncurrent_loans_pct", "v": 2.734, "m": 0.36, "pp": 12.345}],
+            "other_pp": 1.2,
+            "p_pct": 17.6,
+        }
+    )
+    assert wx.waterfall(raw) == {
+        "b": 4.1,
+        "i": [{"f": "noncurrent_loans_pct", "l": "Non-current loans", "v": 2.73, "m": 0.36, "pp": 12.35}],
+        "o": 1.2,
+    }
+    assert wx.waterfall(None) is None
+    lines = wx.distress(_json.dumps([{"line": "tier1_leverage_below", "value": 4.1, "threshold": 5.0}]))
+    assert lines == [{"k": "tier1_leverage_below", "l": "Tier 1 leverage ratio below 5%", "v": 4.1}]
+    assert wx.distress(None) is None and wx.distress("[]") == []
+
+
+def test_not_reported_waterfall_items_say_so():
+    import json as _json
+
+    from ingestion import watchlist_export as wx
+
+    raw = _json.dumps(
+        {
+            "base_pct": 4.0,
+            "items": [
+                {"f": "brokered_to_deposits_pct", "v": None, "m": 0.0, "pp": 3.1},
+                {"f": "ore_to_assets_pct", "v": None, "m": 0.0, "pp": -0.4},
+            ],
+            "other_pp": 0,
+            "p_pct": 6.7,
+        }
+    )
+    a, b = wx.waterfall(raw)["i"]
+    assert a["nr"] == "Not reported: the missing figure itself raised the score" and a["v"] is None
+    assert b["nr"] == "Not reported: the missing figure itself lowered the score"
