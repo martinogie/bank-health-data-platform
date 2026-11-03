@@ -1,0 +1,78 @@
+{
+ "provenance": "Draft: labels proposed by Claude Code, not yet reviewed by Martins. Not for publication.",
+ "precision": {
+  "by_company": {
+   "value": 0.9292929292929293,
+   "ci95": [
+    0.8611851485384827,
+    0.9653297699061363
+   ],
+   "correct": 92,
+   "judged": 99,
+   "method": "Wilson"
+  },
+  "by_volume": {
+   "value": 0.9993677029634814,
+   "ci95": [
+    0.9981627865006316,
+    0.9998952835299116
+   ],
+   "correct_complaints": 516835,
+   "judged_complaints": 517162,
+   "method": "bootstrap over companies, 10000 resamples"
+  },
+  "sample": "100 of 142 matched companies (1 unsure left out)"
+ },
+ "recall": {
+  "by_volume": {
+   "value": 0.9476360613107067,
+   "range": [
+    0.9203690208124322,
+    0.9476622443558186
+   ],
+   "matched_correct_complaints_est": 600281,
+   "missed_complaints_est": 33170,
+   "missed_complaints_upper": 51874
+  },
+  "by_company": {
+   "value": 0.9850701251696576,
+   "range": [
+    0.3835607080270548,
+    0.9856194591259816
+   ],
+   "matched_correct_companies_est": 132.0,
+   "missed_companies_est": 2.0,
+   "missed_companies_upper": 196.5
+  },
+  "true_misses_top50": [
+   [
+    "Bread Financial Holdings, Inc.",
+    25276,
+    "57570"
+   ],
+   [
+    "UNITED SERVICES AUTOMOBILE ASSOCIATION",
+    7894,
+    "32188"
+   ]
+  ],
+  "true_misses_random_rest": 0,
+  "random_rest_judged": 99,
+  "rest_population": {
+   "companies": 5208,
+   "complaints": 500737
+  }
+ },
+ "top50_share_of_unmatched_volume": 0.642047164503882,
+ "unmatched_volume_by_type": {
+  "debt_collector": 554206,
+  "other_non_bank": 535270,
+  "fintech": 241154,
+  "credit_union": 35091,
+  "true_miss": 33170
+ },
+ "unmatched_volume_unsure": 0,
+ "dedup": [
+  "TRANSWORLD SYSTEMS INC"
+ ]
+}
