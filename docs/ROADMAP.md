@@ -51,6 +51,7 @@ each item are in the [model card](model_card.md).
 |---|---|
 | 0 | 7.0 Preparation: keep bank history (review finding D-04) |
 | 1 | 7.1 Complaint features as a tested challenger |
+| 2 | 7.2 Research study: consumer narratives (stress signal and bank mentions) |
 
 **7.0 in brief:** today `dim_bank` keeps only each bank's latest name, holding company and status,
 so history is overwritten. A dbt snapshot (type 2 history: one row per bank per period, with valid
@@ -67,6 +68,23 @@ because it matters mainly for 7.1.
 4. Train a v6-based model with and without the features, on the same split.
 5. Report the results overall and for large banks, then record the adopt or reject decision.
    Calibration must not get worse.
+
+**7.2 in brief (research study):** two signals from CFPB consumer narratives, each tested as a
+challenger like 7.1.
+1. **Consumer-stress signal:** monthly counts of complaints to the credit bureaus (Equifax,
+   TransUnion, Experian, today excluded from the pipeline) by state, as a regional
+   consumer-stress feature for banks with deposits in that state.
+2. **Bank mentions:** banks named in the narratives of complaints sent to the credit bureaus
+   and to debt collectors, found by named-entity recognition (NER) plus an alias dictionary of
+   FDIC bank and holding-company names. They are then linked to a cert with the same entity
+   resolution as the complaint matching, and checked on a hand-labelled sample (precision and
+   recall, as in E-01).
+3. "Mentioned" counts stay separate from complaints addressed to a bank: different features,
+   never added to the complaint counts.
+4. Adopted only if it improves the model as a challenger (same split and rules as 7.1),
+   especially for banks over $100B, where complaint volume is large enough to carry a signal.
+5. Needs the narrative text (`complaint_what_happened`, published only with the consumer's
+   consent) and the bureau complaints, neither downloaded today: a separate download, sized first.
 
 ## How a version is released
 

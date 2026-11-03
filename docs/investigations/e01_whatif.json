@@ -1,0 +1,315 @@
+{
+ "source_catalog": "bank_health",
+ "baseline_reproduces_prod": true,
+ "totals": {
+  "baseline": {
+   "companies_matched": 142,
+   "complaints_matched": 600661,
+   "match_rate_pct": 30.04
+  },
+  "overrides": {
+   "companies_matched": 138,
+   "complaints_matched": 633560,
+   "match_rate_pct": 31.69
+  },
+  "abbreviations": {
+   "companies_matched": 143,
+   "complaints_matched": 608555,
+   "match_rate_pct": 30.43
+  },
+  "both": {
+   "companies_matched": 138,
+   "complaints_matched": 633560,
+   "match_rate_pct": 31.69
+  }
+ },
+ "changes": {
+  "overrides": [
+   {
+    "cert_after": 57570,
+    "cert_before": null,
+    "company": "Bread Financial Holdings, Inc.",
+    "complaints": 25276,
+    "method_before": "unmatched",
+    "method_after": "manual_override",
+    "bank_before": null,
+    "bank_after": "Comenity Capital Bank",
+    "state_after": "UT"
+   },
+   {
+    "cert_after": 32188,
+    "cert_before": null,
+    "company": "UNITED SERVICES AUTOMOBILE ASSOCIATION",
+    "complaints": 7894,
+    "method_before": "unmatched",
+    "method_after": "manual_override",
+    "bank_before": null,
+    "bank_after": "USAA Federal Savings Bank",
+    "state_after": "AZ"
+   },
+   {
+    "cert_after": null,
+    "cert_before": 6123,
+    "company": "Eagle Financial Services, Inc.",
+    "complaints": 121,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "Bank Of Clarke",
+    "bank_after": null,
+    "state_after": null
+   },
+   {
+    "cert_after": null,
+    "cert_before": 13198,
+    "company": "Cornerstone Holdings, Inc.",
+    "complaints": 85,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "Cornerstone Bank",
+    "bank_after": null,
+    "state_after": null
+   },
+   {
+    "cert_after": 9712,
+    "cert_before": 3076,
+    "company": "INDEPENDENT BANK CORP.",
+    "complaints": 56,
+    "method_before": "bank_name",
+    "method_after": "manual_override",
+    "bank_before": "Independent Bank",
+    "bank_after": "Rockland Trust Company",
+    "state_after": "MA"
+   },
+   {
+    "cert_after": null,
+    "cert_before": 26312,
+    "company": "FIRST AMERICAN FINANCIAL CORPORATION",
+    "complaints": 49,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "First American Trust, FSB",
+    "bank_after": null,
+    "state_after": null
+   },
+   {
+    "cert_after": null,
+    "cert_before": 13107,
+    "company": "Town Financial Corporation",
+    "complaints": 7,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "Citizens State Bank of New Castle, Indiana",
+    "bank_after": null,
+    "state_after": null
+   },
+   {
+    "cert_after": null,
+    "cert_before": 33136,
+    "company": "Woodlands Financial Services Inc",
+    "complaints": 6,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "Woodlands Bank",
+    "bank_after": null,
+    "state_after": null
+   },
+   {
+    "cert_after": null,
+    "cert_before": 21998,
+    "company": "Covington Capital Corporation",
+    "complaints": 3,
+    "method_before": "holding_company",
+    "method_after": "removed_by_review",
+    "bank_before": "Covington County Bank",
+    "bank_after": null,
+    "state_after": null
+   }
+  ],
+  "abbreviations": [
+   {
+    "cert_after": 32188,
+    "cert_before": null,
+    "company": "UNITED SERVICES AUTOMOBILE ASSOCIATION",
+    "complaints": 7894,
+    "method_before": "unmatched",
+    "method_after": "holding_company",
+    "bank_before": null,
+    "bank_after": "USAA Federal Savings Bank",
+    "state_after": "AZ"
+   }
+  ]
+ },
+ "sense_check": {
+  "holding_company_matches": 88,
+  "to_banks_under_10b": 12,
+  "flagged": {
+   "strict": [
+    {
+     "company": "Eagle Financial Services, Inc.",
+     "complaints": 121,
+     "bank": "Bank Of Clarke",
+     "bank_state": "VA",
+     "assets_k": 1847024.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.6
+    },
+    {
+     "company": "ALCAR INC.",
+     "complaints": 121,
+     "bank": "DR Bank",
+     "bank_state": "CT",
+     "assets_k": 912610.0,
+     "home_state_share": 0.02,
+     "non_bank_share": 0.76
+    },
+    {
+     "company": "Cornerstone Holdings, Inc.",
+     "complaints": 85,
+     "bank": "Cornerstone Bank",
+     "bank_state": "ND",
+     "assets_k": 1853302.0,
+     "home_state_share": 0.01,
+     "non_bank_share": 0.88
+    },
+    {
+     "company": "Town Financial Corporation",
+     "complaints": 7,
+     "bank": "Citizens State Bank of New Castle, Indiana",
+     "bank_state": "IN",
+     "assets_k": 908766.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.86
+    },
+    {
+     "company": "Oak Tree Financial Inc.",
+     "complaints": 6,
+     "bank": "Riverside Bank",
+     "bank_state": "AR",
+     "assets_k": 73912.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.5
+    },
+    {
+     "company": "Covington Capital Corporation",
+     "complaints": 3,
+     "bank": "Covington County Bank",
+     "bank_state": "MS",
+     "assets_k": 109173.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.67
+    },
+    {
+     "company": "First State Financial Corporation",
+     "complaints": 1,
+     "bank": "First State Bank",
+     "bank_state": "MI",
+     "assets_k": 1349122.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 1.0
+    }
+   ],
+   "broad": [
+    {
+     "company": "Eagle Financial Services, Inc.",
+     "complaints": 121,
+     "bank": "Bank Of Clarke",
+     "bank_state": "VA",
+     "assets_k": 1847024.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.99
+    },
+    {
+     "company": "ALCAR INC.",
+     "complaints": 121,
+     "bank": "DR Bank",
+     "bank_state": "CT",
+     "assets_k": 912610.0,
+     "home_state_share": 0.02,
+     "non_bank_share": 0.96
+    },
+    {
+     "company": "Cornerstone Holdings, Inc.",
+     "complaints": 85,
+     "bank": "Cornerstone Bank",
+     "bank_state": "ND",
+     "assets_k": 1853302.0,
+     "home_state_share": 0.01,
+     "non_bank_share": 1.0
+    },
+    {
+     "company": "Peoples Financial Corp.",
+     "complaints": 16,
+     "bank": "The Peoples Bank, Biloxi, Mississippi",
+     "bank_state": "MS",
+     "assets_k": 770659.0,
+     "home_state_share": 0.06,
+     "non_bank_share": 0.81
+    },
+    {
+     "company": "Town Financial Corporation",
+     "complaints": 7,
+     "bank": "Citizens State Bank of New Castle, Indiana",
+     "bank_state": "IN",
+     "assets_k": 908766.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 1.0
+    },
+    {
+     "company": "Woodlands Financial Services Inc",
+     "complaints": 6,
+     "bank": "Woodlands Bank",
+     "bank_state": "PA",
+     "assets_k": 640262.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.83
+    },
+    {
+     "company": "Oak Tree Financial Inc.",
+     "complaints": 6,
+     "bank": "Riverside Bank",
+     "bank_state": "AR",
+     "assets_k": 73912.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.5
+    },
+    {
+     "company": "Covington Capital Corporation",
+     "complaints": 3,
+     "bank": "Covington County Bank",
+     "bank_state": "MS",
+     "assets_k": 109173.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 0.67
+    },
+    {
+     "company": "First State Financial Corporation",
+     "complaints": 1,
+     "bank": "First State Bank",
+     "bank_state": "MI",
+     "assets_k": 1349122.0,
+     "home_state_share": 0.0,
+     "non_bank_share": 1.0
+    }
+   ]
+  },
+  "rule": "holding-company match, bank assets < $10B, home-state share < 25%, non-bank product share >= 50%"
+ },
+ "ambiguous_name_vs_hc": [
+  {
+   "company": "FIRSTBANK",
+   "complaints": 83,
+   "cert_by_name": 18714,
+   "name_bank": "FirstBank",
+   "cert_by_hc": 3864,
+   "hc_bank": "The First National Bank of Fort Smith"
+  },
+  {
+   "company": "INDEPENDENT BANK CORP.",
+   "complaints": 56,
+   "cert_by_name": 3076,
+   "name_bank": "Independent Bank",
+   "cert_by_hc": 9712,
+   "hc_bank": "Rockland Trust Company"
+  }
+ ]
+}
