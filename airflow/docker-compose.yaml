@@ -72,6 +72,7 @@ x-airflow-common:
     - ${AIRFLOW_LOGS_DIR:-./logs}:/opt/airflow/logs
     - ../ingestion:/opt/airflow/ingestion
     - ../dbt:/opt/airflow/dbt
+    - ../ops:/opt/airflow/ops:ro   # credential dates for check_credentials (no secrets)
     - ../databricks:/opt/airflow/databricks:ro   # dev uploads these notebooks to its own folder
     - ${BANK_HEALTH_DATA_DIR:-../data}:/opt/airflow/data
     # export_watchlist writes watchlist.json here: outside the git checkout, so a deploy's

@@ -31,6 +31,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
 | `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs; the share of complaints matched to a bank (alert if more than 2 points below the usual) (`ingestion/volume_checks.py`) | read-only |
 | `check_model` | model monitoring (`07_monitor`): PSI of the score and features vs the previous 4 quarters and vs 2001–2019, the backtest from 2020 -> `OPS.MODEL_MONITORING`; a MODEL message when alerts are on (`MODEL_MONITOR_ALERTS`). Never fails the run | replaces this run's rows |
+| `check_credentials` | Databricks token expiry (token API) and the dates in `ops/credentials.yml`: an EXPIRING message for anything due within 14 days. Never fails the run | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 
@@ -145,7 +146,9 @@ def _collect_metrics(ti) -> dict:
     run_id = ti.xcom_pull(task_ids="run_databricks_job", key="run_id")
     if run_id:
         try:
-            out["layers"] = run_log.layer_rows(run_log.databricks_outputs(DatabricksAPI.from_env(), run_id))
+            api = DatabricksAPI.from_env()
+            out["layers"] = run_log.layer_rows(run_log.databricks_outputs(api, run_id))
+            out["databricks_minutes"] = run_log.job_run_minutes(api, run_id)
         except Exception as exc:
             print(f"Databricks summaries not available: {type(exc).__name__}")
     try:
@@ -237,6 +240,7 @@ def _record_run() -> dict:
             volume_anomalies=volume.get("anomalies"),
             backfill=ti.xcom_pull(task_ids="check_backfill"),
             contracts=ti.xcom_pull(task_ids="check_contracts"),
+            databricks_minutes=metrics.get("databricks_minutes"),
         )
         run_log.write_row(cur, row)
         backfilled = run_log.backfill_final_credits(cur, warehouse, ended)
@@ -818,6 +822,37 @@ def bank_health_weekly():
         return {"recorded": written, "alerts": would_alert, "alerts_enabled": enabled, "headline": line}
 
     @task(
+        retries=0,
+        doc_md="Credential expiry (O-05): Databricks tokens from the token API, everything else from "
+        "ops/credentials.yml (no secrets). One EXPIRING message for anything due within 14 days or overdue "
+        "(docs/runbooks/rotation.md). Never fails the run.",
+    )
+    def check_credentials() -> dict:
+        from pathlib import Path as _Path
+
+        from ingestion import credentials
+        from ingestion.alerts import notify
+        from ingestion.databricks_jobs import DatabricksAPI
+
+        try:
+            entries = credentials.load(_Path("/opt/airflow/ops/credentials.yml"))
+        except Exception as exc:
+            entries = [{"name": f"ops/credentials.yml could not be read ({type(exc).__name__})", "due": None}]
+        try:
+            tokens = credentials.token_deadlines(
+                DatabricksAPI.from_env().call("GET", "/api/2.0/token/list").get("token_infos", [])
+            )
+        except Exception as exc:
+            print(f"Databricks token list not available: {type(exc).__name__}")
+            tokens = []
+        lines = credentials.due(entries, tokens, pendulum.now(TZ).date())
+        for line in lines:
+            print("due:", line)
+        if lines:
+            notify(f"EXPIRING: {len(lines)} credential(s) or reminder(s) due within 14 days", lines)
+        return {"due": lines, "checked": len(entries) + len(tokens)}
+
+    @task(
         trigger_rule="all_done",
         retries=1,
         doc_md="Always runs last, even after failures: writes this run's OPS.PIPELINE_RUNS row (state, failed "
@@ -851,7 +886,9 @@ def bank_health_weekly():
     [check_freshness(metrics), check_volumes(metrics, plan)] >> watchlist
     model_check = check_model()
     metrics >> model_check
-    [watchlist, manifest, model_check] >> record_run()
+    creds = check_credentials()
+    env_checked >> creds
+    [watchlist, manifest, model_check, creds] >> record_run()
 
 
 bank_health_weekly()

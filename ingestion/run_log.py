@@ -35,12 +35,12 @@ COLUMNS = (
     "FAILED_TASKS", "BRONZE_ROWS", "SILVER_ROWS", "GOLD_ROWS", "MARTS_ROWS", "SCORED_BANKS", "ROWS_DETAIL",
     "DBT_MODELS_OK", "DBT_MODELS_ERROR", "DBT_TESTS_PASS", "DBT_TESTS_WARN", "DBT_TESTS_FAIL", "DQ_WARNINGS",
     "CREDITS_ESTIMATE", "MODEL_NAME", "MODEL_VERSION", "MODEL_ALIAS", "LATEST_FDIC_QUARTER",
-    "VOLUME_ANOMALIES", "SLO_MET", "CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL",
+    "VOLUME_ANOMALIES", "SLO_MET", "CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL", "DATABRICKS_MINUTES",
 )  # fmt: skip
 VARIANT_COLUMNS = {"ROWS_DETAIL", "VOLUME_ANOMALIES"}
 # Added by snowflake/setup_monitoring.sql (PR 8). Until that script has run, a table without them is
 # written without them (with a warning), so the deploy order can't break a run.
-OPTIONAL_COLUMNS = ("CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL")
+OPTIONAL_COLUMNS = ("CONTRACT_WARNINGS", "CONTRACT_WOULD_FAIL", "DATABRICKS_MINUTES")
 _MODEL_RE = re.compile(r"^(?P<name>\S+) v(?P<version>\S+) \(@(?P<alias>[\w-]+)\)$")
 
 
@@ -69,6 +69,21 @@ def databricks_outputs(api, run_id: int | str) -> dict[str, dict]:
         except json.JSONDecodeError:
             log.warning("task %s: exit value is not JSON", task["task_key"])
     return out
+
+
+def run_minutes(run: dict) -> dict[str, Any]:
+    """Databricks minutes for one job run (C-02), from runs/get: per task, setup + execution +
+    cleanup; and the total. Free Edition has no billing data, so time (against the daily quota) is
+    the measure of Databricks cost."""
+    tasks = {}
+    for t in run.get("tasks", []):
+        ms = sum(t.get(k) or 0 for k in ("setup_duration", "execution_duration", "cleanup_duration"))
+        tasks[t["task_key"]] = round(ms / 60_000, 2)
+    return {"total": round(sum(tasks.values()), 1), "tasks": tasks}
+
+
+def job_run_minutes(api, run_id: int | str) -> dict[str, Any]:
+    return run_minutes(api.call("GET", "/api/2.2/jobs/runs/get", params={"run_id": run_id}))
 
 
 def layer_rows(outputs: dict[str, dict]) -> dict[str, Any]:
@@ -215,6 +230,7 @@ def build_row(
     volume_anomalies: list[dict] | None = None,
     backfill: dict | None = None,
     contracts: dict | None = None,
+    databricks_minutes: dict | None = None,
 ) -> dict[str, Any]:
     """One PIPELINE_RUNS row. Times are stored in UTC. A run that ended before it started
     (e.g. `airflow dags test` with a future logical date) raises InvalidRunTimes instead of
@@ -249,6 +265,7 @@ def build_row(
         # check_contracts' summary: warnings, and (warn mode) the findings enforce mode would fail on
         CONTRACT_WARNINGS=(contracts or {}).get("warning_count"),
         CONTRACT_WOULD_FAIL=(contracts or {}).get("errors") if contracts else None,
+        DATABRICKS_MINUTES=(databricks_minutes or {}).get("total"),
     )
     for key in (
         "BRONZE_ROWS",
@@ -264,6 +281,8 @@ def build_row(
     detail = dict(layers.get("detail") or {})
     if marts:
         detail["marts"] = marts
+    if databricks_minutes and databricks_minutes.get("tasks"):
+        detail["databricks_minutes"] = databricks_minutes["tasks"]
     if backfill and backfill.get("mode") == "backfill":
         detail["backfill"] = {k: v for k, v in backfill.items() if k != "mode"}
     row["ROWS_DETAIL"] = detail or None
@@ -336,6 +355,7 @@ def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:
         f"dbt: {n(row.get('DBT_TESTS_PASS'))} tests passed, {n(row.get('DBT_TESTS_WARN'))} warned, "
         f"{n(row.get('DBT_TESTS_FAIL'))} failed",
         f"Credits (estimate): {row['CREDITS_ESTIMATE']}" if row.get("CREDITS_ESTIMATE") is not None else "",
+        f"Databricks: {row['DATABRICKS_MINUTES']} min" if row.get("DATABRICKS_MINUTES") is not None else "",
         "Data ready before Monday 12:00 CT: "
         + {True: "yes", False: "no", None: "n/a (manual run)"}[row.get("SLO_MET")],
     ]
