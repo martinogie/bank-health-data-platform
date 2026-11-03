@@ -1,8 +1,8 @@
 # E-01: how well are CFPB complaints matched to FDIC banks?
 
-> **Draft, not for publication.** Every figure below rests on labels proposed by Claude Code
-> that Martins has not yet reviewed (`confirmed_by_martins` in the label file). The figures are
-> recomputed from his confirmed labels before any of them is used.
+> **Labels proposed by Claude Code and reviewed by Martins Ogiekpolor (3 Nov 2026):** 248 of 250
+> confirmed, 2 marked unsure (`reviewed_by` and `confirmed_by_martins` in the label file). Every
+> figure below is computed from these reviewed labels.
 
 Data: prod silver, 3 Nov 2026. Complaints in the pipeline: 1,999,552 (the last 3 years, credit
 bureaus excluded), from 5,400 companies. Today 142 companies (600,661 complaints, **30.0%**) are
@@ -15,7 +15,8 @@ Files: labels [e01_match_labels.csv](e01_match_labels.csv) (250 companies; how t
 
 ## 1. Precision and recall today
 
-The unsure row (ALCAR INC) is left out. TRANSWORLD SYSTEMS INC, in both the
+The 2 rows Martins marked unsure (ALCAR INC; CLGF Holdco 1, LLC: credit-card complaints,
+identity not confirmed) are left out. TRANSWORLD SYSTEMS INC, in both the
 random sample and the top 50, is counted once.
 
 | Measure | Value | 95% interval | Based on |
@@ -43,7 +44,8 @@ The **50 largest unmatched companies hold 64.2%** of the unmatched complaints (8
 |---|---|---|
 | Debt collectors | 554,206 | 39.6% |
 | Other non-banks (mortgage, auto and student lenders, credit reporting and data firms, title) | 535,270 | 38.3% |
-| Fintechs | 241,154 | 17.2% |
+| Fintechs | 234,367 | 16.8% |
+| Unsure (CLGF Holdco 1, LLC) | 6,787 | 0.5% |
 | Credit unions | 35,091 | 2.5% |
 | **Missed banks** | **33,170** | **2.4%** |
 

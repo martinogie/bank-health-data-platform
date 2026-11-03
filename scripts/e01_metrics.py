@@ -33,7 +33,7 @@ Z = 1.959964
 SEED = 20261103
 BOOT = 10_000
 PROVENANCE = (
-    "Draft: labels proposed by Claude Code, not yet reviewed by Martins. Not for publication."
+    "Labels proposed by Claude Code and reviewed by Martins Ogiekpolor (3 Nov 2026)."
 )
 
 

@@ -1,5 +1,5 @@
 {
- "provenance": "Draft: labels proposed by Claude Code, not yet reviewed by Martins. Not for publication.",
+ "provenance": "Labels proposed by Claude Code and reviewed by Martins Ogiekpolor (3 Nov 2026).",
  "precision": {
   "by_company": {
    "value": 0.9292929292929293,
@@ -67,11 +67,11 @@
  "unmatched_volume_by_type": {
   "debt_collector": 554206,
   "other_non_bank": 535270,
-  "fintech": 241154,
+  "fintech": 234367,
   "credit_union": 35091,
   "true_miss": 33170
  },
- "unmatched_volume_unsure": 0,
+ "unmatched_volume_unsure": 6787,
  "dedup": [
   "TRANSWORLD SYSTEMS INC"
  ]
