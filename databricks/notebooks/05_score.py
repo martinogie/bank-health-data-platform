@@ -15,6 +15,11 @@
 # MAGIC   `feature = value (peer median m)`: ranked by their SHAP contribution to the bank's log-odds
 # MAGIC   (shap `TreeExplainer`), compared with the median of banks in the same asset-size tier. A
 # MAGIC   metric the bank doesn't report is never cited.
+# MAGIC - `shap_waterfall` (JSON, scored banks): the 8 features that move the score most, either way:
+# MAGIC   feature, bank value, peer median, push in percentage points of probability (they add up,
+# MAGIC   with `other_pp`, from `base_pct` to the bank's probability), for the website's waterfall.
+# MAGIC - `distress_lines` (JSON, banks already in distress): the lines crossed this quarter
+# MAGIC   (non-current loans above 3%, Tier 1 below 5%, two quarterly losses), with value and threshold.
 # MAGIC - `reason_method`: `shap`, or `median_fallback` when SHAP gives no usable reason (or fails):
 # MAGIC   then the earlier method, `feature = value (median m)`, how much the probability falls if
 # MAGIC   that one metric is set to the median of all scored banks this quarter.
@@ -119,7 +124,7 @@ for f in model_features:
     Xf[f] = medians[f]
     drops[f] = cur.loc[ranked, "distress_probability"] - model.predict_proba(Xf)[:, 1]
 
-contributions, shap_error = None, None
+contributions, shap_error, base = None, None, None
 try:
     import shap
 
@@ -151,6 +156,29 @@ for i in Xr.index:
 cur[["reason_1", "reason_2", "reason_3"]] = reasons
 print("reason_method:", cur["reason_method"].value_counts(dropna=False).to_dict())
 
+# For the website's Bank Detail page: the top 8 SHAP pushes (scored banks), as JSON text, and for
+# banks already in distress, the distress lines they crossed (no reasons for them).
+cur["shap_waterfall"] = None
+if contributions is not None:
+    for i in Xr.index:
+        cur.loc[i, "shap_waterfall"] = json.dumps(
+            shap_waterfall(Xr.loc[i], contributions.loc[i], peers.loc[i], base)
+        )
+cur["distress_lines"] = None
+in_distress = cur["risk_band"] == ALREADY_IN_DISTRESS
+for i in cur.index[in_distress]:
+    r = cur.loc[i]
+    lines = distress_lines(
+        r["noncurrent_loans_pct"],
+        r["tier1_leverage_pct"],
+        r["is_loss_qtr"],
+        r["is_loss_qtr_lag1"],
+        NCL_THRESHOLD,
+        TIER1_THRESHOLD,
+    )
+    cur.loc[i, "distress_lines"] = json.dumps(lines)
+print(f"waterfalls: {cur['shap_waterfall'].notna().sum():,}; distress lines: {in_distress.sum():,} banks")
+
 # COMMAND ----------
 
 out_cols = [
@@ -173,6 +201,8 @@ out_cols = [
     "reason_2",
     "reason_3",
     "reason_method",
+    "shap_waterfall",
+    "distress_lines",
     "tier1_leverage_pct",
     "noncurrent_loans_pct",
     "roa_pct",

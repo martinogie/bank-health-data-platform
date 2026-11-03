@@ -33,6 +33,8 @@ select
     s.reason_2,
     s.reason_3,
     s.reason_method,
+    s.shap_waterfall,
+    s.distress_lines,
 
     sc.tier1_leverage_pct,
     sc.tier1_leverage_change_qoq_pp,

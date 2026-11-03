@@ -16,6 +16,8 @@ select
     reason_2,
     reason_3,
     reason_method,
+    shap_waterfall,
+    distress_lines,
     model_name,
     cast(model_version as integer)        as model_version,
     scored_at,

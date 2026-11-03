@@ -320,3 +320,27 @@ def test_plain_reason_says_which_median_a_reason_uses():
     assert wx.plain_reason("noncurrent_loans_pct = 2.73 (median 0.46)") == (
         "Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)"
     )
+
+
+def test_waterfall_and_distress_lines_for_the_website():
+    import json as _json
+
+    from ingestion import watchlist_export as wx
+
+    raw = _json.dumps(
+        {
+            "base_pct": 4.1,
+            "items": [{"f": "noncurrent_loans_pct", "v": 2.734, "m": 0.36, "pp": 12.345}],
+            "other_pp": 1.2,
+            "p_pct": 17.6,
+        }
+    )
+    assert wx.waterfall(raw) == {
+        "b": 4.1,
+        "i": [{"f": "noncurrent_loans_pct", "l": "Non-current loans", "v": 2.73, "m": 0.36, "pp": 12.35}],
+        "o": 1.2,
+    }
+    assert wx.waterfall(None) is None
+    lines = wx.distress(_json.dumps([{"line": "tier1_leverage_below", "value": 4.1, "threshold": 5.0}]))
+    assert lines == [{"k": "tier1_leverage_below", "l": "Tier 1 leverage ratio below 5%", "v": 4.1}]
+    assert wx.distress(None) is None and wx.distress("[]") == []

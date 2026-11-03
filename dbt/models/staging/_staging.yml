@@ -71,6 +71,14 @@ models:
           - accepted_values:
               arguments:
                 values: [shap, median_fallback]
+      - name: shap_waterfall
+        description: >
+          JSON text, scored banks: the 8 features that move the score most (feature, value, peer
+          median, push in percentage points of probability), for the website's waterfall chart.
+      - name: distress_lines
+        description: >
+          JSON text, banks already in distress: the distress lines crossed this quarter (non-current
+          loans above 3%, Tier 1 below 5%, two quarterly losses), with value and threshold.
       - name: reason_1
         description: Reasons never cite total risk-based capital (not a model feature since v5).
         tests:

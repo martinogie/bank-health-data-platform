@@ -149,3 +149,40 @@ def test_shap_reasons_still_pass_the_top20_capital_check():
     zero = "tier1_leverage_pct = 0.00 (peer median 10.50)"
     assert sanity_checks._ZERO_CAPITAL_REASON.search(zero)
     assert not sanity_checks._ZERO_CAPITAL_REASON.search("tier1_leverage_pct = 6.10 (peer median 10.50)")
+
+
+# --------------------------------------------------------------- waterfall and distress lines (PR 7)
+def test_waterfall_bars_add_up_to_the_banks_probability():
+    contrib = pd.Series(
+        {f"f{i}": c for i, c in enumerate([1.2, -0.8, 0.5, 0.3, -0.2, 0.15, 0.1, 0.05, 0.04, -0.03])}
+    )
+    values = pd.Series({f: 1.0 for f in contrib.index} | {"f1": np.nan})
+    peers = pd.Series({f: 0.5 for f in contrib.index})
+    base = -2.5
+    w = R["shap_waterfall"](values, contrib, peers, base)
+    p = 1 / (1 + math.exp(-(base + contrib.sum())))
+    assert [i["f"] for i in w["items"]] == [
+        "f0",
+        "f1",
+        "f2",
+        "f3",
+        "f4",
+        "f5",
+        "f6",
+        "f7",
+    ]  # by size, either way
+    assert len(w["items"]) == 8 and w["items"][1]["pp"] < 0 and w["items"][1]["v"] is None
+    assert abs(w["base_pct"] + sum(i["pp"] for i in w["items"]) + w["other_pp"] - w["p_pct"]) < 0.01
+    assert abs(w["p_pct"] - 100 * p) < 1e-3  # stored to 3 decimals
+
+
+def test_distress_lines_name_each_line_crossed():
+    lines = R["distress_lines"](4.2, 4.1, True, True, 3.0, 5.0)
+    assert [d["line"] for d in lines] == [
+        "noncurrent_loans_above",
+        "tier1_leverage_below",
+        "two_quarterly_losses",
+    ]
+    assert lines[0] == {"line": "noncurrent_loans_above", "value": 4.2, "threshold": 3.0}
+    assert R["distress_lines"](3.0, 5.0, True, False, 3.0, 5.0) == []  # at the line is not over it
+    assert R["distress_lines"](np.nan, None, None, True, 3.0, 5.0) == []  # missing: no breach

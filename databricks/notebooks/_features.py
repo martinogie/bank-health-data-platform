@@ -223,6 +223,8 @@ def build_model_frame():
         "outcome_observed",
         "label_complete",
         "is_distressed",
+        "is_loss_qtr",  # with the previous quarter's, which distress lines a bank crossed (05_score)
+        "is_loss_qtr_lag1",
         "fails_within_12m",
         "distress_next_4q",
         "distress_strict_next_4q",

@@ -119,3 +119,64 @@ def check_additivity(base: float, contributions, log_odds) -> float:
     if gap > SHAP_ADDITIVITY_TOLERANCE:
         raise ValueError(f"SHAP values don't add up to the model's log-odds (max gap {gap:.2e})")
     return gap
+
+
+# Waterfall for the website's Bank Detail page (PR 7): the 8 features that move this bank's score
+# most, either way, as percentage points of probability. SHAP adds up in log-odds; the steps are
+# turned into probability by walking from the base rate in order of size, so the bars plus
+# "other" add up exactly to the bank's probability.
+WATERFALL_TOP = 8
+
+
+def _sigmoid(x: float) -> float:
+    return 1.0 / (1.0 + math.exp(-x))
+
+
+def shap_waterfall(
+    values: pd.Series, contributions: pd.Series, peer_medians: pd.Series, base: float, k: int = WATERFALL_TOP
+) -> dict:
+    """{"base_pct", "items": [{"f", "v", "m", "pp"} x k], "other_pp", "p_pct"}: f = feature, v = the
+    bank's value (None if not reported), m = peer median, pp = push in percentage points."""
+    order = contributions.abs().sort_values(ascending=False, kind="stable").index
+    cum, items = base, []
+    for f in order[:k]:
+        before, cum = cum, cum + float(contributions[f])
+        v, m = values.get(f), peer_medians.get(f)
+        items.append(
+            {
+                "f": f,
+                "v": None if pd.isna(v) else round(float(v), 4),
+                "m": None if pd.isna(m) else round(float(m), 4),
+                "pp": round(100 * (_sigmoid(cum) - _sigmoid(before)), 3),
+            }
+        )
+    total = base + float(contributions.sum())
+    return {
+        "base_pct": round(100 * _sigmoid(base), 3),
+        "items": items,
+        "other_pp": round(100 * (_sigmoid(total) - _sigmoid(cum)), 3),
+        "p_pct": round(100 * _sigmoid(total), 3),
+    }
+
+
+# Banks "Already in distress" get no reasons; instead, the distress lines they crossed this quarter
+# (the same lines as the model's label, _features.py).
+def distress_lines(
+    ncl_pct, tier1_pct, loss_now, loss_prev, ncl_threshold: float, tier1_threshold: float
+) -> list:
+    out = []
+    if pd.notna(ncl_pct) and ncl_pct > ncl_threshold:
+        out.append(
+            {"line": "noncurrent_loans_above", "value": round(float(ncl_pct), 2), "threshold": ncl_threshold}
+        )
+    if pd.notna(tier1_pct) and tier1_pct < tier1_threshold:
+        out.append(
+            {
+                "line": "tier1_leverage_below",
+                "value": round(float(tier1_pct), 2),
+                "threshold": tier1_threshold,
+            }
+        )
+    if bool(loss_now) is True and bool(loss_prev) is True and pd.notna(loss_now) and pd.notna(loss_prev):
+        out.append({"line": "two_quarterly_losses", "value": None, "threshold": None})
+    return out
