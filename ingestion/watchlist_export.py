@@ -117,8 +117,10 @@ def _json(value):
 
 
 def waterfall(raw) -> dict | None:
-    """05_score's shap_waterfall -> {"b": base %, "i": [{"f", "l", "v", "m", "pp"}], "o": other pp}:
-    the top 8 pushes in percentage points of probability, with plain labels."""
+    """05_score's shap_waterfall -> {"b": base %, "i": [{"f", "l", "v", "m", "pp", "nr"?}], "o": other pp}:
+    the top 8 pushes in percentage points of probability, with plain labels. An item the bank
+    doesn't report has v = null and `nr`, a plain note saying that the missing figure itself
+    moved the score."""
     w = _json(raw)
     if not w:
         return None
@@ -129,6 +131,13 @@ def waterfall(raw) -> dict | None:
             "v": round_or_none(i.get("v"), 2),
             "m": round_or_none(i.get("m"), 2),
             "pp": round_or_none(i.get("pp"), 2),
+            **(
+                {
+                    "nr": f"Not reported: the missing figure itself {'raised' if (i.get('pp') or 0) > 0 else 'lowered'} the score"
+                }
+                if i.get("v") is None
+                else {}
+            ),
         }
         for i in w.get("items", [])
     ]

@@ -42,9 +42,10 @@ x-airflow-common:
     # Data contracts (ingestion/contracts/): warn = report what would fail; enforce = stop the run.
     # Prod starts in warn for one clean run, then this line changes to enforce (Phase 3, PR 2).
     CONTRACTS_MODE: warn
-    # Model monitoring alerts (check_model): off = record and log only; on = also send a MODEL
-    # message. Off until Martins has reviewed both PSI comparisons from dev (Phase 3, PR 8).
-    MODEL_MONITOR_ALERTS: "off"
+    # Model monitoring alerts (check_model): on = send a MODEL message for what would alert; off =
+    # record and log only. Switched on by Martins on 3 Nov 2026 after reviewing both PSI comparisons
+    # from dev (docs/investigations/m08_monitoring_dev.md).
+    MODEL_MONITOR_ALERTS: "on"
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__PARALLELISM: 4
     # Low-memory settings for a PC where Docker gets ~4 GB
