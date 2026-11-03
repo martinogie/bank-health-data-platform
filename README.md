@@ -408,8 +408,8 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
 
 - **Data contracts.** Every downloaded file is checked against its contract
   (`ingestion/contracts/`: fields, types, allowed nulls, code lists) before it reaches bronze. A
-  removed, renamed or retyped field fails the run; a new field or code value warns. Prod reports
-  in warn mode; the counts go in the run log.
+  removed, renamed or retyped field fails the run; a new field or code value warns. Prod runs in
+  enforce mode since 3 Nov 2026 (after clean warn-mode runs); the counts go in the run log.
 - **Idempotent loading.** Silver merges on its keys (newest load wins); the incremental marts
   merge only changed rows; the marts are built and tested in `MARTS_NEXT` and swapped in only if
   every critical test passed (write, audit, publish). Checked in dev: the same week loaded twice,
