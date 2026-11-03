@@ -15,7 +15,10 @@
 # MAGIC 4. **Challenger** with a stricter label (failure, Tier 1 < 5% or non-current loans > 3%; no
 # MAGIC    "two net losses"), logged in MLflow, not registered.
 # MAGIC 5. Register the selected model in Unity Catalog as `bank_health.ml.distress_model` with alias
-# MAGIC    `candidate`. It becomes `champion` only with `promote=true` (after a person approves it).
+# MAGIC    `candidate`. It becomes `champion` only with `promote=true` (after a person approves it)
+# MAGIC    **and** if the promotion gate allows it (`_promotion`, M-09): not worse than the current
+# MAGIC    champion beyond the tolerances (0.005 PR-AUC, 1.0 point of top-10% capture) on the same test
+# MAGIC    rows. The gate's decision is logged in MLflow (`promotion_gate.json`) and on the version's tags.
 # MAGIC
 # MAGIC Version 5 differs from v4 only by data fixes (no risk-based capital feature, foreign offices
 # MAGIC and banks under 3 years excluded, CRE missing stays missing) and probability-based bands;
@@ -50,6 +53,10 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # MAGIC %run ./_features
+
+# COMMAND ----------
+
+# MAGIC %run ./_promotion
 
 # COMMAND ----------
 
@@ -519,6 +526,23 @@ except Exception as exc:  # first ever run, or the old model can't be loaded
     old_version, p_old, old_eval = None, None, None
 
 
+# Promotion gate (M-09): the new model vs the champion, on the same test rows (row-key hashes).
+new_rows = rows_hash(pdf.loc[X_te.index, ["cert", "report_date"]].itertuples(index=False))
+champion_rows = (
+    rows_hash(pdf.loc[X_old.index, ["cert", "report_date"]].itertuples(index=False)) if old_eval else None
+)
+gate_result = gate(results[champion]["test"], old_eval, new_rows, champion_rows)
+gate_result.update(
+    {
+        "champion_version": old_version,
+        "test_rows": int(len(X_te)),
+        "test_rows_hash": new_rows,
+        "promote_requested": PROMOTE,
+    }
+)
+print("promotion gate:", gate_result)
+
+
 def calibration_table(yv, p, bins=10):
     d = pd.DataFrame({"y": np.asarray(yv), "p": p})
     d["decile"] = pd.qcut(d["p"].rank(method="first"), bins, labels=False) + 1
@@ -594,6 +618,7 @@ band_thresholds = {
 with mlflow.start_run(run_id=results[champion]["run_id"], nested=True):
     mlflow.log_figure(fig, "calibration_test.png")
     mlflow.log_dict(band_thresholds, "band_thresholds.json")
+    mlflow.log_dict(gate_result, "promotion_gate.json")
     mlflow.log_dict(
         {
             "comparison_test_2020_2024": comparison,
@@ -634,14 +659,23 @@ client.set_model_version_tag(
 )
 client.set_model_version_tag(MODEL_NAME, version, "test_period", f"{PERIODS['test'][0]}-{PERIODS['test'][1]}")
 client.set_model_version_tag(MODEL_NAME, version, "challenger_run_id", challenger_run_id)
+client.set_model_version_tag(MODEL_NAME, version, "gate_decision", gate_result["decision"])
+client.set_model_version_tag(MODEL_NAME, version, "test_rows_hash", new_rows)
 client.set_registered_model_alias(MODEL_NAME, "candidate", version)
-if PROMOTE:
+PROMOTED = PROMOTE and gate_result["promotable"]
+if PROMOTE and not PROMOTED:
+    print(f"promote=true REFUSED by the promotion gate: {'; '.join(gate_result['reasons'])}")
+if PROMOTED:
     assert IS_PROD and MODEL_NAME == CHAMPION_MODEL  # checked above; never move @champion outside prod
     client.set_registered_model_alias(MODEL_NAME, "champion", version)
 mlflow.end_run()
 print(
     f"Registered {MODEL_NAME} version {version} as @candidate"
-    + (" and @champion" if PROMOTE else "; @champion unchanged (promote=false)")
+    + (
+        " and @champion"
+        if PROMOTED
+        else "; @champion unchanged" + (" (refused by the gate)" if PROMOTE else " (promote=false)")
+    )
 )
 
 # Keep a queryable copy of the metrics next to the data
@@ -668,7 +702,8 @@ summary = {
     "model_rows": len(pdf),
     "champion": champion,
     "registered": f"{MODEL_NAME} v{version}",
-    "promoted": PROMOTE,
+    "promoted": PROMOTED,
+    "promotion_gate": gate_result,
     "exclusions_2001_2019": exclusions_2001_2019,
     "band_thresholds": band_thresholds,
     "band_precision_oos_2003_2019": band_oos.round(4).to_dict("records"),
@@ -687,4 +722,9 @@ summary = {
     "data_quality": dq_summary,
 }
 print(json.dumps(summary, indent=2, default=str))
+if PROMOTE and not PROMOTED:
+    # everything is logged; fail the run so the refusal can't be missed (the alert names the reasons)
+    raise ValueError(
+        f"promotion refused by the gate ({gate_result['decision']}): {'; '.join(gate_result['reasons'])}"
+    )
 dbutils.notebook.exit(json.dumps(summary, default=str))

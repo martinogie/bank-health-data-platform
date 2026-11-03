@@ -468,16 +468,24 @@ def test_build_row_fills_every_column():
 class MergeTable:
     """Stands in for OPS.PIPELINE_RUNS: applies a MERGE on RUN_ID like Snowflake would."""
 
-    def __init__(self):
+    def __init__(self, columns=None):
         self.rows: dict[str, dict] = {}
         self.statements: list[str] = []
+        self.columns = list(run_log.COLUMNS if columns is None else columns)
+        self._last = []
 
     def execute(self, sql, params=None):
+        if "INFORMATION_SCHEMA.COLUMNS" in sql:  # the column lookup before the write
+            self._last = [(c,) for c in self.columns]
+            return
         self.statements.append(sql)
         assert sql.startswith("merge into OPS.PIPELINE_RUNS t using (select ")
         assert "on t.RUN_ID = s.RUN_ID" in sql and "when matched then update" in sql
         assert "when not matched then insert" in sql
         self.rows[params["RUN_ID"]] = dict(params)  # matched: replace; not matched: insert
+
+    def fetchall(self):
+        return self._last
 
 
 def test_write_row_is_one_merge_that_parses_json():
@@ -521,3 +529,25 @@ def test_success_message_says_what_ran():
     assert title == "OK: bank_health_weekly succeeded"
     assert "24 min" in text and "silver 2,727,061" in text and "Scored banks: 4,257" in text
     assert "dbt: 94 tests passed, 2 warned, n/a failed" in text and "before Monday 12:00 CT: yes" in text
+
+
+def test_contract_counts_are_written_when_the_columns_exist():
+    table = MergeTable()
+    contracts = {
+        "mode": "warn",
+        "errors": 2,
+        "warning_count": 5,
+        "warnings": ["w"] * 5,
+        "would_fail": ["e", "e"],
+    }
+    run_log.write_row(table, row(contracts=contracts))
+    stored = table.rows["scheduled__2026-11-02"]
+    assert (stored["CONTRACT_WARNINGS"], stored["CONTRACT_WOULD_FAIL"]) == (5, 2)
+
+
+def test_a_table_without_the_new_columns_is_still_written(caplog):
+    table = MergeTable(columns=[c for c in run_log.COLUMNS if c not in run_log.OPTIONAL_COLUMNS])
+    run_log.write_row(table, row(contracts={"errors": 0, "warning_count": 1}))
+    (sql,) = table.statements
+    assert "CONTRACT_WARNINGS" not in sql and "scheduled__2026-11-02" in table.rows
+    assert "setup_monitoring.sql" in caplog.text
