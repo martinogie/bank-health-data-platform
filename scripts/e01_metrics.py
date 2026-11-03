@@ -32,9 +32,7 @@ DIR = ROOT / "docs" / "investigations"
 Z = 1.959964
 SEED = 20261103
 BOOT = 10_000
-PROVENANCE = (
-    "Labels proposed by Claude Code and reviewed by Martins Ogiekpolor (3 Nov 2026)."
-)
+PROVENANCE = "Labels proposed by Claude Code and reviewed by Martins Ogiekpolor (3 Nov 2026)."
 
 
 def wilson(k: int, n: int) -> tuple[float, float]:
