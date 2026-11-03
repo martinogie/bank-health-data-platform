@@ -1,0 +1,26 @@
+{
+ "source_catalog": "bank_health",
+ "seed": 20261029,
+ "population": [
+  {
+   "match_method": "bank_name",
+   "companies": 50,
+   "complaints": 192146
+  },
+  {
+   "match_method": "holding_company",
+   "companies": 88,
+   "complaints": 370120
+  },
+  {
+   "match_method": "manual_override",
+   "companies": 4,
+   "complaints": 38395
+  },
+  {
+   "match_method": "unmatched",
+   "companies": 5258,
+   "complaints": 1398891
+  }
+ ]
+}
