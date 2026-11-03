@@ -275,7 +275,8 @@ Each scored bank gets up to 3 reasons, `reason_1..3`. Since Phase 3 they come fr
 features that push the bank's log-odds up most (shap 0.46.0 `TreeExplainer` on the v5 model,
 pinned in the scoring environment; base value + contributions = the model's log-odds to within
 2×10⁻¹⁴ for all 4,222 banks scored on 3 Nov 2026). Each reason is compared with the median of
-banks in the **same asset-size tier**. A feature the bank doesn't report is never cited.
+banks in the **same asset-size tier**. A feature the bank doesn't report is never cited, and a
+"change" feature (non-current loans, Tier 1, ROA) only when it moved the worsening way.
 
 - **Fallback:** if SHAP gives no usable reason for a bank, or fails for the run, the earlier
   method is used (set one feature to the median of all scored banks and see how much the
@@ -286,7 +287,8 @@ banks in the **same asset-size tier**. A feature the bank doesn't report is neve
   3 times by the new one, because against its own tier a bank's size rarely looks unusual.
 - **Waterfall:** `shap_waterfall` keeps the 8 largest pushes per bank, either way, in percentage
   points of probability (walked from the base rate in order of size, so the bars and "other"
-  add up to the bank's probability). Banks already in distress get `distress_lines` instead: the
+  add up to the bank's probability; a not-reported item is shown as "Not reported: the missing
+figure itself raised the score"). Banks already in distress get `distress_lines` instead: the
   distress lines they crossed. Both reach `watchlist.json` (schema 3) for the website.
 
 ### Monitoring (finding M-08, Phase 3)
@@ -312,8 +314,8 @@ First results (dev, on prod data, 3 Nov 2026, 2026 Q2;
 | Score PSI vs 2001–2019 training | 0.323 (large; 12 features large): expected after 20 years, reported only |
 | Backtest, 22 quarters 2020 Q1 – 2025 Q2 | top-10% capture 45.1%–59.9%; none below the 42.6% alert line |
 
-Alerts are sent as a MODEL message (never failing the run) once switched on
-(`MODEL_MONITOR_ALERTS=on`).
+Alerts go out as a MODEL message (never failing the run); switched on by Martins on 3 Nov 2026
+after reviewing both comparisons.
 
 ### Promotion rule (finding M-09, Phase 3)
 
