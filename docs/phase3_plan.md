@@ -109,7 +109,12 @@ announced first. Databricks Free Edition has a daily quota: at most 2 dev pipeli
 - Precision and recall by company and by complaint volume, with Wilson 95% intervals; the
   unmatched volume by type (debt collector, fintech, credit union, other non-bank, true miss);
   how complaints split under holding companies with several banks.
+- Also (added 3 Nov): the 50 largest unmatched companies by complaints, labelled the same way
+  (a missed bank is one large company, which a random draw rarely finds); the share of the
+  unmatched volume they hold; and which of them are banks or own one, checked in FDIC data.
 - Fuzzy matching only proposes candidates; only rows Martins approves are applied. Before/after.
+- Every run (added 3 Nov): the complaint match rate in the run log and the OK message, with an
+  alert on a drop of more than 2 points from the usual. The label review is a one-time audit.
 - **Stops:** label review; candidate review; the before/after numbers before merging.
 
 ## PR 7: SHAP reasons (M-05)
