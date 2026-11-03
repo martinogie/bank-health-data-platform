@@ -70,16 +70,23 @@ Snowflake **resource monitors** cap credits per month and suspend a warehouse at
 
 | Monitor | Watches | Cap (credits / month) | Used by |
 |---|---|---|---|
-| `BANK_DEV_WH_MONITOR` | `BANK_DEV_WH` | 10 for now (raised by Martins for the Phase 4 dev work; lowered when it is done) | dev pipeline runs, dbt slim CI (pull requests only) |
-| `ACCOUNT_MONTHLY_CAP` | the whole account | 15 for now (raised by Martins for the Phase 4 dev work; lowered when it is done) | everything: prod's Monday runs on `BANK_WH` (about 0.31 credits a run), Power BI, the late-run watchdog on `BANK_OPS_WH` (about 0.07 a month), and dev |
+| `BANK_DEV_WH_MONITOR` | `BANK_DEV_WH` | 10 for now (raised by Martins for the Phase 4 dev work; lowered around 15 Nov 2026, then 2 after the 26 Nov reset) | dev pipeline runs, dbt slim CI (pull requests only) |
+| `ACCOUNT_MONTHLY_CAP` | the whole account | 15 for now (raised by Martins for the Phase 4 dev work; lowered around 15 Nov 2026, then 5 after the 26 Nov reset) | everything: prod's Monday runs on `BANK_WH` (about 0.31 credits a run), Power BI, the late-run watchdog on `BANK_OPS_WH` (about 0.07 a month), and dev |
 
 `BANK_DEV_WH` counts toward both caps. A prod run costs about 0.31 credits (measured, Oct 2026),
 so prod needs about 1.3–1.6 credits a month; the rest of the account cap is room for dev.
 
 Both caps were raised on purpose for the Phase 4 dev work (confirmed by Martins, 3 Nov 2026).
-**Lowering them when the dev work is done** is a Terraform change: edit `credit_quota` in
-`infra/terraform/snowflake/main.tf`, run `plan.ps1`, check the plan shows only those 1–2 in-place
-updates, and Martins approves before it is applied. Then update this table.
+**Schedule (Martins, 3 Nov 2026):** the trial credits last until about 17 Nov, so
+
+1. **around 15 Nov 2026:** account cap to the credits used so far this month + about 2; dev cap to
+   the credits used so far;
+2. **after the 26 Nov reset:** account cap back to 5, dev cap back to 2.
+
+Both are reminders in `ops/credentials.yml` (the weekly `check_credentials` task warns 14 days
+ahead). Each is a Terraform change: edit `credit_quota` in `infra/terraform/snowflake/main.tf`,
+run `plan.ps1`, check the plan shows only those 1–2 in-place updates, and Martins approves before
+`plan.ps1 -Apply`. Then update this table.
 
 ### How you'll know
 

@@ -45,8 +45,10 @@ in parallel while prod verifications run.
    Martins). Not recreated. The Snowflake provider (2.22.1) has no budget resource, so the budget
    stays SQL-managed; ADR 0010 records it.
 2. **OCI budget alert: $5** (corrected everywhere).
-3. **Grants:** imported only if they plan clean without changes. If not, they stay in the existing
-   SQL scripts, with the reason in ADR 0010.
+3. **Grants:** kept in the existing SQL scripts (decided 3 Nov 2026; the reasons are in ADR 0010).
+   **Credit caps** (raised for the dev work, confirmed 3 Nov 2026): lowered around 15 Nov (account to
+   used so far + ~2, dev to used so far), then account 5 / dev 2 after the 26 Nov reset, each
+   through a Terraform plan Martins approves. Not at the end of Phase 4.
 4. **OCI account: Pay As You Go.** Compartment quota policies block paid resources (zero paid-shape
    cores, a block-storage limit). The exact policy text is shown to Martins before he applies it.
 5. **Network policy on `SVC_BANK_PIPELINE` only.** None on `SVC_BANK_DEV`, `SVC_POWERBI` or
