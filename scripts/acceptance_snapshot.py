@@ -88,7 +88,9 @@ def compare(a_name: str, b_name: str, only: str | None = None) -> int:
     ta, tb = a["tables"], b["tables"]
     if only:  # e.g. SNOWFLAKE.MARTS: compare just those tables
         ta, tb = ({k: v for k, v in t.items() if k.startswith(only)} for t in (ta, tb))
-    print(f"{a_name} ({a['taken_at']}, {a['marts_schema']}) vs {b_name} ({b['taken_at']}, {b['marts_schema']})")
+    print(
+        f"{a_name} ({a['taken_at']}, {a['marts_schema']}) vs {b_name} ({b['taken_at']}, {b['marts_schema']})"
+    )
     for line in checksums.summary_lines(ta, tb):
         print(" ", line)
     diff = checksums.differences(ta, tb)

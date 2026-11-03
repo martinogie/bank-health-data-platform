@@ -424,7 +424,7 @@ def bank_health_weekly():
 
         today = pendulum.now(TZ).date()
         if plan["mode"] == "backfill":
-            result = {"fresh": [], "cached": []}
+            result: dict[str, list[Path]] = {"fresh": [], "cached": []}
             if plan["cfpb_from"]:
                 result = cfpb.download_range(
                     date.fromisoformat(plan["cfpb_from"]),

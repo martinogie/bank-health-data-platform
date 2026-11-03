@@ -110,8 +110,8 @@ def plan(
         problems.append("prod: no backfills on a Monday, the weekly run's day; start it Tuesday to Saturday")
 
     quarters: list[date] = []
-    if "fdic" in chosen and all(chosen["fdic"]):
-        start, end = chosen["fdic"]
+    start, end = chosen.get("fdic", (None, None))
+    if start and end:
         quarters = fdic.quarter_ends(start, end)
         if not quarters:
             problems.append(
@@ -126,9 +126,10 @@ def plan(
                 f"FDIC quarters: {quarters[-1]} is newer than the newest quarter loaded ({fdic_watermark}); "
                 "new quarters come with the weekly run"
             )
-    cfpb_from = cfpb_to = None
-    if "cfpb" in chosen and all(chosen["cfpb"]):
-        cfpb_from, cfpb_to = chosen["cfpb"]
+    cfpb_from, cfpb_to = chosen.get("cfpb", (None, None))
+    if not (cfpb_from and cfpb_to):
+        cfpb_from = cfpb_to = None
+    else:
         first = cfpb.history_start(today)
         if cfpb_from < first:
             problems.append(
