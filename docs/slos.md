@@ -11,7 +11,7 @@ is missed. Measured from `BANK_HEALTH.OPS.PIPELINE_RUNS` (one row per run) and i
 | 1 | **Fresh data:** this week's marts and watchlist are ready by **Monday 12:00 America/Chicago** | every week | `SLO_MET` on the scheduled run's row | LATE alert from the VM at 12:00 and from GitHub at 12:30 CST ([alerts.md](runbooks/alerts.md)) |
 | 2 | **Success rate:** scheduled runs that succeed without a manual fix | at least 11 of the last 12 | `STATE` in `HEALTH_RUNS_LAST_12` (manual overrides don't count as unattended) | the failure alert; the cause is fixed in a PR |
 | 3 | **Correct, not just green:** freshness, volume, match-rate and data-contract checks pass | every run | `check_freshness`, `check_volumes`, `check_contracts` | the run fails and the watchlist is not published |
-| 4 | **Cost per run:** Snowflake credits | about 0.21–0.31 a run; the account cap is 5 credits a month (7 until 26 Nov 2026) | `CREDITS_FINAL` (or `CREDITS_ESTIMATE`) per run; `ACCOUNT_MONTHLY_CAP` | the monitor suspends warehouses; [quota_errors.md](runbooks/quota_errors.md) |
+| 4 | **Cost per run:** Snowflake credits | about 0.21–0.31 a run; the account cap is 15 credits a month for now (raised for the Phase 4 dev work; lowered when it is done) | `CREDITS_FINAL` (or `CREDITS_ESTIMATE`) per run; `ACCOUNT_MONTHLY_CAP` | the monitor suspends warehouses; [quota_errors.md](runbooks/quota_errors.md) |
 | 5 | **Databricks time per run** | within the Free Edition daily quota | Databricks minutes per run (Phase 4, PR 2; planned) | quota alert; resume the next day |
 
 ## Service indicators (watched, not targets)

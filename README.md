@@ -406,9 +406,9 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
 
 ## Documentation
 
-- **Decisions:** [architecture decision records](docs/adr/) (0001–0009: the Oracle VM and runner,
+- **Decisions:** [architecture decision records](docs/adr/) (0001–0010: the Oracle VM and runner,
   alert channels, Databricks limits, Snowflake with a PostgreSQL mirror, write-audit-publish,
-  incremental loads, data contracts, monitoring thresholds, gated promotion).
+  incremental loads, data contracts, monitoring thresholds, gated promotion, Terraform import only).
 - **Operations:** [runbook index](docs/runbooks/README.md) (find the page by the alert you see) and
   [service levels](docs/slos.md).
 - **Security:** [SECURITY.md](SECURITY.md): who can do what, where secrets live, network exposure,

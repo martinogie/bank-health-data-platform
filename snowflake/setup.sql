@@ -28,6 +28,8 @@ CREATE WAREHOUSE IF NOT EXISTS BANK_WH
 -- setup is never uncapped: 5 credits/month, notify at 50 % and 80 %, suspend at 100 %
 -- (running queries finish), suspend immediately at 110 % (running queries are cancelled).
 -- IF NOT EXISTS: an existing cap is left exactly as it is (settings and credits used).
+-- 5 is only the starting value for a fresh account. The live cap is 15 for the Phase 4 dev work (Martins,
+-- 3 Nov 2026; lowered when it is done); since Phase 4 Terraform records it (infra/terraform/snowflake/main.tf).
 -- It replaced BANK_WH_MONITOR (20 credits on BANK_WH only), which setup_dev.sql drops.
 CREATE RESOURCE MONITOR IF NOT EXISTS ACCOUNT_MONTHLY_CAP
   WITH CREDIT_QUOTA = 5
