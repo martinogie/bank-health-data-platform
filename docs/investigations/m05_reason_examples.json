@@ -1,0 +1,567 @@
+{
+ "latest_quarter": "2026-06-30",
+ "top20": [
+  {
+   "cert": 35518,
+   "bank": "The Federal Savings Bank",
+   "state": "IL",
+   "tier": "3: $1B-$10B",
+   "report_date": "2026-06-30",
+   "probability": 0.8137,
+   "old": [
+    "noncurrent_loans_pct = 2.69 (median 0.41)",
+    "construction_to_loans_pct = 25.92 (median 5.41)",
+    "loans_to_deposits_pct = 130.66 (median 81.64)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.69 (peer median 0.48)",
+    "construction_to_loans_pct = 25.92 (peer median 7.03)",
+    "loans_to_deposits_pct = 130.66 (peer median 88.01)"
+   ]
+  },
+  {
+   "cert": 30152,
+   "bank": "Milford Building and Loan Association",
+   "state": "IL",
+   "tier": "1: <$100M",
+   "report_date": "2026-06-30",
+   "probability": 0.8034,
+   "old": [
+    "past_due_30_89_to_loans_pct = 9.24 (median 0.32)",
+    "noncurrent_loans_pct = 2.55 (median 0.41)",
+    "log_total_assets = 17.15 (median 19.82)"
+   ],
+   "new": [
+    "past_due_30_89_to_loans_pct = 9.24 (peer median 0.34)",
+    "noncurrent_loans_pct = 2.55 (peer median 0.24)",
+    "log_total_assets = 17.15 (peer median 18.03)"
+   ]
+  },
+  {
+   "cert": 8117,
+   "bank": "Pbt Bancorp",
+   "state": "KY",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7899,
+   "old": [
+    "noncurrent_loans_pct = 2.66 (median 0.41)",
+    "equity_to_assets_pct = 5.06 (median 10.48)",
+    "past_due_30_89_to_loans_pct = 1.48 (median 0.32)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.66 (peer median 0.36)",
+    "equity_to_assets_pct = 5.06 (peer median 10.28)",
+    "roa_pct = -0.01 (peer median 1.28)"
+   ]
+  },
+  {
+   "cert": 57359,
+   "bank": "American Eagle Bank",
+   "state": "IL",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7879,
+   "old": [
+    "efficiency_ratio_pct = 110.80 (median 61.32)",
+    "net_income_qtr_to_assets_pct = -0.22 (median 0.32)",
+    "roa_pct = -0.19 (median 1.25)"
+   ],
+   "new": [
+    "net_income_qtr_to_assets_pct = -0.22 (peer median 0.33)",
+    "efficiency_ratio_pct = 110.80 (peer median 61.86)",
+    "roa_pct = -0.19 (peer median 1.28)"
+   ]
+  },
+  {
+   "cert": 23864,
+   "bank": "Summit Bank",
+   "state": "CA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7639,
+   "old": [
+    "past_due_30_89_to_loans_pct = 2.91 (median 0.32)",
+    "roa_pct = -3.45 (median 1.25)",
+    "net_income_qtr_to_assets_pct = -2.05 (median 0.32)"
+   ],
+   "new": [
+    "roa_pct = -3.45 (peer median 1.28)",
+    "past_due_30_89_to_loans_pct = 2.91 (peer median 0.36)",
+    "net_income_qtr_to_assets_pct = -2.05 (peer median 0.33)"
+   ]
+  },
+  {
+   "cert": 58063,
+   "bank": "VisionBank",
+   "state": "MN",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.759,
+   "old": [
+    "past_due_30_89_to_loans_pct = 7.21 (median 0.32)",
+    "noncurrent_loans_pct = 1.81 (median 0.41)",
+    "construction_to_loans_pct = 7.19 (median 5.41)"
+   ],
+   "new": [
+    "past_due_30_89_to_loans_pct = 7.21 (peer median 0.36)",
+    "noncurrent_loans_pct = 1.81 (peer median 0.36)",
+    "cre_to_loans_pct = 69.40 (peer median 34.97)"
+   ]
+  },
+  {
+   "cert": 13986,
+   "bank": "Transact Bank, National Association",
+   "state": "CO",
+   "tier": "1: <$100M",
+   "report_date": "2026-06-30",
+   "probability": 0.7477,
+   "old": [
+    "log_total_assets = 15.68 (median 19.82)",
+    "efficiency_ratio_pct = 99.01 (median 61.32)",
+    "roa_change_4q_pp = 2.47 (median 0.16)"
+   ],
+   "new": [
+    "log_total_assets = 15.68 (peer median 18.03)",
+    "net_income_qtr_to_assets_pct = -0.05 (peer median 0.29)",
+    "efficiency_ratio_pct = 99.01 (peer median 67.79)"
+   ]
+  },
+  {
+   "cert": 22319,
+   "bank": "Legacy Bank & Trust Company",
+   "state": "MO",
+   "tier": "3: $1B-$10B",
+   "report_date": "2026-06-30",
+   "probability": 0.7462,
+   "old": [
+    "construction_to_loans_pct = 30.71 (median 5.41)",
+    "roa_change_4q_pp = -1.11 (median 0.16)",
+    "noncurrent_loans_pct = 1.47 (median 0.41)"
+   ],
+   "new": [
+    "construction_to_loans_pct = 30.71 (peer median 7.03)",
+    "noncurrent_loans_pct = 1.47 (peer median 0.48)",
+    "roa_change_4q_pp = -1.11 (peer median 0.17)"
+   ]
+  },
+  {
+   "cert": 35541,
+   "bank": "BCB Community Bank",
+   "state": "NJ",
+   "tier": "3: $1B-$10B",
+   "report_date": "2026-06-30",
+   "probability": 0.7403,
+   "old": [
+    "noncurrent_loans_pct = 2.85 (median 0.41)",
+    "past_due_30_89_to_loans_pct = 2.33 (median 0.32)",
+    "net_income_qtr_to_assets_pct = -0.44 (median 0.32)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.85 (peer median 0.48)",
+    "net_income_qtr_to_assets_pct = -0.44 (peer median 0.32)",
+    "past_due_30_89_to_loans_pct = 2.33 (peer median 0.27)"
+   ]
+  },
+  {
+   "cert": 24045,
+   "bank": "Banc of California",
+   "state": "CA",
+   "tier": "4: $10B-$100B",
+   "report_date": "2026-06-30",
+   "probability": 0.7386,
+   "old": [
+    "noncurrent_loans_pct = 2.34 (median 0.41)",
+    "net_income_qtr_to_assets_pct = -0.67 (median 0.32)",
+    "roa_change_4q_pp = -1.46 (median 0.16)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.34 (peer median 0.65)",
+    "net_income_qtr_to_assets_pct = -0.67 (peer median 0.33)",
+    "roa_pct = -0.88 (peer median 1.25)"
+   ]
+  },
+  {
+   "cert": 58297,
+   "bank": "Pinnacle Bank",
+   "state": "CA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7325,
+   "old": [
+    "past_due_30_89_to_loans_pct = 4.63 (median 0.32)",
+    "noncurrent_loans_pct = 2.30 (median 0.41)",
+    "noncurrent_change_4q_pp = 0.84 (median 0.00)"
+   ],
+   "new": [
+    "past_due_30_89_to_loans_pct = 4.63 (peer median 0.36)",
+    "noncurrent_loans_pct = 2.30 (peer median 0.36)",
+    "noncurrent_change_1q_pp = -1.45 (peer median -0.00)"
+   ]
+  },
+  {
+   "cert": 11891,
+   "bank": "The Donley County State Bank",
+   "state": "TX",
+   "tier": "1: <$100M",
+   "report_date": "2026-06-30",
+   "probability": 0.7321,
+   "old": [
+    "noncurrent_loans_pct = 2.77 (median 0.41)",
+    "past_due_30_89_to_loans_pct = 8.75 (median 0.32)",
+    "roa_change_4q_pp = -0.40 (median 0.16)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.77 (peer median 0.24)",
+    "past_due_30_89_to_loans_pct = 8.75 (peer median 0.34)",
+    "log_total_assets = 17.72 (peer median 18.03)"
+   ]
+  },
+  {
+   "cert": 59245,
+   "bank": "Genesis Bank",
+   "state": "CA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7188,
+   "old": [
+    "net_income_qtr_to_assets_pct = -0.14 (median 0.32)",
+    "efficiency_ratio_pct = 107.35 (median 61.32)",
+    "roe_pct = -2.13 (median 11.96)"
+   ],
+   "new": [
+    "net_income_qtr_to_assets_pct = -0.14 (peer median 0.33)",
+    "efficiency_ratio_pct = 107.35 (peer median 61.86)",
+    "roa_pct = -0.24 (peer median 1.28)"
+   ]
+  },
+  {
+   "cert": 16111,
+   "bank": "Highland Bank",
+   "state": "MN",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.7176,
+   "old": [
+    "noncurrent_loans_pct = 2.51 (median 0.41)",
+    "net_income_qtr_to_assets_pct = -0.05 (median 0.32)",
+    "roa_pct = 0.04 (median 1.25)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.51 (peer median 0.36)",
+    "net_income_qtr_to_assets_pct = -0.05 (peer median 0.33)",
+    "roa_pct = 0.04 (peer median 1.28)"
+   ]
+  },
+  {
+   "cert": 35497,
+   "bank": "Quaint Oak Bank",
+   "state": "PA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.6985,
+   "old": [
+    "past_due_30_89_to_loans_pct = 4.46 (median 0.32)",
+    "noncurrent_loans_pct = 1.73 (median 0.41)",
+    "brokered_to_deposits_pct = 16.80 (median 0.00)"
+   ],
+   "new": [
+    "past_due_30_89_to_loans_pct = 4.46 (peer median 0.36)",
+    "noncurrent_loans_pct = 1.73 (peer median 0.36)",
+    "cre_to_loans_pct = 65.28 (peer median 34.97)"
+   ]
+  },
+  {
+   "cert": 16656,
+   "bank": "Security State Bank of Aitkin",
+   "state": "MN",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.6955,
+   "old": [
+    "past_due_30_89_to_loans_pct = 3.93 (median 0.32)",
+    "noncurrent_loans_pct = 2.24 (median 0.41)",
+    "equity_to_assets_pct = 5.50 (median 10.48)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.24 (peer median 0.36)",
+    "past_due_30_89_to_loans_pct = 3.93 (peer median 0.36)",
+    "equity_to_assets_pct = 5.50 (peer median 10.28)"
+   ]
+  },
+  {
+   "cert": 33552,
+   "bank": "Boone Bank & Trust Co.",
+   "state": "IA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.6891,
+   "old": [
+    "past_due_30_89_to_loans_pct = 4.10 (median 0.32)",
+    "noncurrent_loans_pct = 2.45 (median 0.41)",
+    "brokered_to_deposits_pct = 7.01 (median 0.00)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.45 (peer median 0.36)",
+    "past_due_30_89_to_loans_pct = 4.10 (peer median 0.36)",
+    "consumer_to_loans_pct = 0.10 (peer median 2.05)"
+   ]
+  },
+  {
+   "cert": 29005,
+   "bank": "First Federal Savings and Loan Association",
+   "state": "OH",
+   "tier": "1: <$100M",
+   "report_date": "2026-06-30",
+   "probability": 0.6872,
+   "old": [
+    "efficiency_ratio_pct = 130.14 (median 61.32)",
+    "net_income_qtr_to_assets_pct = -0.23 (median 0.32)",
+    "roa_pct = -0.45 (median 1.25)"
+   ],
+   "new": [
+    "efficiency_ratio_pct = 130.14 (peer median 67.79)",
+    "net_income_qtr_to_assets_pct = -0.23 (peer median 0.29)",
+    "roa_pct = -0.45 (peer median 1.12)"
+   ]
+  },
+  {
+   "cert": 19629,
+   "bank": "International Bank of Commerce",
+   "state": "TX",
+   "tier": "4: $10B-$100B",
+   "report_date": "2026-06-30",
+   "probability": 0.681,
+   "old": [
+    "construction_to_loans_pct = 24.21 (median 5.41)",
+    "noncurrent_loans_pct = 2.21 (median 0.41)",
+    "log_total_assets = 23.05 (median 19.82)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.21 (peer median 0.65)",
+    "construction_to_loans_pct = 24.21 (peer median 5.52)",
+    "noncurrent_change_4q_pp = 1.13 (peer median 0.01)"
+   ]
+  },
+  {
+   "cert": 26536,
+   "bank": "BankGloucester",
+   "state": "MA",
+   "tier": "2: $100M-$1B",
+   "report_date": "2026-06-30",
+   "probability": 0.6719,
+   "old": [
+    "noncurrent_loans_pct = 2.98 (median 0.41)",
+    "past_due_30_89_to_loans_pct = 1.91 (median 0.32)",
+    "noncurrent_change_4q_pp = 0.77 (median 0.00)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 2.98 (peer median 0.36)",
+    "past_due_30_89_to_loans_pct = 1.91 (peer median 0.36)",
+    "noncurrent_change_4q_pp = 0.77 (peer median 0.00)"
+   ]
+  }
+ ],
+ "failures_2009_2010": [
+  {
+   "cert": 9609,
+   "bank": "Colonial Bank",
+   "state": "AL",
+   "tier": "4: $10B-$100B",
+   "report_date": "2008-09-30",
+   "probability": 0.964,
+   "old": [
+    "construction_to_loans_pct = 31.76 (median 5.65)",
+    "log_total_assets = 23.99 (median 18.80)",
+    "noncurrent_change_1q_pp = 1.53 (median 0.00)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 3.40 (peer median 1.20)",
+    "construction_to_loans_pct = 31.76 (peer median 4.04)",
+    "net_income_qtr_to_assets_pct = -0.23 (peer median 0.16)"
+   ],
+   "fail_date": "2009-08-14",
+   "in_sample": true
+  },
+  {
+   "cert": 32618,
+   "bank": "Guaranty Bank",
+   "state": "TX",
+   "tier": "4: $10B-$100B",
+   "report_date": "2008-09-30",
+   "probability": 0.9666,
+   "old": [
+    "construction_to_loans_pct = 37.89 (median 5.65)",
+    "log_total_assets = 23.45 (median 18.80)",
+    "noncurrent_loans_pct = 4.82 (median 0.77)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 4.82 (peer median 1.20)",
+    "construction_to_loans_pct = 37.89 (peer median 4.04)",
+    "net_income_qtr_to_assets_pct = -1.03 (peer median 0.16)"
+   ],
+   "fail_date": "2009-08-21",
+   "in_sample": true
+  },
+  {
+   "cert": 32247,
+   "bank": "BankUnited, FSB",
+   "state": "FL",
+   "tier": "4: $10B-$100B",
+   "report_date": "2008-06-30",
+   "probability": 0.9377,
+   "old": [
+    "noncurrent_loans_pct = 7.18 (median 0.70)",
+    "past_due_30_89_to_loans_pct = 3.79 (median 0.92)",
+    "log_total_assets = 23.38 (median 18.81)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 7.18 (peer median 1.08)",
+    "past_due_30_89_to_loans_pct = 3.79 (peer median 0.85)",
+    "roa_pct = -2.33 (peer median 0.86)"
+   ],
+   "fail_date": "2009-05-21",
+   "in_sample": true
+  },
+  {
+   "cert": 29776,
+   "bank": "AmTrust Bank",
+   "state": "OH",
+   "tier": "4: $10B-$100B",
+   "report_date": "2008-12-31",
+   "probability": 0.9627,
+   "old": [
+    "noncurrent_loans_pct = 9.77 (median 0.82)",
+    "roa_pct = -3.12 (median 0.84)",
+    "construction_to_loans_pct = 20.67 (median 4.99)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 9.77 (peer median 1.38)",
+    "past_due_30_89_to_loans_pct = 4.85 (peer median 1.17)",
+    "net_income_qtr_to_assets_pct = -1.03 (peer median 0.15)"
+   ],
+   "fail_date": "2009-12-04",
+   "in_sample": true
+  },
+  {
+   "cert": 32469,
+   "bank": "United Commercial Bank",
+   "state": "CA",
+   "tier": "4: $10B-$100B",
+   "report_date": "2008-12-31",
+   "probability": 0.9618,
+   "old": [
+    "construction_to_loans_pct = 22.64 (median 4.99)",
+    "noncurrent_change_4q_pp = 5.03 (median 0.12)",
+    "loans_to_deposits_pct = 95.73 (median 84.98)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 6.11 (peer median 1.38)",
+    "construction_to_loans_pct = 22.64 (peer median 3.49)",
+    "net_income_qtr_to_assets_pct = -0.55 (peer median 0.15)"
+   ],
+   "fail_date": "2009-11-06",
+   "in_sample": true
+  },
+  {
+   "cert": 31027,
+   "bank": "Westernbank Puerto Rico",
+   "state": "PR",
+   "tier": "4: $10B-$100B",
+   "report_date": "2009-06-30",
+   "probability": 0.9354,
+   "old": [
+    "noncurrent_loans_pct = 17.55 (median 0.98)",
+    "roa_change_4q_pp = -0.46 (median -0.14)",
+    "cre_to_equity_pct = 684.52 (median 170.32)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 17.55 (peer median 1.43)",
+    "past_due_30_89_to_loans_pct = 3.19 (peer median 0.86)",
+    "net_income_qtr_to_assets_pct = -0.04 (peer median 0.22)"
+   ],
+   "fail_date": "2010-04-30",
+   "in_sample": true
+  },
+  {
+   "cert": 34659,
+   "bank": "California National Bank",
+   "state": "CA",
+   "tier": "3: $1B-$10B",
+   "report_date": "2008-12-31",
+   "probability": 0.9851,
+   "old": [
+    "construction_to_loans_pct = 36.79 (median 4.99)",
+    "cre_to_equity_pct = 1,332.52 (median 180.03)",
+    "log_total_assets = 22.56 (median 18.80)"
+   ],
+   "new": [
+    "construction_to_loans_pct = 36.79 (peer median 9.87)",
+    "noncurrent_loans_pct = 2.15 (peer median 1.07)",
+    "net_income_qtr_to_assets_pct = -1.13 (peer median 0.14)"
+   ],
+   "fail_date": "2009-10-30",
+   "in_sample": true
+  },
+  {
+   "cert": 13693,
+   "bank": "Corus Bank, National Association",
+   "state": "IL",
+   "tier": "3: $1B-$10B",
+   "report_date": "2008-09-30",
+   "probability": 0.962,
+   "old": [
+    "construction_to_loans_pct = 85.92 (median 5.65)",
+    "past_due_30_89_to_loans_pct = 2.52 (median 0.90)",
+    "log_total_assets = 22.85 (median 18.80)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 20.38 (peer median 0.97)",
+    "construction_to_loans_pct = 85.92 (peer median 10.67)",
+    "net_income_qtr_to_assets_pct = -1.44 (peer median 0.18)"
+   ],
+   "fail_date": "2009-09-11",
+   "in_sample": true
+  },
+  {
+   "cert": 28536,
+   "bank": "First Federal Bank of California, a Federal Savings Bank",
+   "state": "CA",
+   "tier": "3: $1B-$10B",
+   "report_date": "2008-12-31",
+   "probability": 0.9257,
+   "old": [
+    "noncurrent_loans_pct = 6.14 (median 0.82)",
+    "past_due_30_89_to_loans_pct = 3.16 (median 1.09)",
+    "equity_to_assets_pct = 5.39 (median 9.90)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 6.14 (peer median 1.07)",
+    "past_due_30_89_to_loans_pct = 3.16 (peer median 0.88)",
+    "net_income_qtr_to_assets_pct = -3.27 (peer median 0.14)"
+   ],
+   "fail_date": "2009-12-18",
+   "in_sample": true
+  },
+  {
+   "cert": 32185,
+   "bank": "R-G Premier Bank of Puerto Rico",
+   "state": "PR",
+   "tier": "3: $1B-$10B",
+   "report_date": "2009-06-30",
+   "probability": 0.9769,
+   "old": [
+    "noncurrent_loans_pct = 17.44 (median 0.98)",
+    "construction_to_loans_pct = 17.20 (median 4.41)",
+    "past_due_30_89_to_loans_pct = 4.40 (median 0.99)"
+   ],
+   "new": [
+    "noncurrent_loans_pct = 17.44 (peer median 1.39)",
+    "past_due_30_89_to_loans_pct = 4.40 (peer median 0.77)",
+    "net_income_qtr_to_assets_pct = -0.99 (peer median 0.15)"
+   ],
+   "fail_date": "2010-04-30",
+   "in_sample": true
+  }
+ ]
+}

@@ -62,6 +62,15 @@ models:
           - not_null:
               config:
                 where: "risk_band not in ('New bank – not scored', 'Office of a foreign bank – not scored')"
+      - name: reason_method
+        description: >
+          How reason_1..3 were chosen: shap (SHAP contributions, compared with the asset-size-tier
+          peer median) or median_fallback (the earlier median method). Empty for banks that are not
+          scored.
+        tests:
+          - accepted_values:
+              arguments:
+                values: [shap, median_fallback]
       - name: reason_1
         description: Reasons never cite total risk-based capital (not a model feature since v5).
         tests:

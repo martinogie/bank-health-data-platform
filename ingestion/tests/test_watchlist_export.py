@@ -309,3 +309,14 @@ def test_banks_sorted_by_probability_highest_first():
 def test_no_banks_is_an_error():
     with pytest.raises(ValueError, match="no scored banks"):
         wx.build_payload([], [], [], date(2026, 10, 21))
+
+
+def test_plain_reason_says_which_median_a_reason_uses():
+    from ingestion import watchlist_export as wx
+
+    assert wx.plain_reason("noncurrent_loans_pct = 2.73 (peer median 0.46)") == (
+        "Non-current loans: 2.73% of loans (median of similar-size banks: 0.46% of loans)"
+    )
+    assert wx.plain_reason("noncurrent_loans_pct = 2.73 (median 0.46)") == (
+        "Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)"
+    )

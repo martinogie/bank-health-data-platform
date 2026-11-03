@@ -11,8 +11,13 @@
 # MAGIC   Not scored: **Office of a foreign bank – not scored** (no capital ratios),
 # MAGIC   **New bank – not scored** (under 3 years old); and **Already in distress** (the model
 # MAGIC   predicts the onset of distress).
-# MAGIC - `reason_1..3`: the reported metrics that raise the bank's risk most — how much the
-# MAGIC   probability falls if that one metric is set to the median of all scored banks this quarter.
+# MAGIC - `reason_1..3`: the reported metrics that raise the bank's risk most, written
+# MAGIC   `feature = value (peer median m)`: ranked by their SHAP contribution to the bank's log-odds
+# MAGIC   (shap `TreeExplainer`), compared with the median of banks in the same asset-size tier. A
+# MAGIC   metric the bank doesn't report is never cited.
+# MAGIC - `reason_method`: `shap`, or `median_fallback` when SHAP gives no usable reason (or fails):
+# MAGIC   then the earlier method, `feature = value (median m)`, how much the probability falls if
+# MAGIC   that one metric is set to the median of all scored banks this quarter.
 # MAGIC
 # MAGIC The model uses FDIC call-report features only; CFPB complaints are context, not inputs.
 # MAGIC
@@ -23,7 +28,7 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install --quiet "mlflow==2.22.5" "scikit-learn==1.5.2"
+# MAGIC %pip install --quiet "mlflow==2.22.5" "scikit-learn==1.5.2" "shap==0.46.0" "numba==0.60.0" "llvmlite==0.43.0"
 
 # COMMAND ----------
 
@@ -100,8 +105,12 @@ cur["risk_percentile"] = np.nan
 cur.loc[ranked, "risk_percentile"] = cur.loc[ranked, "distress_probability"].rank(pct=True)
 cur["risk_rank"] = cur.loc[ranked, "distress_probability"].rank(ascending=False, method="min")
 
-# Reasons, for scored banks only: set one feature to the median of scored banks, see how much
-# the probability falls. Features the bank doesn't report are never used as reasons.
+# Reasons, for scored banks only (M-05). First choice: SHAP, each feature's contribution to the
+# bank's log-odds (shap TreeExplainer; pinned with the environment above), compared with the
+# median of banks in the same asset-size tier. Fallback, per bank or for the whole run if SHAP
+# fails: the earlier median method (set one feature to the median of scored banks, see how much
+# the probability falls). Either way a feature the bank doesn't report is never cited.
+# reason_method says which was used.
 Xr = X[ranked]
 medians = Xr.median()
 drops = pd.DataFrame(index=Xr.index)
@@ -110,10 +119,37 @@ for f in model_features:
     Xf[f] = medians[f]
     drops[f] = cur.loc[ranked, "distress_probability"] - model.predict_proba(Xf)[:, 1]
 
+contributions, shap_error = None, None
+try:
+    import shap
+
+    explainer = shap.TreeExplainer(model)
+    values = explainer.shap_values(Xr)
+    values = values[1] if isinstance(values, list) else values
+    base = float(np.ravel(explainer.expected_value)[-1])
+    gap = check_additivity(base, values, model.decision_function(Xr))
+    contributions = pd.DataFrame(values, index=Xr.index, columns=model_features)
+    print(f"SHAP {shap.__version__}: {len(Xr):,} banks explained, additivity gap {gap:.1e}")
+except Exception as exc:  # the scores never depend on this; reasons fall back to the median method
+    shap_error = f"{type(exc).__name__}: {exc}"
+    print(f"SHAP reasons not available, using the median method for every bank: {shap_error}")
+peers = tier_peer_medians(Xr, cur.loc[ranked, "asset_size_tier"])
+
 reasons = pd.DataFrame([[None] * 3] * len(cur), index=cur.index, columns=["reason_1", "reason_2", "reason_3"])
+cur["reason_method"] = None
 for i in Xr.index:
-    reasons.loc[i] = reason_texts(Xr.loc[i], drops.loc[i], medians)
+    texts = (
+        shap_reason_texts(Xr.loc[i], contributions.loc[i], peers.loc[i]) if contributions is not None else []
+    )
+    if any(texts):
+        reasons.loc[i], cur.loc[i, "reason_method"] = texts, REASON_SHAP
+    else:
+        reasons.loc[i], cur.loc[i, "reason_method"] = (
+            reason_texts(Xr.loc[i], drops.loc[i], medians),
+            REASON_MEDIAN_FALLBACK,
+        )
 cur[["reason_1", "reason_2", "reason_3"]] = reasons
+print("reason_method:", cur["reason_method"].value_counts(dropna=False).to_dict())
 
 # COMMAND ----------
 
@@ -136,6 +172,7 @@ out_cols = [
     "reason_1",
     "reason_2",
     "reason_3",
+    "reason_method",
     "tier1_leverage_pct",
     "noncurrent_loans_pct",
     "roa_pct",
@@ -176,6 +213,21 @@ dq_check(
     "no reason mentions total risk-based capital",
     sdf.filter(F.concat_ws(" ", "reason_1", "reason_2", "reason_3").contains("total_risk_based")).count(),
 )
+dq_check(
+    T,
+    "reason_method is shap or median_fallback for every scored bank, empty otherwise",
+    sdf.filter(
+        (F.col("risk_band").isin(SCORED_BANDS) & ~F.col("reason_method").isin(list(REASON_METHODS)))
+        | (~F.col("risk_band").isin(SCORED_BANDS) & F.col("reason_method").isNotNull())
+    ).count(),
+)
+dq_check(
+    T,
+    "reasons come from SHAP (not the fallback) for at least 95% of scored banks",
+    0 if shap_error is None and (cur.loc[ranked, "reason_method"] == REASON_SHAP).mean() >= 0.95 else 1,
+    level="warn",
+    detail=shap_error or "",
+)
 if PRODUCTION:
     dq_check(
         T,
@@ -199,6 +251,7 @@ top20 = (
             "reason_1",
             "reason_2",
             "reason_3",
+            "reason_method",
         ]
     ]
 )
@@ -220,6 +273,8 @@ summary = {
         for q in (0.5, 0.85, 0.95, 0.99)
     },
     "top20": top20.round(4).to_dict("records"),
+    "reason_methods": {str(k): int(v) for k, v in cur.loc[ranked, "reason_method"].value_counts().items()},
+    "shap_error": shap_error,
     "data_quality": dq_summary,
 }
 print(json.dumps(summary, indent=2, default=str))

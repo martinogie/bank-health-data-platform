@@ -107,3 +107,45 @@ def test_reasons_only_for_features_that_raise_risk():
         "c = 3.00 (median 0.00)",
         None,
     ]
+
+
+# --------------------------------------------------------------- SHAP reasons (M-05)
+def test_shap_reasons_rank_by_contribution_against_tier_peers():
+    values = pd.Series({"noncurrent_loans_pct": 4.2, "roa_pct": -0.5, "tier1_leverage_pct": 7.0})
+    contrib = pd.Series({"noncurrent_loans_pct": 0.8, "roa_pct": 1.1, "tier1_leverage_pct": -0.3})
+    peers = pd.Series({"noncurrent_loans_pct": 0.5, "roa_pct": 1.0, "tier1_leverage_pct": 10.0})
+    assert R["shap_reason_texts"](values, contrib, peers) == [
+        "roa_pct = -0.50 (peer median 1.00)",
+        "noncurrent_loans_pct = 4.20 (peer median 0.50)",
+        None,  # tier 1 lowers this bank's risk: never a reason
+    ]
+
+
+def test_shap_reasons_never_cite_a_missing_value_even_if_missingness_moved_the_score():
+    values = pd.Series({"brokered_to_deposits_pct": np.nan, "roa_pct": -0.2, "cre_to_equity_pct": 400.0})
+    contrib = pd.Series({"brokered_to_deposits_pct": 2.0, "roa_pct": 0.4, "cre_to_equity_pct": 0.3})
+    peers = pd.Series({"brokered_to_deposits_pct": 1.0, "roa_pct": 1.0, "cre_to_equity_pct": np.nan})
+    texts = R["shap_reason_texts"](values, contrib, peers)
+    assert texts == ["roa_pct = -0.20 (peer median 1.00)", None, None]  # no peer median for CRE: not cited
+
+
+def test_tier_peer_medians_use_each_banks_own_tier():
+    X = pd.DataFrame({"roa_pct": [1.0, 3.0, 10.0, 20.0, np.nan]}, index=[10, 11, 12, 13, 14])
+    tiers = pd.Series(["small", "small", "large", "large", "large"], index=[10, 11, 12, 13, 14])
+    peers = R["tier_peer_medians"](X, tiers)
+    assert peers["roa_pct"].tolist() == [2.0, 2.0, 15.0, 15.0, 15.0]  # missing values ignored
+
+
+def test_additivity_check_passes_on_exact_values_and_refuses_a_mismatch():
+    contrib = np.array([[0.5, -0.25], [1.0, 0.0]])
+    assert R["check_additivity"](-2.0, contrib, np.array([-1.75, -1.0])) == 0.0
+    with pytest.raises(ValueError, match="don't add up"):
+        R["check_additivity"](-2.0, contrib, np.array([-1.75, -0.5]))
+
+
+def test_shap_reasons_still_pass_the_top20_capital_check():
+    from ingestion import sanity_checks
+
+    zero = "tier1_leverage_pct = 0.00 (peer median 10.50)"
+    assert sanity_checks._ZERO_CAPITAL_REASON.search(zero)
+    assert not sanity_checks._ZERO_CAPITAL_REASON.search("tier1_leverage_pct = 6.10 (peer median 10.50)")

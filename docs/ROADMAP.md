@@ -41,6 +41,12 @@ each item are in the [model card](model_card.md).
 4. Calibration is fitted on the final classifier.
 5. The separate outputs need the hazard model's failure-only variant.
 
+**Found in Phase 3 (PR 7, 3 Nov 2026), for the v6 distress definition:** the failure part of
+the label uses every row of FDIC's failure list, which also holds **assistance transactions**
+(resolution types OBAM, A/A, ...). On 16 Jan 2009 the open-bank assistance to Bank of America's
+banks (8 rows in 2009–2010, among them Countrywide, FIA Card Services and two Merrill Lynch banks)
+counts as a failure. v6 should decide whether assistance counts as distress; v5 is unchanged.
+
 ## v7: complaint features, tested
 
 - **What it tests:** whether CFPB complaint features add predictive value. They are adopted only

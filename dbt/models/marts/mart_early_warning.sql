@@ -32,6 +32,7 @@ select
     s.reason_1,
     s.reason_2,
     s.reason_3,
+    s.reason_method,
 
     sc.tier1_leverage_pct,
     sc.tier1_leverage_change_qoq_pp,

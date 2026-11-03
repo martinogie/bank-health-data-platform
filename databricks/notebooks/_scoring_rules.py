@@ -74,3 +74,48 @@ def reason_texts(values: pd.Series, drops: pd.Series, medians: pd.Series, k: int
     top = drops[usable].sort_values(ascending=False).head(k)
     texts = [f"{f} = {_fmt(values[f])} (median {_fmt(medians[f])})" for f in top.index]
     return texts + [None] * (k - len(texts))
+
+
+# Reasons by SHAP (M-05): each feature's contribution to this bank's log-odds, from shap's
+# TreeExplainer on the gradient-boosting model. Compared with the bank's asset-size-tier peers.
+REASON_SHAP = "shap"
+REASON_MEDIAN_FALLBACK = "median_fallback"  # the earlier method: set one feature to the median
+REASON_METHODS = (REASON_SHAP, REASON_MEDIAN_FALLBACK)
+SHAP_ADDITIVITY_TOLERANCE = 1e-6  # base + sum of contributions must equal the model's log-odds
+
+
+def tier_peer_medians(X: pd.DataFrame, tiers: pd.Series) -> pd.DataFrame:
+    """For each bank, the median of each feature among the banks in its asset-size tier (missing
+    values ignored). Same index and columns as X."""
+    return X.groupby(tiers.reindex(X.index)).transform("median")
+
+
+def shap_reason_texts(
+    values: pd.Series, contributions: pd.Series, peer_medians: pd.Series, k: int = 3
+) -> list:
+    """Top-k reasons as 'feature = value (peer median m)': the features that raise this bank's risk
+    most (contribution > 0), largest first. A feature the bank doesn't report (missing value) is
+    never cited, even if its missingness moved the score, and neither is one without a peer median."""
+    usable = [
+        f
+        for f in contributions.index
+        if contributions[f] > 0 and pd.notna(values.get(f)) and pd.notna(peer_medians.get(f))
+    ]
+    top = contributions[usable].sort_values(ascending=False).head(k)
+    texts = [f"{f} = {_fmt(values[f])} (peer median {_fmt(peer_medians[f])})" for f in top.index]
+    return texts + [None] * (k - len(texts))
+
+
+def check_additivity(base: float, contributions, log_odds) -> float:
+    """Largest gap between base + sum of contributions and the model's log-odds; raises if it is
+    above SHAP_ADDITIVITY_TOLERANCE (then the explanation doesn't describe this model)."""
+    import numpy as np
+
+    gap = (
+        float(np.max(np.abs(base + np.asarray(contributions).sum(axis=1) - np.asarray(log_odds))))
+        if len(log_odds)
+        else 0.0
+    )
+    if gap > SHAP_ADDITIVITY_TOLERANCE:
+        raise ValueError(f"SHAP values don't add up to the model's log-odds (max gap {gap:.2e})")
+    return gap

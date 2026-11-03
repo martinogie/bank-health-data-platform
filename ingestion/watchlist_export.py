@@ -91,10 +91,13 @@ _UNIT_SUFFIX = {
     "pct_deposits": "% of deposits",
     "pct_equity": "% of equity",
 }
-# reason text written by 05_score: "<feature> = <value> (median <value>)", values like 1,234.56 or n/a
+# reason text written by 05_score, values like 1,234.56 or n/a:
+#   SHAP reasons:     "<feature> = <value> (peer median <value>)"  (median of the bank's asset-size tier)
+#   median fallback:  "<feature> = <value> (median <value>)"       (median of all scored banks)
 _REASON_RE = re.compile(
-    r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\(median\s+(n/a|-?[\d,]*\.?\d+)\)\s*$"
+    r"^\s*([a-z0-9_]+)\s*=\s*(n/a|-?[\d,]*\.?\d+)\s*\((peer median|median)\s+(n/a|-?[\d,]*\.?\d+)\)\s*$"
 )
+_MEDIAN_WORDING = {"peer median": "median of similar-size banks", "median": "median of all US banks"}
 
 
 # --------------------------------------------------------------- formatting
@@ -139,19 +142,24 @@ def _parse_number(text: str) -> float | None:
 
 
 def plain_reason(raw: str | None) -> str | None:
-    """'noncurrent_loans_pct = 2.73 (median 0.46)' ->
-    'Non-current loans: 2.73% of loans (median of all US banks: 0.46% of loans)'.
+    """'noncurrent_loans_pct = 2.73 (peer median 0.46)' ->
+    'Non-current loans: 2.73% of loans (median of similar-size banks: 0.46% of loans)'.
 
-    The median comes from 05_score: the median of ALL scored banks that quarter. That is not
-    the size-tier peer median used for the trend lines (`peers`), so the wording says so."""
+    SHAP reasons (05_score, reason_method = shap) compare with the bank's asset-size-tier peers;
+    fallback reasons, '(median m)', with ALL scored banks that quarter. The wording says which."""
     if not raw:
         return None
     m = _REASON_RE.match(raw)
     if not m:
         return raw.strip()  # unknown format: show as-is rather than drop it
-    feature, value, median = m.group(1), _parse_number(m.group(2)), _parse_number(m.group(3))
+    feature, value, kind, median = (
+        m.group(1),
+        _parse_number(m.group(2)),
+        m.group(3),
+        _parse_number(m.group(4)),
+    )
     label, unit = FEATURE_LABELS.get(feature, (feature.replace("_", " ").capitalize(), "num"))
-    return f"{label}: {_fmt_value(value, unit)} (median of all US banks: {_fmt_value(median, unit)})"
+    return f"{label}: {_fmt_value(value, unit)} ({_MEDIAN_WORDING[kind]}: {_fmt_value(median, unit)})"
 
 
 # ------------------------------------------------------------------ dates
