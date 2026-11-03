@@ -404,6 +404,18 @@ tests/        integration, smoke, browser and end-to-end tests
 docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/, health page contract
 ```
 
+## Documentation
+
+- **Decisions:** [architecture decision records](docs/adr/) (0001–0009: the Oracle VM and runner,
+  alert channels, Databricks limits, Snowflake with a PostgreSQL mirror, write-audit-publish,
+  incremental loads, data contracts, monitoring thresholds, gated promotion).
+- **Operations:** [runbook index](docs/runbooks/README.md) (find the page by the alert you see) and
+  [service levels](docs/slos.md).
+- **Security:** [SECURITY.md](SECURITY.md): who can do what, where secrets live, network exposure,
+  what to do if something leaks.
+- **Model:** [model card](docs/model_card.md); **plans:** [Phase 3](docs/phase3_plan.md),
+  [Phase 4](docs/phase4_plan.md), [roadmap](docs/ROADMAP.md).
+
 ## Data quality and loading
 
 - **Data contracts.** Every downloaded file is checked against its contract
