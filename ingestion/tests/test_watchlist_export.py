@@ -344,3 +344,24 @@ def test_waterfall_and_distress_lines_for_the_website():
     lines = wx.distress(_json.dumps([{"line": "tier1_leverage_below", "value": 4.1, "threshold": 5.0}]))
     assert lines == [{"k": "tier1_leverage_below", "l": "Tier 1 leverage ratio below 5%", "v": 4.1}]
     assert wx.distress(None) is None and wx.distress("[]") == []
+
+
+def test_not_reported_waterfall_items_say_so():
+    import json as _json
+
+    from ingestion import watchlist_export as wx
+
+    raw = _json.dumps(
+        {
+            "base_pct": 4.0,
+            "items": [
+                {"f": "brokered_to_deposits_pct", "v": None, "m": 0.0, "pp": 3.1},
+                {"f": "ore_to_assets_pct", "v": None, "m": 0.0, "pp": -0.4},
+            ],
+            "other_pp": 0,
+            "p_pct": 6.7,
+        }
+    )
+    a, b = wx.waterfall(raw)["i"]
+    assert a["nr"] == "Not reported: the missing figure itself raised the score" and a["v"] is None
+    assert b["nr"] == "Not reported: the missing figure itself lowered the score"

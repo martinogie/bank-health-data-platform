@@ -186,3 +186,25 @@ def test_distress_lines_name_each_line_crossed():
     assert lines[0] == {"line": "noncurrent_loans_above", "value": 4.2, "threshold": 3.0}
     assert R["distress_lines"](3.0, 5.0, True, False, 3.0, 5.0) == []  # at the line is not over it
     assert R["distress_lines"](np.nan, None, None, True, 3.0, 5.0) == []  # missing: no breach
+
+
+def test_change_features_are_cited_only_when_they_worsened():
+    # Pinnacle Bank's case: non-current loans fell 1.45 pp over the quarter, yet raised the score
+    values = pd.Series(
+        {
+            "noncurrent_change_1q_pp": -1.45,
+            "roa_change_4q_pp": -0.4,
+            "tier1_change_4q_pp": 0.8,
+            "roa_pct": 0.2,
+        }
+    )
+    contrib = pd.Series(
+        {"noncurrent_change_1q_pp": 0.9, "roa_change_4q_pp": 0.5, "tier1_change_4q_pp": 0.4, "roa_pct": 0.3}
+    )
+    peers = pd.Series({f: 0.0 for f in values.index})
+    texts = R["shap_reason_texts"](values, contrib, peers)
+    assert texts == ["roa_change_4q_pp = -0.40 (peer median 0.00)", "roa_pct = 0.20 (peer median 0.00)", None]
+    assert (
+        R["reason_texts"](values, contrib, peers)[0] == "roa_change_4q_pp = -0.40 (median 0.00)"
+    )  # fallback too
+    assert R["worsened"]("noncurrent_change_4q_pp", 0.3) and not R["worsened"]("tier1_change_4q_pp", 0.3)
