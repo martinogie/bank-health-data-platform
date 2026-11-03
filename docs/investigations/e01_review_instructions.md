@@ -34,7 +34,7 @@ unmatched (1,398,891 complaints), in [e01_population.json](e01_population.json).
 | Column | Meaning |
 |---|---|
 | `proposed_label` | my label (lists below) |
-| `proposed_cert` | empty for now: a bank's cert is only filled in after it is looked up in FDIC data (the next step), never guessed |
+| `proposed_cert` | the FDIC cert of the bank I think it should match: filled in only where I looked it up in FDIC data (Bread Financial, USAA), never guessed |
 | `evidence_note` | my reason, starting with my confidence: `[high]`, `[medium]` or `[low]` |
 
 **Yours (empty, for you to fill in):**
