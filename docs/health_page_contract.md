@@ -38,6 +38,8 @@ Query for the page: `SELECT * FROM BANK_HEALTH.OPS.HEALTH_RUNS_LAST_12 ORDER BY 
 | `DQ_WARNINGS` | number | data-quality warnings inside the Databricks notebooks |
 | `CREDITS` | number | Snowflake credits used, three decimals: the final figure if `CREDITS_ARE_FINAL`, else the estimate (C-02) |
 | `CREDITS_ARE_FINAL` | boolean | false until the next run recomputes it from complete metering |
+| `DATABRICKS_MINUTES` | number | Databricks job minutes this run (task setup + execution + cleanup); Free Edition has no billing data, so time against the daily quota is the measure (C-02, Phase 4) |
+| `CONTRACT_WARNINGS`, `CONTRACT_WOULD_FAIL` | number | data-contract warnings, and findings that would fail in enforce mode (Phase 3) |
 | `CREDITS_AVG_LAST_4` | number | moving average of `CREDITS` over this and the 3 runs before it: the cost trend line |
 | `LATEST_FDIC_QUARTER` | date | newest quarter in the marts after this run |
 | `SLO_MET` | boolean | succeeded by Monday 12:00 America/Chicago that week (the objective) |
