@@ -44,6 +44,7 @@ NOTEBOOK_TASKS = [
     ("gold", "03_gold", 3600),
     ("train_model", "04_train_model", 3600),
     ("score", "05_score", 1800),
+    ("monitor", "07_monitor", 1800),
 ]
 
 
@@ -164,7 +165,7 @@ def job_settings(repo_path: str, s: Settings | None = None) -> dict:
         previous = key
     return {
         "name": s.databricks_job_name,
-        "description": "Bank Health: bronze -> silver -> gold -> train (only if retrain=true) -> score",
+        "description": "Bank Health: bronze -> silver -> gold -> train (only if retrain=true) -> score -> monitor",
         "max_concurrent_runs": 1,  # an Airflow retry can never start a parallel copy
         "queue": {"enabled": True},
         "timeout_seconds": 3 * 3600,

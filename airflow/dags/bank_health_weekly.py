@@ -18,7 +18,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `save_watermarks` | remember how far we got (after the upload succeeded). Backfill: not moved | writes the same values again |
 | `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true. Backfill: never | pure decision |
 | `sync_databricks_job` | prod: pull the Git folder to main; dev: upload this checkout's notebooks. Create/update the job | both idempotent |
-| `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
+| `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score -> monitor | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
 | `sanity_check_top20` | fails if the 20 riskiest scored banks include a new bank, a foreign-bank office or a 0% capital ratio | read-only |
 | `prepare_marts` | write, audit, publish: clone MARTS into MARTS_NEXT; `full_refresh=true` rebuilds the incremental marts | MARTS_NEXT is recreated; MARTS untouched |
@@ -30,6 +30,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `collect_metrics` | row counts per layer (Databricks notebook summaries, Snowflake MARTS), latest FDIC quarter | read-only |
 | `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
 | `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs; the share of complaints matched to a bank (alert if more than 2 points below the usual) (`ingestion/volume_checks.py`) | read-only |
+| `check_model` | model monitoring (`07_monitor`): PSI of the score and features vs the previous 4 quarters and vs 2001–2019, the backtest from 2020 -> `OPS.MODEL_MONITORING`; a MODEL message when alerts are on (`MODEL_MONITOR_ALERTS`). Never fails the run | replaces this run's rows |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 
@@ -235,6 +236,7 @@ def _record_run() -> dict:
             latest_quarter=metrics.get("latest_quarter"),
             volume_anomalies=volume.get("anomalies"),
             backfill=ti.xcom_pull(task_ids="check_backfill"),
+            contracts=ti.xcom_pull(task_ids="check_contracts"),
         )
         run_log.write_row(cur, row)
         backfilled = run_log.backfill_final_credits(cur, warehouse, ended)
@@ -771,6 +773,51 @@ def bank_health_weekly():
         return result
 
     @task(
+        retries=1,
+        doc_md="Model monitoring (M-08): reads 07_monitor's summary from the Databricks run, writes one row "
+        "per metric to OPS.MODEL_MONITORING (PSI vs the previous 4 quarters and vs 2001-2019; backtest from "
+        "2020) and, when MODEL_MONITOR_ALERTS=on, sends a MODEL message for what would alert. Never fails "
+        "the run: drift doesn't make this week's scores wrong.",
+    )
+    def check_model() -> dict:
+        from airflow.sdk import get_current_context
+
+        from ingestion import model_monitoring as mm
+        from ingestion import run_log
+        from ingestion.alerts import notify
+        from ingestion.databricks_jobs import DatabricksAPI
+
+        ctx = get_current_context()
+        run_id = ctx["ti"].xcom_pull(task_ids="run_databricks_job", key="run_id")
+        try:
+            summary = (
+                run_log.databricks_outputs(DatabricksAPI.from_env(), run_id).get("monitor")
+                if run_id
+                else None
+            )
+        except Exception as exc:
+            print(f"monitor summary not available: {type(exc).__name__}")
+            summary = None
+        if not summary:
+            print("no 07_monitor summary in this run; nothing to record")
+            return {"recorded": 0}
+        records = mm.rows(summary, ctx["dag_run"].run_id, ENV.name)
+        written = 0
+        with _snowflake_cursor() as cur:
+            if mm.table_exists(cur):
+                written = mm.write(cur, ctx["dag_run"].run_id, records)
+            else:
+                print(f"{mm.TABLE} doesn't exist yet (run snowflake/setup_monitoring.sql): not written")
+        line, would_alert = mm.headline(summary), summary.get("alerts") or []
+        print(line)
+        for a in would_alert:
+            print("would alert:", a)
+        enabled = mm.alerts_enabled(os.environ.get("MODEL_MONITOR_ALERTS"))
+        if would_alert and enabled:
+            notify("MODEL: monitoring found a shift or a weaker backtest", [line, *would_alert])
+        return {"recorded": written, "alerts": would_alert, "alerts_enabled": enabled, "headline": line}
+
+    @task(
         trigger_rule="all_done",
         retries=1,
         doc_md="Always runs last, even after failures: writes this run's OPS.PIPELINE_RUNS row (state, failed "
@@ -802,7 +849,9 @@ def bank_health_weekly():
     dbt_docs_generate >> verify_pipeline(watermarks) >> metrics
     watchlist = export_watchlist()
     [check_freshness(metrics), check_volumes(metrics, plan)] >> watchlist
-    [watchlist, manifest] >> record_run()
+    model_check = check_model()
+    metrics >> model_check
+    [watchlist, manifest, model_check] >> record_run()
 
 
 bank_health_weekly()

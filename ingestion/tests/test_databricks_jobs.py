@@ -14,7 +14,7 @@ def api_with(handler):
 def test_job_settings_chain_and_safety_flags():
     s = dj.job_settings("/Users/me/bank-health-data-platform")
     keys = [t["task_key"] for t in s["tasks"]]
-    assert keys == ["bronze", "silver", "gold", "train_model", "score"]
+    assert keys == ["bronze", "silver", "gold", "train_model", "score", "monitor"]
     for prev, task in zip(s["tasks"], s["tasks"][1:]):
         assert task["depends_on"] == [{"task_key": prev["task_key"]}]
     assert (
