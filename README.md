@@ -292,7 +292,8 @@ commit, rebuilds, restarts and runs a smoke check ([deploy runbook](docs/runbook
 - one *OK* message per run.
 
 **The run log.** Every run writes one row to `OPS.PIPELINE_RUNS`: state, failed tasks, rows per
-layer, dbt results, credits, the model used, the latest FDIC quarter. The view
+layer, dbt results, credits, the model used, the latest FDIC quarter, the complaint match rate and
+the data-contract counts. Model monitoring (drift and backtest) goes to `OPS.MODEL_MONITORING`. The view
 `OPS.HEALTH_RUNS_LAST_12` is the data behind the future health page
 ([contract](docs/health_page_contract.md)). What to do for each alert:
 [alerts runbook](docs/runbooks/alerts.md).
@@ -402,6 +403,29 @@ scripts/      export_watchlist_data.py and helper scripts
 tests/        integration, smoke, browser and end-to-end tests
 docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/, health page contract
 ```
+
+## Data quality and loading
+
+- **Data contracts.** Every downloaded file is checked against its contract
+  (`ingestion/contracts/`: fields, types, allowed nulls, code lists) before it reaches bronze. A
+  removed, renamed or retyped field fails the run; a new field or code value warns. Prod reports
+  in warn mode; the counts go in the run log.
+- **Idempotent loading.** Silver merges on its keys (newest load wins); the incremental marts
+  merge only changed rows; the marts are built and tested in `MARTS_NEXT` and swapped in only if
+  every critical test passed (write, audit, publish). Checked in dev: the same week loaded twice,
+  the same period backfilled twice, and incremental vs full refresh left **every table identical**
+  (row counts and checksums; bronze on distinct keys).
+- **Backfill.** Any past period can be redone from the Airflow trigger form or
+  `scripts/backfill.py`; it never moves the watermarks and never retrains
+  ([runbook](docs/runbooks/backfill.md)).
+- **Complaint matching quality.** CFPB names companies, the FDIC banks. A one-time audit of 250
+  companies (labels proposed by Claude Code and reviewed by Martins, 3 Nov 2026) measured
+  precision 92.9% by company (95% interval 86.1–96.5%) and 99.9% by complaint volume, and recall
+  94.8% by complaint volume. The fixes it led to (two missed banks, Bread Financial and USAA; six
+  wrong holding-company matches; a sense check on small banks) raise the share of complaints
+  matched to a bank from 30.0% to 31.7%
+  ([results](docs/investigations/e01_results.md)). Every run logs the match rate and alerts if it
+  drops more than 2 points.
 
 ## Data sources
 

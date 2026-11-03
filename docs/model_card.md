@@ -269,6 +269,71 @@ Warnings must not scroll past unseen. Every run, the failing rows are stored wit
 at them:
 `SELECT * FROM BANK_HEALTH.OPS.DBT_WARNINGS_AUDIT ORDER BY RECORDED_AT DESC;`
 
+### Reasons (finding M-05, Phase 3)
+
+Each scored bank gets up to 3 reasons, `reason_1..3`. Since Phase 3 they come from **SHAP**: the
+features that push the bank's log-odds up most (shap 0.46.0 `TreeExplainer` on the v5 model,
+pinned in the scoring environment; base value + contributions = the model's log-odds to within
+2×10⁻¹⁴ for all 4,222 banks scored on 3 Nov 2026). Each reason is compared with the median of
+banks in the **same asset-size tier**. A feature the bank doesn't report is never cited, and a
+"change" feature (non-current loans, Tier 1, ROA) only when it moved the worsening way.
+
+- **Fallback:** if SHAP gives no usable reason for a bank, or fails for the run, the earlier
+  method is used (set one feature to the median of all scored banks and see how much the
+  probability falls). `reason_method` (`shap` or `median_fallback`) says which.
+- **Old vs new** on today's top 20 and on the 10 largest closures of 2009–2010 (in-sample):
+  [docs/investigations/m05_reason_examples.md](investigations/m05_reason_examples.md). The top
+  reason is the same feature for 21 of the 30 banks; size is cited 8 times by the old method and
+  3 times by the new one, because against its own tier a bank's size rarely looks unusual.
+- **Waterfall:** `shap_waterfall` keeps the 8 largest pushes per bank, either way, in percentage
+  points of probability (walked from the base rate in order of size, so the bars and "other"
+  add up to the bank's probability; a not-reported item is shown as "Not reported: the missing
+figure itself raised the score"). Banks already in distress get `distress_lines` instead: the
+  distress lines they crossed. Both reach `watchlist.json` (schema 3) for the website.
+
+### Monitoring (finding M-08, Phase 3)
+
+`07_monitor`, after scoring in every weekly run, and `check_model` in Airflow, which writes
+`OPS.MODEL_MONITORING`:
+
+- **Score history:** `ml.risk_score_history` keeps every score, append-only. Earlier quarters are
+  filled once by rescoring with v5; 2001–2019 is marked in-sample.
+- **Drift (PSI)** for the score and each feature, latest quarter vs the previous 4 quarters (the
+  alert comparison) and vs 2001–2019 training (reported only). Alert: score PSI above 0.25, or 3+
+  features above 0.25, vs the previous 4 quarters.
+- **Backtest** per quarter from 2020 whose outcome is known: realised PR-AUC and top-10% capture,
+  judged with at least 30 positives. Alert: capture more than 10 points below the test result
+  (52.6%).
+
+First results (dev, on prod data, 3 Nov 2026, 2026 Q2;
+[m08_monitoring_dev.md](investigations/m08_monitoring_dev.md)):
+
+| | Result |
+|---|---|
+| Score PSI vs the previous 4 quarters | 0.008 (stable); all 31 features stable |
+| Score PSI vs 2001–2019 training | 0.323 (large; 12 features large): expected after 20 years, reported only |
+| Backtest, 22 quarters 2020 Q1 – 2025 Q2 | top-10% capture 45.1%–59.9%; none below the 42.6% alert line |
+
+Alerts go out as a MODEL message (never failing the run); switched on by Martins on 3 Nov 2026
+after reviewing both comparisons.
+
+### Promotion rule (finding M-09, Phase 3)
+
+A retrained model becomes `@champion` only if a person runs training with `promote=true` **and**
+the gate allows it (`_promotion`): judged on the same test rows as the champion (checked by a
+hash of the row keys), it must not be more than 0.005 PR-AUC or 1.0 point of top-10% capture
+below the champion.
+
+| Result | Promotion with `promote=true` |
+|---|---|
+| `pass`: better beyond a tolerance on PR-AUC or capture | allowed |
+| `tie`: within both tolerances | allowed |
+| `fail`: worse beyond a tolerance, or different test rows | refused; the training run fails with the reasons |
+
+The decision is logged in MLflow (`promotion_gate.json`) and on the version's tags
+(`gate_decision`, `test_rows_hash`). v5 was promoted before the rule existed; the first gated
+decision comes with v6.
+
 ### Known limits
 
 - **CBLR banks score less well.** On 2020–2024 the model separates CBLR banks less well than other
@@ -297,6 +362,10 @@ at them:
 - **Credit risk and earnings risk share one list.** Banks just under the 3% non-current-loan line
   (32 of the top 50 in 2026 Q2) and banks with thin earnings both rank high. Users can't tell
   from the probability which kind of risk a bank carries; the reasons show it.
+- **Assistance counted as failure.** The failure part of the label uses every row of the FDIC
+  failure list, which also holds assistance transactions: the open-bank assistance (OBAM) to Bank
+  of America's banks on 16 Jan 2009 (8 rows in 2009–2010, among them Countrywide and FIA Card
+  Services) counts as a failure. Found in Phase 3; a v6 decision.
 - Public data only, quarterly, with a lag of about 2 months after quarter-end.
 - The label mixes capital, asset quality and earnings stress, so "distress" is not the same as
   failure.
