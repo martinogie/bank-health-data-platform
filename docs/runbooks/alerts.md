@@ -134,6 +134,11 @@ The volume thresholds and their reasons are in `ingestion/volume_checks.py`:
   never shift the usual rows added or the medians.
 - **Silver, gold, marts:** −0.5% / +5% against the median of the last 4 successful runs (needs 3).
 - **Scored banks:** ±3% against the same median.
+- **Complaint match rate** (share of complaints matched to an FDIC bank, about 30%; kept in
+  `ROWS_DETAIL:match` and shown in the OK message): an alert when it is more than **2 percentage
+  points** below the median of the last 4 successful runs (needs 3, so it starts judging from the
+  fourth run that records it). A sharp drop means matching broke: look at `02_silver`'s
+  `company_bank_map` summary and the institutions file. Also checked in backfills.
 
 Review them after about 8 weeks of `OPS.PIPELINE_RUNS` history: if real weeks trip them, change
 them in a pull request, with the evidence.

@@ -29,7 +29,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `verify_pipeline` | end-to-end checks in Snowflake | read-only |
 | `collect_metrics` | row counts per layer (Databricks notebook summaries, Snowflake MARTS), latest FDIC quarter | read-only |
 | `check_freshness` | MARTS rebuilt in this run, the FDIC quarter expected for today, scored banks in range | read-only |
-| `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs (`ingestion/volume_checks.py`) | read-only |
+| `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs; the share of complaints matched to a bank (alert if more than 2 points below the usual) (`ingestion/volume_checks.py`) | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 

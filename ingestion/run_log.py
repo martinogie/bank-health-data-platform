@@ -74,7 +74,14 @@ def layer_rows(outputs: dict[str, dict]) -> dict[str, Any]:
     bronze = {k: v.get("total_rows") for k, v in bronze_out.items()}
     # rows this run's bronze load added per source (Auto Loader's count), for the volume check
     bronze_added = {k: v["new_rows"] for k, v in bronze_out.items() if v.get("new_rows") is not None}
-    silver = dict((outputs.get("silver") or {}).get("rows") or {})
+    silver_out = outputs.get("silver") or {}
+    silver = dict(silver_out.get("rows") or {})
+    # complaint-to-bank match rate, for the match-rate check (ingestion/volume_checks.py)
+    match = {
+        k: silver_out[k]
+        for k in ("complaints_matched_to_bank_pct", "companies_matched")
+        if silver_out.get(k) is not None
+    }
     gold = (outputs.get("gold") or {}).get("bank_quarter_rows")
     score = outputs.get("score") or {}
     warnings = [
@@ -95,6 +102,7 @@ def layer_rows(outputs: dict[str, dict]) -> dict[str, Any]:
             "bronze_added": bronze_added or None,
             "silver": silver or None,
             "gold": {"bank_quarter": gold},
+            **({"match": match} if match else {}),
         },
     }
 
@@ -279,6 +287,16 @@ def write_row(cur, row: dict[str, Any]) -> None:
     cur.execute(merge_sql(), params)
 
 
+def _match_line(detail: Any) -> str:
+    match = (detail or {}).get("match") if isinstance(detail, dict) else None
+    if not match or match.get("complaints_matched_to_bank_pct") is None:
+        return ""
+    companies = match.get("companies_matched")
+    return f"Complaints matched to a bank: {match['complaints_matched_to_bank_pct']}%" + (
+        f" ({companies:,} companies)" if isinstance(companies, int) else ""
+    )
+
+
 def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:
     """The weekly 'it ran fine' alert, so silence never means success."""
     minutes = (row.get("DURATION_SECONDS") or 0) / 60
@@ -292,6 +310,7 @@ def success_message(row: dict[str, Any]) -> tuple[str, list[str]]:
         f"gold {n(row.get('GOLD_ROWS'))}, marts {n(row.get('MARTS_ROWS'))}",
         f"Scored banks: {n(row.get('SCORED_BANKS'))} (latest FDIC quarter {row.get('LATEST_FDIC_QUARTER')}, "
         f"model {row.get('MODEL_NAME') or '?'} v{row.get('MODEL_VERSION') or '?'} @{row.get('MODEL_ALIAS') or '?'})",
+        _match_line(row.get("ROWS_DETAIL")),
         f"dbt: {n(row.get('DBT_TESTS_PASS'))} tests passed, {n(row.get('DBT_TESTS_WARN'))} warned, "
         f"{n(row.get('DBT_TESTS_FAIL'))} failed",
         f"Credits (estimate): {row['CREDITS_ESTIMATE']}" if row.get("CREDITS_ESTIMATE") is not None else "",

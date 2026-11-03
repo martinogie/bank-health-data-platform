@@ -24,6 +24,12 @@ Rows added per source are stored in the run log (OPS.PIPELINE_RUNS.ROWS_DETAIL:b
 the bronze notebook's own count). For runs recorded before that, they are worked out from the
 change in each source's bronze total since the previous successful run.
 
+3. The complaint match rate: the share of complaints matched to an FDIC bank (silver; stored in
+   ROWS_DETAIL:match). It moves by a few tenths of a point a week; a drop of more than
+   MATCH_RATE_MAX_DROP_PTS percentage points below the median of the last 4 successful runs (needs
+   3) means matching broke (an empty or changed institutions file, a normalisation change), and
+   is an alert. Checked in backfills too.
+
 Backfill runs (ingestion/backfill.py; ROWS_DETAIL:backfill is set) add far more rows than usual by
 design, so in a backfill the rows-added check only reports, and every other check still applies.
 Backfill runs are also left out of the history, so they never shift the usual rows added or the
@@ -57,6 +63,8 @@ BRONZE_SOURCES = ("cfpb_complaints", "fdic_financials", "fdic_institutions", "fd
 ADDED_MIN_RATIO = 0.5  # under half the usual rows added: a broken or partial download
 ADDED_MAX_RATIO = 3.0  # over three times the usual: a full re-download or a duplicated load
 QUARTER_STEP_SOURCE = "fdic_financials"  # may add a whole new quarter when one arrives
+MATCH_RATE = "complaints_matched_to_bank_pct"
+MATCH_RATE_MAX_DROP_PTS = 2.0  # percentage points below the usual (about 30% today)
 
 
 def _detail(value: Any) -> dict:
@@ -127,6 +135,32 @@ def usual_added(history: list[dict]) -> dict[str, float]:
     return out
 
 
+def match_rate(run: dict) -> float | None:
+    value = (_detail(run.get("ROWS_DETAIL")).get("match") or {}).get(MATCH_RATE)
+    return float(value) if value is not None else None
+
+
+def usual_match_rate(history: list[dict]) -> float | None:
+    """Median match rate over the last BASELINE_RUNS runs that have it (needs MIN_BASELINE_RUNS)."""
+    values = [v for v in (match_rate(h) for h in history[:BASELINE_RUNS]) if v is not None]
+    return float(median(values)) if len(values) >= MIN_BASELINE_RUNS else None
+
+
+def check_match_rate(current: dict, history: list[dict]) -> list[dict]:
+    value, usual = match_rate(current), usual_match_rate(history)
+    if value is None or usual is None or value >= usual - MATCH_RATE_MAX_DROP_PTS:
+        return []
+    return [
+        {
+            "metric": "MATCH_RATE",
+            "value": value,
+            "usual_match_rate": usual,
+            "drop_pts": round(usual - value, 1),
+            "limit_pts": MATCH_RATE_MAX_DROP_PTS,
+        }
+    ]
+
+
 def check_added(current: dict[str, int], usual: dict[str, float], new_quarter: bool = False) -> list[dict]:
     """Anomalies in the rows added to bronze this run, per source."""
     anomalies = []
@@ -167,18 +201,20 @@ def compare(
         current_added = added_in({"ROWS_DETAIL": current.get("ROWS_DETAIL")}, history[0])
     current_added = current_added or {}
     usual = usual_added(history)
-    if not base and not usual:
+    usual_rate = usual_match_rate(history)
+    if not base and not usual and usual_rate is None:
         return {
             "anomalies": [],
             "reported": [],
             "baseline": {},
             "usual_added": {},
+            "usual_match_rate": None,
             "added": current_added,
             "note": f"no baseline yet ({len(history)} earlier successful runs, need {MIN_BASELINE_RUNS})",
         }
     added_findings = check_added(current_added, usual, new_quarter)
     reported = added_findings if backfill else []
-    anomalies = [] if backfill else added_findings
+    anomalies = ([] if backfill else added_findings) + check_match_rate(current, history)
     for metric, rule in RULES.items():
         value, ref = current.get(metric), base.get(metric)
         if value is None or not ref:
@@ -205,12 +241,18 @@ def compare(
         "reported": reported,
         "baseline": base,
         "usual_added": usual,
+        "usual_match_rate": usual_rate,
         "added": current_added,
         "note": note,
     }
 
 
 def describe(anomaly: dict) -> str:
+    if anomaly["metric"] == "MATCH_RATE":
+        return (
+            f"complaints matched to a bank: {anomaly['value']:.1f}% vs usual {anomaly['usual_match_rate']:.1f}% "
+            f"(down {anomaly['drop_pts']:.1f} points; limit {anomaly['limit_pts']:.1f})"
+        )
     if "usual_added" in anomaly:
         source = anomaly["metric"].split(".", 1)[1]
         return (
