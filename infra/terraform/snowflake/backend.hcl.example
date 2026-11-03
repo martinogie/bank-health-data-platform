@@ -1,0 +1,3 @@
+# Not secret: where the remote state bucket lives. Used by `terraform init -backend-config=backend.hcl`.
+namespace = "<your Object Storage namespace: oci os ns get>"
+region    = "us-chicago-1"

@@ -72,20 +72,19 @@ in parallel while prod verifications run.
 ## Design notes
 
 - **Terraform state:** OCI Object Storage bucket `bank-health-tfstate` (private, versioned,
-  Oracle-managed encryption), through Terraform's native `oci` backend, which locks the state. Auth
-  for the backend and the OCI provider: an OCI **session token** (`oci session authenticate`, 1 hour,
-  refreshable for 24 hours), so no long-lived API key sits on the PC. `*.tfstate*` and
-  `.terraform/` are git-ignored.
-- **Snowflake auth for Terraform:** Martins' own login through the browser (`EXTERNALBROWSER`, MFA),
-  as ACCOUNTADMIN. No new user and no new key.
+  Oracle-managed encryption), through Terraform's native `oci` backend, which locks the state.
+  `*.tfstate*` and `.terraform/` are git-ignored.
+- **Logins (changed during the work, 3 Nov 2026; see [ADR 0010](adr/0010-terraform-import-only.md)):**
+  OCI uses Martins' API-key profile `bank-health` (his choice, instead of a session token).
+  Snowflake uses a passphrase-encrypted key pair on his own user, run by him through
+  `infra/terraform/snowflake/plan.ps1`: `EXTERNALBROWSER` needs SSO, and password + MFA doesn't
+  work with a passkey.
 - **What Terraform manages:** warehouses, databases, the stable schemas (`RAW`, `STAGING`, `OPS`),
-  roles, service users (their RSA public keys are ignored: rotation stays a runbook step, and no key
-  material is in state), resource monitors; on OCI the network, the VM, the budget. **Not:** `MARTS`
-  and `MARTS_NEXT` (swapped every week by write-audit-publish), `CI_*` schemas, dbt's tables and
-  views, the `PROD_SCHEDULER` row, the Snowflake budget.
-- **The VM** carries `prevent_destroy` and `ignore_changes` on everything that would force a
-  replacement or a restart (metadata and SSH keys, the image, the VNIC, the shape). If the import
-  still shows a forced replacement or a restart, the VM stays out of Terraform, documented.
+  roles, resource monitors; on OCI the network, the VM, the budget. **Not:** the 4 service users
+  (kept in SQL, see ADR 0010), `MARTS` and `MARTS_NEXT` (swapped every week by write-audit-publish),
+  `CI_*` schemas, dbt's tables and views, the `PROD_SCHEDULER` row, the Snowflake budget.
+- **The VM** carries `prevent_destroy` and `ignore_changes = all`, and the guard blocks any action
+  on it. Its import planned 0/0/0 and was applied on 3 Nov 2026 with no restart (up since 27 Oct).
 - **Secrets (PR 8):** one Vault (software key, free tier); the VM reads them as itself (instance
   principal, a dynamic group and a policy limited to this vault), into a RAM-only tmpfs
   (`/run/bank-health`, mode 600) at container start. The old `.env` stays until a manual prod run

@@ -32,3 +32,16 @@ dbt/.user.yml
 .coverage
 coverage.xml
 htmlcov/
+# Terraform: state and plans never in git (remote state lives in the OCI bucket bank-health-tfstate)
+*.tfstate
+*.tfstate.*
+**/.terraform/
+*.tfplan
+tfplan*
+plan.json
+infra/terraform/**/plan.txt
+infra/terraform/**/apply.txt
+infra/terraform/**/backend.hcl
+crash.log
+*.auto.tfvars
+terraform.tfvars
