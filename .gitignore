@@ -1,5 +1,6 @@
 # secrets — never commit
 .env
+.env.before-vault
 *.p8
 *.pem
 keys/

@@ -50,6 +50,14 @@ main() {
     git merge --ff-only --quiet "$sha" || fail "cannot fast-forward $before to $sha"
     echo "checkout: $before -> $(git rev-parse --short HEAD)"
 
+    # Vault mode (airflow/.env has BANK_HEALTH_RUNTIME_SECRETS_DIR; docs/runbooks/vault.md):
+    # refresh the secrets in RAM from OCI Vault before the containers are (re)created. A failed
+    # read changes nothing and stops the deploy.
+    if grep -q '^BANK_HEALTH_RUNTIME_SECRETS_DIR=.' airflow/.env 2>/dev/null; then
+        /srv/bank-health/venv/bin/python "$app/deploy/vault_secrets.py" fetch \
+            || fail "could not read the secrets from OCI Vault (docs/runbooks/vault.md)"
+    fi
+
     cd airflow
     docker compose build
     docker compose up -d --wait --wait-timeout 600
@@ -61,7 +69,9 @@ main() {
     # dbt deps reinstalling dbt_packages: Cosmos then records an import error that stays until
     # the next parse (seen on 2 Nov 2026). Parse again now that the packages are complete, so the
     # smoke check judges the DAG as it really is.
-    docker compose exec -T airflow-dag-processor airflow dags reserialize >/dev/null
+    # (load_secrets.sh: in Vault mode an exec'd shell gets the secrets the way the containers do.)
+    docker compose exec -T airflow-dag-processor bash -c \
+        '. /opt/airflow/include/load_secrets.sh && airflow dags reserialize' >/dev/null
     "$app/deploy/smoke_check.sh"
     echo "DEPLOYED $(git rev-parse --short HEAD)"
 }

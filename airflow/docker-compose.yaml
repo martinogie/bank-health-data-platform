@@ -23,6 +23,13 @@
 #   AIRFLOW_UID=<uid of the deploy user>
 # See docs/runbooks/oracle_vm_setup.md.
 #
+# Vault mode (Phase 4, PR 8; docs/runbooks/vault.md): two more lines in airflow/.env switch the
+# secrets from the .env file to OCI Vault, read into RAM by deploy/vault_secrets.py:
+#   BANK_HEALTH_RUNTIME_SECRETS_DIR=/run/bank-health
+#   BANK_HEALTH_KEYS_DIR=/run/bank-health/keys
+# (plus BANK_HEALTH_VAULT_ID=<vault OCID>, read by the fetch script only). Removing them is the
+# rollback: the stack goes back to the .env file and keys/ folder.
+#
 # The UI is published on 127.0.0.1 only: on the VM it is reached through an SSH tunnel and is
 # never reachable from the internet, whatever the firewall says.
 
@@ -37,6 +44,9 @@ x-airflow-common:
     # Set here, not only in .env, so this stack can only ever run as prod. It overrides .env.
     # The dev override file sets dev. The entrypoint stops the container if it is missing.
     BANK_HEALTH_ENV: prod
+    # Vault mode when the host sets BANK_HEALTH_RUNTIME_SECRETS_DIR (then load_secrets.sh requires
+    # every secret in /run/bank-health/env); empty = .env mode.
+    BANK_HEALTH_SECRETS_DIR: ${BANK_HEALTH_RUNTIME_SECRETS_DIR:+/run/bank-health}
     # Base of the Airflow UI links in alerts (through the SSH tunnel on the VM). Not a secret.
     AIRFLOW_UI_URL: ${AIRFLOW_UI_URL:-http://localhost:8080}
     # Data contracts (ingestion/contracts/): warn = report what would fail; enforce = stop the run.
@@ -79,6 +89,8 @@ x-airflow-common:
     # `git pull` never meets a locally changed file. Publishing it is a separate step.
     - ${WATCHLIST_DIR:-../data/site}:/opt/airflow/site/data
     - ${BANK_HEALTH_KEYS_DIR:-../keys}:/opt/airflow/keys:ro
+    # Vault mode: the secrets in RAM (read-only). .env mode: an empty folder from the repo.
+    - ${BANK_HEALTH_RUNTIME_SECRETS_DIR:-./include/no-runtime-secrets}:/run/bank-health:ro
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
@@ -163,6 +175,8 @@ services:
         # init runs as root; hand the folders to the Airflow user so tasks can write downloads
         # there (on a fresh machine they would otherwise be root-owned and read-only)
         chown "${AIRFLOW_UID:-50000}:0" /opt/airflow/logs /opt/airflow/data /opt/airflow/data/raw
+        # Vault mode: export the secrets from RAM first (stops if any is missing)
+        . /opt/airflow/include/load_secrets.sh
         if [[ -z "$${AIRFLOW__CORE__FERNET_KEY:-}" || -z "$${AIRFLOW__API_AUTH__JWT_SECRET:-}" || -z "$${_AIRFLOW_WWW_USER_PASSWORD:-}" ]]; then
           echo "Missing AIRFLOW__CORE__FERNET_KEY, AIRFLOW__API_AUTH__JWT_SECRET or _AIRFLOW_WWW_USER_PASSWORD in .env"
           exit 1

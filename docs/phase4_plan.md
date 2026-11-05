@@ -89,8 +89,16 @@ in parallel while prod verifications run.
   on it. Its import planned 0/0/0 and was applied on 3 Nov 2026 with no restart (up since 27 Oct).
 - **Secrets (PR 8):** one Vault (software key, free tier); the VM reads them as itself (instance
   principal, a dynamic group and a policy limited to this vault), into a RAM-only tmpfs
-  (`/run/bank-health`, mode 600) at container start. The old `.env` stays until a manual prod run
-  succeeds on Vault; a written rollback step; any shred only after Martins' OK.
+  (`/run/bank-health`, mode 600) at boot and on each deploy, exported when a container starts.
+  The old `.env` stays until a manual prod run succeeds on Vault; a written rollback step; any
+  shred only after Martins' OK. Built as a switch: merging changes nothing until two lines in the
+  VM's `airflow/.env` turn Vault mode on ([vault.md](runbooks/vault.md)). 8 secrets (5 Nov 2026):
+  `prod-databricks-token`, `prod-snowflake-private-key`, `prod-snowflake-key-passphrase`,
+  `prod-airflow-fernet-key`, `prod-airflow-jwt-secret`, `prod-airflow-admin-password`,
+  `prod-slack-webhook`, `prod-discord-webhook`. **Not** the Postgres mirror or pgAdmin passwords
+  (the mirror runs on the PC only; the VM's stray copies go in the cleanup). Airflow's metadata
+  database password becomes `prod-airflow-db-password` in a separate PR after the switch (renamed
+  so it can't be confused with the mirror's `POSTGRES_PASSWORD`).
 - **Network policy (PR 7):** a reserved public IP first (price checked before), then the policy, by
   SQL (Martins runs it), imported into Terraform afterwards.
 

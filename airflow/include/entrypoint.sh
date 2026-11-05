@@ -12,6 +12,8 @@ case "${BANK_HEALTH_ENV:-}" in
     exit 1
     ;;
 esac
+# Vault mode: export the secrets from RAM (stops if any is missing). .env mode: does nothing.
+. /opt/airflow/include/load_secrets.sh
 # Also stops if ../.env belongs to another environment (e.g. dev credentials under prod).
 python -c "from ingestion.environment import describe; print('Bank Health Airflow:', describe())"
 
