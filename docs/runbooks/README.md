@@ -12,11 +12,12 @@ Find the right page by what you see. Every alert names its task; start from the 
 | **FAILED … publish_marts**, or wrong marts after a run | [marts_publish.md](marts_publish.md): swap back to last week's marts |
 | **MODEL: monitoring found a shift or a weaker backtest** | [alerts.md](alerts.md); the numbers' meaning: [model card](../model_card.md#monitoring-finding-m-08-phase-3) |
 | **LATE** / **WATCHDOG** / no OK message on Monday | [alerts.md](alerts.md) |
+| Containers restarting with **Vault mode: missing …**, or **DEPLOY REFUSED: could not read the secrets from OCI Vault** | [vault.md](vault.md#troubleshooting) |
 | The VM is down or unreachable | [oracle_vm_setup.md](oracle_vm_setup.md); rollback to the PC until about 19 Nov 2026: [cutover_and_rollback.md](cutover_and_rollback.md) |
 | A deploy failed, or you want to release a change | [deploy.md](deploy.md) |
 | Data for a past period must be redone | [backfill.md](backfill.md) |
 | A model to review, promote or roll back | [../runbook.md](../runbook.md) (top 20 review, promote, roll back to v4) |
-| A credential is about to expire, or has leaked | [../../SECURITY.md](../../SECURITY.md) (rotation runbooks are added in Phase 4, PR 8) |
+| A credential is about to expire, or has leaked | [../../SECURITY.md](../../SECURITY.md); [rotation.md](rotation.md); prod secrets in Vault: [vault.md](vault.md#changing-a-secret-later-rotation) |
 
 ## Every runbook
 
@@ -29,6 +30,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | [deploy.md](deploy.md) | How a merge reaches the VM: approval, the self-hosted runner, the smoke check |
 | [oracle_vm_setup.md](oracle_vm_setup.md) | Building the Oracle VM from scratch |
 | [cutover_and_rollback.md](cutover_and_rollback.md) | Moving prod between the PC and the VM, and back |
+| [vault.md](vault.md) | Prod secrets in OCI Vault: setup, the switch, rollback, cleanup, changing a secret |
 | [../runbook.md](../runbook.md) | Model operations: top-20 review, promotion, rollback, the Databricks environment |
 
 Service levels: [../slos.md](../slos.md). Decisions behind all of this: [../adr/](../adr/).

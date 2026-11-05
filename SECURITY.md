@@ -59,10 +59,12 @@ One Always Free Arm VM, Pay As You Go account with a $5 budget alert.
 
 ## Where secrets live
 
-| Secret | Today | Phase 4 (PR 8, planned) |
+| Secret | Before Phase 4 | Phase 4 (PR 8; [vault.md](docs/runbooks/vault.md)) |
 |---|---|---|
-| Snowflake private key (pipeline) | file on the VM, `/srv/bank-health/secrets/keys`, mode 600, owner `deploy` | OCI Vault, encrypted with a passphrase (also in Vault), fetched into RAM at container start |
-| Databricks token, Airflow Fernet and JWT keys, admin and Postgres passwords, Slack and Discord webhooks | `/srv/bank-health/secrets/.env`, mode 600 | OCI Vault, fetched into a RAM-only tmpfs (`/run/bank-health`) at container start |
+| Snowflake private key (pipeline) | file on the VM, `/srv/bank-health/secrets/keys`, mode 600, owner `deploy` | OCI Vault (`prod-snowflake-private-key`), encrypted with a passphrase (`prod-snowflake-key-passphrase`), read into RAM (`/run/bank-health/keys`) |
+| Databricks token, Airflow Fernet and JWT keys, admin password, Slack and Discord webhooks | `/srv/bank-health/secrets/.env`, mode 600 | OCI Vault (7 secrets named `prod-*`), read by the VM as itself into RAM (`/run/bank-health/env`) at boot and on each deploy; exported when a container starts |
+| Airflow's metadata database password | the default `airflow`, in `docker-compose.yaml` (reachable only inside Docker's network) | `prod-airflow-db-password`, in its own PR after the Vault switch |
+| Postgres mirror and pgAdmin passwords | the owner's PC (the mirror runs only there); stray copies in the VM's `.env` | PC only; the VM copies are removed in the Vault cleanup |
 | Dev keys and `.env` | the owner's PC, git-ignored | unchanged (dev only) |
 | CI key, prod webhooks for the watchdog | GitHub encrypted secrets | unchanged |
 | Terraform state (Phase 4) | – | private, versioned OCI Object Storage bucket; contains no secret values |
@@ -70,8 +72,10 @@ One Always Free Arm VM, Pay As You Go account with a $5 budget alert.
 Nothing secret is committed: `.env`, `keys/`, `*.p8` and Terraform state are git-ignored, and CI
 scans every push for secrets. Alert messages mask webhook URLs.
 
-**Known exposure:** inside the containers, secrets are environment variables, so anyone with root or
-Docker access on the VM can read them (`docker inspect`). Access to the VM is the owner's SSH key.
+**Known exposure:** inside the containers, secrets are environment variables of the running
+processes, so anyone with root or Docker access on the VM can read them (`docker exec`, `/proc`).
+In Vault mode they are not in Docker's stored container settings (`docker inspect`) and, after the
+cleanup, not in any file on disk. Access to the VM is the owner's SSH key.
 
 ## If something leaks
 
