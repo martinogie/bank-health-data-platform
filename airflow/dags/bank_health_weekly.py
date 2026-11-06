@@ -9,7 +9,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 
 | Task | What it does | Why a re-run is safe |
 |---|---|---|
-| `check_environment` | logs the environment; checks the Snowflake session is in that environment's database; in prod, stops unless this machine is the one named in `OPS.PROD_SCHEDULER` (one scheduler only) | read-only |
+| `check_environment` | logs the environment; checks the Snowflake session is in that environment's database; in prod, stops unless this machine is the one named in `CONTROL.PROD_SCHEDULER` (one scheduler only) | read-only |
 | `check_backfill` | weekly run, or a backfill? Checks the backfill dates (below) before anything is downloaded | read-only |
 | `download_fdic` | new FDIC quarters (last 2 re-pulled for amendments), institutions, failures. Backfill: only the chosen quarters | fixed file names; complete quarters already on disk are reused |
 | `download_cfpb` | complaints since the watermark (30-day look-back), credit bureaus excluded. Backfill: only the chosen dates | complete months already on disk are reused |
@@ -328,7 +328,7 @@ def bank_health_weekly():
         print(f"Snowflake session database: {database}")
         host = os.environ.get("PROD_HOST_ID") or None
         if ENV.is_prod:
-            # One scheduler only: stop here unless OPS.PROD_SCHEDULER names this machine.
+            # One scheduler only: stop here unless CONTROL.PROD_SCHEDULER names this machine.
             from ingestion import scheduler_guard
 
             with _snowflake_cursor() as cur:

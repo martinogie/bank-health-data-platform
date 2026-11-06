@@ -128,6 +128,8 @@ SELECT RUN_RANK, RUN_ID, ENVIRONMENT, HOST_ID, STARTED_AT, ENDED_AT,
 FROM ranked
 WHERE RUN_RANK <= 12;
 
+-- MOVED in Phase 4 (PR 10): the guard now reads BANK_HEALTH.CONTROL.PROD_SCHEDULER
+-- (snowflake/setup_control.sql). This section is kept as the record of how it started.
 -- The one machine allowed to run the prod schedule. check_environment stops a prod run on
 -- any other machine (and stops if it can't read this table). Created, filled and OWNED by
 -- ACCOUNTADMIN: the pipeline role, which both machines use, may only READ it, so the pipeline

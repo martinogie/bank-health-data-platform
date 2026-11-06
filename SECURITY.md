@@ -19,7 +19,7 @@ protecting is the ability to run, change or spend on the infrastructure.
 | `SVC_POWERBI` | service | key pair only | `BANK_REPORTER_ROLE` | read `BANK_HEALTH.MARTS` only |
 | The owner | person | password + MFA | ACCOUNTADMIN and the above | everything; runs the setup SQL and Terraform |
 
-- `OPS.PROD_SCHEDULER` (which machine may run prod) is owned by ACCOUNTADMIN; the pipeline can only
+- `CONTROL.PROD_SCHEDULER` (which machine may run prod) is owned by ACCOUNTADMIN; the pipeline can only
   read it, so it can't rewrite the rule that restrains it.
 - Spending: resource monitors and an account budget (spending limit 5) stop runaway cost
   ([ADR 0004](docs/adr/0004-snowflake-with-a-postgresql-mirror.md)).

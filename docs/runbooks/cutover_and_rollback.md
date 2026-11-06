@@ -5,7 +5,7 @@ the prod DAG.** Two things make that hard to get wrong:
 
 1. **The procedure:** the PC's DAG is paused before anything moves, and is never unpaused again
    unless you roll back.
-2. **The guard:** `BANK_HEALTH.OPS.PROD_SCHEDULER` names the one machine allowed to run prod.
+2. **The guard:** `BANK_HEALTH.CONTROL.PROD_SCHEDULER` names the one machine allowed to run prod.
    `check_environment`, the first task of every prod run, stops the run (and alerts) on any other
    machine, and `record_run` writes nothing there. Even if both DAGs were unpaused by mistake, only
    one could get past its first task. Cutover is a single change of that row.
@@ -51,7 +51,7 @@ connections stored in the database: 0
 
 - The VM is set up ([oracle_vm_setup.md](oracle_vm_setup.md)), its deploys work
   ([deploy.md](deploy.md)), and it runs the same `main` as the PC.
-- `snowflake/setup_ops.sql` has been run: `BANK_HEALTH.OPS.PROD_SCHEDULER` says `pc`.
+- `snowflake/setup_ops.sql` and `snowflake/setup_control.sql` have been run: `BANK_HEALTH.CONTROL.PROD_SCHEDULER` names the machine that runs prod.
 - The PC's prod `.env` has `PROD_HOST_ID=pc`; the VM's has `PROD_HOST_ID=oracle-vm` and both
   prod webhooks ([alerts.md](alerts.md)).
 - On the VM, **both DAGs are paused** (`bank_health_weekly`, `bank_health_slo_check`). They
@@ -95,9 +95,9 @@ VM commands run as `deploy` in `/srv/bank-health/app/airflow` (`ssh bank-health-
    (`Remove-Item .\airflow.dump` on the PC; `rm /srv/bank-health/var/airflow.dump` on the VM).
 7. **(stop) Hand the schedule to the VM.** In Snowsight, as ACCOUNTADMIN:
    ```sql
-   UPDATE BANK_HEALTH.OPS.PROD_SCHEDULER
+   UPDATE BANK_HEALTH.CONTROL.PROD_SCHEDULER
       SET HOST_ID = 'oracle-vm', SET_AT = CURRENT_TIMESTAMP(), SET_BY = CURRENT_USER(), NOTE = 'cutover';
-   SELECT * FROM BANK_HEALTH.OPS.PROD_SCHEDULER;   -- one row: oracle-vm
+   SELECT * FROM BANK_HEALTH.CONTROL.PROD_SCHEDULER;   -- one row: oracle-vm
    ```
    From now on the PC can't run prod even if unpaused: its `check_environment` would stop.
 8. **(stop) Unpause on the VM:**
@@ -149,7 +149,7 @@ three successful `HOST_ID = 'oracle-vm'` rows, on three consecutive Mondays, in
 3. **(stop)** On the PC: `docker compose start postgres`, restore as in step 5 (`docker compose
    cp`, `pg_restore --clean --if-exists --no-owner`), then `docker compose start`.
 4. **(stop)** In Snowsight, as ACCOUNTADMIN:
-   `UPDATE BANK_HEALTH.OPS.PROD_SCHEDULER SET HOST_ID = 'pc', SET_AT = CURRENT_TIMESTAMP(), SET_BY = CURRENT_USER(), NOTE = 'rollback';`
+   `UPDATE BANK_HEALTH.CONTROL.PROD_SCHEDULER SET HOST_ID = 'pc', SET_AT = CURRENT_TIMESTAMP(), SET_BY = CURRENT_USER(), NOTE = 'rollback';`
 5. **(stop)** Unpause both DAGs on the PC, and trigger one run to check it.
 
 ## The PostgreSQL mirror after the move

@@ -271,7 +271,7 @@ where s.total_assets_k is distinct from r.total_assets_k
 
 **Where prod runs.** Production Airflow runs on an Oracle Cloud Always Free Arm VM
 (4 OCPU / 24 GB, Ubuntu 24.04), from the cutover in Phase 2; until the cutover the PC runs it.
-Exactly one machine may run the prod schedule: `BANK_HEALTH.OPS.PROD_SCHEDULER` names it, and
+Exactly one machine may run the prod schedule: `BANK_HEALTH.CONTROL.PROD_SCHEDULER` names it, and
 a run on any other machine stops at its first task. Why a VM and how it's built:
 [ADR 0001](docs/adr/0001-oracle-vm-and-self-hosted-runner.md),
 [VM runbook](docs/runbooks/oracle_vm_setup.md).
@@ -413,8 +413,11 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
   [service levels](docs/slos.md).
 - **Security:** [SECURITY.md](SECURITY.md): who can do what, where secrets live, network exposure,
   what to do if something leaks.
-- **Model:** [model card](docs/model_card.md); **plans:** [Phase 3](docs/phase3_plan.md),
-  [Phase 4](docs/phase4_plan.md), [roadmap](docs/ROADMAP.md).
+- **Model:** [model card](docs/model_card.md); [validation pack](docs/validation/README.md) for an
+  independent reviewer (scope, 20 checks, report template, `scripts/validation_reproduce.py`);
+  [yearly review checklist](docs/model_review_checklist.md).
+- **dbt docs:** built and checked, not published yet ([how](docs/dbt_docs_publishing.md)).
+- **Plans:** [Phase 3](docs/phase3_plan.md), [Phase 4](docs/phase4_plan.md), [roadmap](docs/ROADMAP.md).
 
 ## Data quality and loading
 
@@ -447,4 +450,5 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
 ---
 
 Built by **Martins Ogiekpolor** · [github.com/martinogie](https://github.com/martinogie) · Built with
-AI-assisted coding; the design, analysis and review are my own. MIT licence.
+AI-assisted coding ([Claude Code](https://claude.com/claude-code), listed as a contributor); the design,
+analysis and review are my own. MIT licence.

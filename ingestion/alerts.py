@@ -42,11 +42,18 @@ _WEBHOOK_RE = re.compile(
 # wording isn't documented, so this list is deliberately broad; tests keep it in one place.
 _QUOTA_RE = re.compile(
     r"quota|usage limit|daily (?:compute )?limit|limit (?:has been )?(?:reached|exceeded)"
-    r"|resource[_ ]exhausted|exceeded (?:the|your) (?:free|daily)",
+    r"|exceeded (?:the|your) (?:free|daily)",
     re.I,
 )
 QUOTA_LINE = "Databricks Free Edition daily quota reached"
 QUOTA_RUNBOOK = "docs/runbooks/quota_errors.md#databricks-free-edition-daily-quota"
+
+# A bare 429 RESOURCE_EXHAUSTED ("Cannot create the resource, please try again later") is NOT
+# proof of the compute quota: on 6 Nov 2026 the Git folder update got it with no compute used that
+# day, while a pull in the browser worked. Named for what it is, with its own runbook steps.
+_REFUSED_RE = re.compile(r"resource[_ ]exhausted", re.I)
+REFUSED_LINE = "Databricks refused the request (429 RESOURCE_EXHAUSTED; not confirmed as the daily quota)"
+REFUSED_RUNBOOK = "docs/runbooks/quota_errors.md#databricks-refused-a-request-429"
 
 # Snowflake stops a warehouse whose resource monitor has used its credit quota, e.g.
 #   090073 (22000): Warehouse 'BANK_DEV_WH' cannot be resumed because resource monitor
@@ -93,6 +100,8 @@ def quota_reason(text: Any) -> tuple[str, str] | None:
         return f"{SNOWFLAKE_CAP_LINE} ({monitor})", SNOWFLAKE_CAP_RUNBOOK
     if is_databricks_quota_error(text):
         return QUOTA_LINE, QUOTA_RUNBOOK
+    if _REFUSED_RE.search(str(text or "")):
+        return REFUSED_LINE, REFUSED_RUNBOOK
     return None
 
 

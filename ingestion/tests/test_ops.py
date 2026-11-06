@@ -61,9 +61,18 @@ def test_guard_needs_a_host_id(host):
 def test_guard_stops_when_it_cannot_read_its_table():
     cur = FakeCursor({"PROD_SCHEDULER": RuntimeError("Object does not exist or not authorized")})
     with pytest.raises(
-        scheduler_guard.SchedulerNotAuthorized, match="Cannot read .*Not running.*setup_ops.sql"
+        scheduler_guard.SchedulerNotAuthorized,
+        match="Cannot read .*CONTROL.PROD_SCHEDULER.*Not running.*setup_control.sql",
     ):
         scheduler_guard.check(cur, "pc")
+
+
+def test_guard_reads_the_control_schema_owned_by_accountadmin():
+    # Phase 4, PR 10: the table moved out of OPS (a schema the pipeline role owns) into CONTROL.
+    assert scheduler_guard.TABLE == "BANK_HEALTH.CONTROL.PROD_SCHEDULER"
+    cur = FakeCursor({"PROD_SCHEDULER": [("oracle-vm", "2026-11-05", "MARTINS")]})
+    scheduler_guard.check(cur, "oracle-vm")
+    assert any("BANK_HEALTH.CONTROL.PROD_SCHEDULER" in sql for sql, _ in cur.queries)
 
 
 @pytest.mark.parametrize("rows", [[], [("pc", None, None), ("oracle-vm", None, None)]])

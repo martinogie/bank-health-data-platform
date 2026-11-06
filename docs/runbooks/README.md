@@ -6,6 +6,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 |---|---|
 | **FAILED: bank_health_weekly / \<task\>** in Slack or Discord | [alerts.md](alerts.md): what to do for each alert |
 | … *Databricks Free Edition daily quota reached* | [quota_errors.md](quota_errors.md#databricks-free-edition-daily-quota) |
+| … *Databricks refused the request (429 …)* | [quota_errors.md](quota_errors.md#databricks-refused-a-request-429) |
 | … *Snowflake credit cap reached* (or the watchdog says so) | [quota_errors.md](quota_errors.md#snowflake-credit-cap-reached) |
 | **FAILED … check_freshness** / **check_volumes** | [alerts.md](alerts.md) (first steps and thresholds) |
 | **FAILED … check_contracts** (a source API changed) | [alerts.md](alerts.md); the contracts: `ingestion/contracts/`, [ADR 0007](../adr/0007-data-contracts-before-bronze.md) |
@@ -31,6 +32,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | [oracle_vm_setup.md](oracle_vm_setup.md) | Building the Oracle VM from scratch |
 | [cutover_and_rollback.md](cutover_and_rollback.md) | Moving prod between the PC and the VM, and back |
 | [vault.md](vault.md) | Prod secrets in OCI Vault: setup, the switch, rollback, cleanup, changing a secret |
+| [ssh_key_passphrase.md](ssh_key_passphrase.md) | A passphrase on the VM's SSH key, with the Windows ssh-agent |
 | [../runbook.md](../runbook.md) | Model operations: top-20 review, promotion, rollback, the Databricks environment |
 
 Service levels: [../slos.md](../slos.md). Decisions behind all of this: [../adr/](../adr/).
