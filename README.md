@@ -284,6 +284,20 @@ config), then browse to `http://localhost:8080` (`8090` while the PC still uses 
 `production` environment in GitHub. A self-hosted runner on the VM then fast-forwards to that
 commit, rebuilds, restarts and runs a smoke check ([deploy runbook](docs/runbooks/deploy.md)).
 
+**Infrastructure as code** (Phase 4). Terraform describes the stable infrastructure, **imported,
+not recreated**: on Oracle Cloud the network, the VM, the $5 budget, a quota policy that allows only
+the Always Free Arm VM and 200 GB of storage, and the VM's reserved IP; on Snowflake the warehouses,
+databases, schemas, roles and resource monitors. State lives in a private, versioned OCI bucket. A
+plan guard blocks deletes, replacements and any VM change, and nothing is applied before the owner
+has seen the plan ([ADR 0010](docs/adr/0010-terraform-import-only.md)).
+
+**Secrets** live in **OCI Vault** only. The VM reads them as itself (no stored key) into RAM at boot
+and on each deploy; no secret is on disk ([vault runbook](docs/runbooks/vault.md)). The VM has a
+reserved IP, and Snowflake accepts the pipeline's login only from it
+([network policy](docs/runbooks/network_policy.md)). The **Databricks jobs are code** too
+(`databricks.yml`, an Asset Bundle); prod changes deploy after the same approval
+([bundle runbook](docs/runbooks/databricks_bundle.md)).
+
 **Alerts** go to both Slack and Discord ([ADR 0002](docs/adr/0002-alert-channels-slack-and-discord.md)):
 - a task failing after its last retry, naming a Databricks quota stop plainly when that's the
   cause ([ADR 0003](docs/adr/0003-databricks-free-edition-limits.md));
@@ -305,7 +319,7 @@ missing or wrong, the DAG fails to load, containers refuse to start, and dbt and
 
 | | dev | ci | prod |
 |---|---|---|---|
-| Runs | a separate dev checkout on the PC | GitHub Actions | the machine that runs the weekly schedule (the PC today, an Oracle Cloud Arm VM next) |
+| Runs | a separate dev checkout on the PC | GitHub Actions | the Oracle Cloud Arm VM (since the 29 Oct 2026 cutover) |
 | Snowflake | `BANK_HEALTH_DEV` (zero-copy clone of prod), role `DEV_ROLE` | temporary schema `BANK_HEALTH_DEV.CI_<run_id>`, role `CI_ROLE`; reads prod | `BANK_HEALTH`, role `BANK_PIPELINE_ROLE` |
 | Databricks | catalog `bank_health_dev`, job `bank_health_pipeline_dev` | none | catalog `bank_health`, job `bank_health_pipeline` |
 | Airflow | port 8081, own project and metadata database | DAG import check only | port 8080 |
@@ -314,7 +328,8 @@ missing or wrong, the DAG fails to load, containers refuse to start, and dbt and
 Two independent layers keep dev and CI out of prod: the code checks every write, publish and
 model promotion (`ingestion/environment.py`), and Snowflake itself gives `DEV_ROLE` and
 `CI_ROLE` no write rights on `BANK_HEALTH` (`snowflake/setup_dev.sql`). Both layers are tested.
-Dev also has its own 1-credit monthly warehouse cap, inside the account-wide 5-credit cap.
+Dev also has its own monthly warehouse cap, inside the account-wide cap (both raised for the
+Phase 4 dev work until late November 2026; [quota_errors.md](docs/runbooks/quota_errors.md)).
 Details and the dev setup: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## How changes are tested
@@ -343,10 +358,10 @@ Five kinds of tests, each in code, plus the checks above:
 
 | Type | What it checks | Where | Latest result |
 |---|---|---|---|
-| **Unit** | One function on its own. Also the Phase 2 operations code: alerts to both channels (both succeed, one fails, both fail, the webhook URL never reaches a log), the one-scheduler guard, the Monday 12:00 CT objective across clock changes, freshness, volume thresholds, the run-log row. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value), the top-20 release check, the **label, feature and exclusion logic** (`_features.py` run on a local Spark session over hand-made bank histories) and **environment safety** (dev and ci can't write prod, publish or promote, in every code path that writes). | `ingestion/tests/` | 294 passed; coverage: `ingestion/` 93%, label/feature/exclusion logic 100% (27 Oct 2026) |
+| **Unit** | One function on its own. Also the Phase 2 operations code: alerts to both channels (both succeed, one fails, both fail, the webhook URL never reaches a log), the one-scheduler guard, the Monday 12:00 CT objective across clock changes, freshness, volume thresholds, the run-log row. HTTP sessions, files and clients are replaced with fakes (`FakeSession`, `monkeypatch`, `tmp_path`), so the tests run offline in seconds and never hit a real API. Covers paging, date windows, watermarks, file naming, retry logic, the watchlist export (JSON schema, rounding, not-scored bands, 8-quarter ordering), the scoring rules (bands, new banks and foreign offices not scored, a missing value stays missing, reasons never cite an unreported value), the top-20 release check, the **label, feature and exclusion logic** (`_features.py` run on a local Spark session over hand-made bank histories) and **environment safety** (dev and ci can't write prod, publish or promote, in every code path that writes). Phase 4 added: the Terraform plan guard, the Vault fetch and the container's secret loader, the cleanup and database-password scripts (run on fake folders), the credential expiry check, the per-bank waterfall files, the public-docs scanner, the validation reproduce check, and a check that `databricks.yml` matches the job definition. | `ingestion/tests/` | 484 passed in CI on `main`; coverage: `ingestion/` 94%, label/feature/exclusion logic 100% (6 Nov 2026) |
 | **Integration** | Real pieces together: the live FDIC and CFPB APIs, a Databricks Files API upload, list and delete, Snowflake key-pair login and a small `write_pandas` load, and **environment safety at the grant level**: logged in as the dev (or CI) service user, every attempt to write `BANK_HEALTH` is refused by Snowflake. Skipped when credentials are missing. | `tests/integration/` (21 tests) | 19 passed, 2 skipped (CI-only checks, run in GitHub Actions); 26 Oct 2026, against dev |
-| **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. The DAG's own `verify_pipeline` task repeats the core checks on every run. | `tests/e2e/`, task `verify_pipeline` | 17 passed (20 Oct 2026 run). Prod run 26 Oct 2026: 53 tasks succeeded, 4,257 banks scored. Dev run 26 Oct 2026 (2 FDIC quarters, about a month of complaints, into `bank_health_dev` / `BANK_HEALTH_DEV`): 53 tasks succeeded, the 2 prod-only tasks (watchlist, dbt manifest) skipped, 4,257 banks scored with prod's `@champion` read-only |
-| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5); dev 26 Oct 2026: same result |
+| **End-to-end** | The whole pipeline after a DAG run: Airflow run state, Snowflake RAW and MARTS row counts, freshness, and numbers checked against the live sources. The DAG's own `verify_pipeline` task repeats the core checks on every run. | `tests/e2e/`, task `verify_pipeline` | Prod run 6 Nov 2026 (all secrets from Vault, the network policy on, the Databricks job managed by the bundle): **65 tasks succeeded in 16 minutes**, 4,257 banks scored (FDIC 2026 Q2), dbt 12 models and 97 tests passed, Databricks 7.5 minutes, 0 data-contract failures. Earlier: 17 passed (20 Oct 2026 run); prod run 26 Oct 2026: 53 tasks succeeded, 4,257 banks scored. Dev run 26 Oct 2026 (2 FDIC quarters, about a month of complaints, into `bank_health_dev` / `BANK_HEALTH_DEV`): 53 tasks succeeded, the 2 prod-only tasks (watchlist, dbt manifest) skipped, 4,257 banks scored with prod's `@champion` read-only |
+| **Data quality** | The data itself: unique and not-null keys, relationships, accepted values (including the not-scored bands), value ranges, source freshness, and a capital ratio that isn't reported is never 0 (`tests/assert_unreported_capital_is_null.sql`). Gold and scoring notebooks add their own checks. | dbt tests in `dbt/models/**/_*.yml` (`dbt_utils`, `dbt_expectations`), `dbt/tests/`, and checks in the Databricks notebooks | prod run 6 Nov 2026: 97 tests passed, 0 failed; earlier 96 tests: 94 passed, 2 warned (real outliers in FDIC data), 0 errors (25 Oct 2026, v5) |
 | **Release check** | The 20 riskiest scored banks contain no new bank, no foreign-bank office, no 0% or missing Tier 1 ratio and no reason quoting an unusable capital ratio. Runs in the DAG after scoring, before dbt publishes the marts. | `ingestion/sanity_checks.py`, `scripts/sanity_check_top20.py`, task `sanity_check_top20` | passed on v5 scores in Databricks and in Snowflake RAW (25 Oct 2026) |
 | **Smoke** | Does it start at all: Airflow containers healthy, the API server answers, the DAG imports with no errors, task order (the environment check first, the release check before dbt). In CI the DAG is also loaded as prod and as dev inside the built image, and must be refused without `BANK_HEALTH_ENV` (`tests/smoke/check_dag_import.py`). | `tests/smoke/` | 7 passed on the dev stack (26 Oct 2026); DAG import check passed for prod and dev, both DAGs, every task with a failure alert (27 Oct 2026) |
 | **Browser smoke** | The watchlist page in Chromium (Playwright): add 3 banks, reload and the list persists; a `?certs=` link renders in a fresh browser; sort order; a new bank shows "New bank – not scored"; works with localStorage blocked; no sideways scroll at 375 px. | `tests/browser/` | 7 passed (v5 data, 25 Oct 2026) |
@@ -388,13 +403,18 @@ cd dbt && dbt build                           # models + data tests
 ## Repository layout
 
 ```
-.github/      CI workflow (ci.yml) and Dependabot
+.github/      CI (ci.yml), deploy to the VM (deploy.yml), Databricks bundle to prod
+              (databricks_bundle.yml), late-run watchdog, Dependabot
 airflow/      Docker Compose stack (prod; docker-compose.dev.yaml adds dev), custom image, DAGs
               bank_health_weekly and bank_health_slo_check
-deploy/       deploy.sh and smoke_check.sh (run on the VM by the approved deploy), airflow_state.sh
+deploy/       deploy.sh and smoke_check.sh (run on the VM by the approved deploy), the Vault fetch
+              (vault_secrets.py, bank-health-secrets.service), cleanup and password scripts
+infra/        Terraform (import only): oci/, snowflake/, sandbox/ (the create-and-destroy demo)
+databricks.yml  the Databricks jobs as code (Asset Bundle)
+ops/          credentials.yml: key and token dates for the weekly expiry check (no secrets)
 ingestion/    FDIC + CFPB clients, Databricks upload, Snowflake load (+ unit tests)
 databricks/   notebooks 00_setup to 05_score (PySpark, MLflow)
-snowflake/    setup.sql, setup_dev.sql, setup_ops.sql, powerbi_user.sql
+snowflake/    setup*.sql (incl. setup_control.sql, setup_network_policy.sql), powerbi_user.sql
 dbt/          staging, intermediate and mart models with tests
 powerbi/      BankHealth.pbip (TMDL + PBIR), build_report.py, theme, screenshots
 watchlist.html  the watchlist page (plain HTML/CSS/JS); index.html is the project page

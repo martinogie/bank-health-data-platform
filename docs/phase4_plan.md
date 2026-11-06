@@ -4,6 +4,26 @@ Agreed on 3 Nov 2026, with Martins' corrections and decisions. Source: the criti
 (Terraform, Databricks Asset Bundles, S-01, O-05, C-02, X-01, X-02, S-02, W-02), plus X-04
 (independent validation) and the backlog. Status is updated here as each PR merges.
 
+## Status (6 Nov 2026)
+
+| PR | What | Status |
+|---|---|---|
+| 0, 1 | This plan; ADRs 0004–0009, runbook index, SLOs, SECURITY.md | done (#36, #37) |
+| – | Data contracts to **enforce** | done, verified on the VM (#38) |
+| 2, 3 | Databricks minutes per run; credential expiry checks | done (#39, #42) |
+| 4–6 | Terraform, import only: OCI (14, later 16 with the quota policy and the reserved IP), Snowflake (15); grants kept in SQL | done; plans showed no changes after each import (#40, #41, #54; ADR 0010) |
+| 8 | Secrets in OCI Vault; cleanup; Airflow database and admin passwords | done; proven by manual prod runs; no secret on disk (#43, #51, #52) |
+| 7 | Reserved IP; Snowflake network policy on `SVC_BANK_PIPELINE` | done, verified from the VM (#53, #54) |
+| 9 | Databricks Asset Bundle owns both jobs (bound, no duplicates) | done: one dev deploy, prod deploy after approval (#56); manual prod run 6 Nov: 65/65 tasks, the job only checked, still bundle-managed |
+| 10 | Scheduler guard in `BANK_HEALTH.CONTROL`; OCI quotas; `MARTS` review (decision A); SSH passphrase runbook | done (#45, #48); the SSH passphrase: runbook written, Martins decided not to add one (6 Nov 2026) |
+| 11 | Validation pack, review checklist, dbt docs built and checked (not published); final docs pass | done (#44, this pass) |
+| – | SANDBOX create-and-destroy demo | done (#48) |
+| – | Found on the way | 429 alert label fixed (#46); watchlist waterfalls in per-bank files (#50) |
+
+Still to come, on dates: lower the credit caps around 15 Nov; remove the home IP from the network
+rule on 20 Nov; caps back to account 5 / dev 2 after the 26 Nov reset (reminders in
+`ops/credentials.yml`).
+
 **Schedule.** All of Phase 4 in about 24 hours (3–4 Nov 2026). After every prod-touching merge, it is
 deployed and verified straight away, before the next prod-touching merge: with a manual prod run
 where Databricks is involved, otherwise with a check that doesn't use Databricks. Prod-touching:

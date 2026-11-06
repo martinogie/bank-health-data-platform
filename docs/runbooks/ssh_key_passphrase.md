@@ -5,6 +5,9 @@ Phase 4, PR 10. The key `~/.ssh/bank_health_vm` (on Martins' PC) opens both SSH 
 anyone who copied the file could log in. Adding one keeps the **same key**: nothing changes on the
 VM, in GitHub or in OCI. **Martins does every step; nobody else handles the key.**
 
+**Decision (6 Nov 2026):** Martins chose not to add a passphrase for now; the key stays protected by
+his Windows account. This runbook is kept for when that changes.
+
 ## Steps (PowerShell on the PC; ~5 minutes)
 
 1. **Start the Windows ssh-agent and keep it on** (PowerShell *as administrator*), so the passphrase
