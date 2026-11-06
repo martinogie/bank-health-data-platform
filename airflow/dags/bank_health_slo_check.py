@@ -7,7 +7,7 @@ before noon.
 
 This DAG runs every Monday at 12:00 CT. If no on-time successful run is logged, it posts a
 **LATE** alert to Slack and Discord and fails. In prod it runs only on the machine named in
-`OPS.PROD_SCHEDULER` (one scheduler only); elsewhere it skips.
+`CONTROL.PROD_SCHEDULER` (one scheduler only); elsewhere it skips.
 
 The GitHub Actions watchdog (`.github/workflows/late_run_watchdog.yml`) makes the same check
 from outside, so a late run is reported even when this whole machine is down.

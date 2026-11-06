@@ -1,20 +1,20 @@
 """One scheduler only: the prod DAG runs on exactly one machine.
 
-BANK_HEALTH.OPS.PROD_SCHEDULER holds one row naming the machine allowed to run prod (today
-'pc', after cutover 'oracle-vm'). Each machine's .env sets PROD_HOST_ID. check_environment,
+BANK_HEALTH.CONTROL.PROD_SCHEDULER holds one row naming the machine allowed to run prod
+('oracle-vm' since the 29 Oct 2026 cutover; it was BANK_HEALTH.OPS.PROD_SCHEDULER until Phase 4). Each machine's .env sets PROD_HOST_ID. check_environment,
 the first task of every prod run, calls check(): on any other machine the run stops at once,
 with an alert, before it downloads or writes anything. So even if the DAG were unpaused on
 both machines by mistake, only one could get past its first task.
 
-The table is owned by ACCOUNTADMIN; the pipeline role can only read it, so the pipeline can't
-rewrite the rule that restrains it. If the table can't be read, the run stops (fail safe).
+The table and its schema CONTROL (managed access) are owned by ACCOUNTADMIN; the pipeline role can
+only read it, so the pipeline can't rewrite or replace the rule that restrains it. If the table can't be read, the run stops (fail safe).
 Cutover changes that one row, as ACCOUNTADMIN (docs/runbooks/cutover_and_rollback.md).
 Dev runs don't use it.
 """
 
 from __future__ import annotations
 
-TABLE = "BANK_HEALTH.OPS.PROD_SCHEDULER"
+TABLE = "BANK_HEALTH.CONTROL.PROD_SCHEDULER"
 
 
 class SchedulerNotAuthorized(RuntimeError):
@@ -35,7 +35,7 @@ def check(cur, host_id: str | None, table: str = TABLE) -> str:
     except Exception as exc:  # missing table, missing grant, Snowflake down: never run blind
         raise SchedulerNotAuthorized(
             f"Cannot read {table} ({type(exc).__name__}: {str(exc)[:200]}). Not running: without the "
-            "guard there is no proof this is the only prod scheduler. Check that snowflake/setup_ops.sql "
+            "guard there is no proof this is the only prod scheduler. Check that snowflake/setup_control.sql "
             "has been run and that BANK_PIPELINE_ROLE has SELECT on the table."
         ) from None
     if len(rows) != 1:

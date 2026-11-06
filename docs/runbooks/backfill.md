@@ -66,7 +66,7 @@ Checked by `check_backfill` (`ingestion/backfill.py`) before anything is downloa
 | No `retrain_model` | a backfill re-scores with `@champion`; retraining is a separate decision |
 | Prod: not on a Monday | Monday belongs to the weekly run and its 12:00 deadline |
 | One run at a time (`max_active_runs=1`) | a backfill never runs alongside the weekly run; if one is going, the other waits |
-| Prod: the one-scheduler guard (`check_environment`) | as on every run: only the machine named in `OPS.PROD_SCHEDULER` can run prod |
+| Prod: the one-scheduler guard (`check_environment`) | as on every run: only the machine named in `CONTROL.PROD_SCHEDULER` can run prod |
 
 ## Watermarks, re-runs and backfills
 

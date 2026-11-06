@@ -271,7 +271,7 @@ where s.total_assets_k is distinct from r.total_assets_k
 
 **Where prod runs.** Production Airflow runs on an Oracle Cloud Always Free Arm VM
 (4 OCPU / 24 GB, Ubuntu 24.04), from the cutover in Phase 2; until the cutover the PC runs it.
-Exactly one machine may run the prod schedule: `BANK_HEALTH.OPS.PROD_SCHEDULER` names it, and
+Exactly one machine may run the prod schedule: `BANK_HEALTH.CONTROL.PROD_SCHEDULER` names it, and
 a run on any other machine stops at its first task. Why a VM and how it's built:
 [ADR 0001](docs/adr/0001-oracle-vm-and-self-hosted-runner.md),
 [VM runbook](docs/runbooks/oracle_vm_setup.md).
