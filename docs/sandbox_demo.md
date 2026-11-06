@@ -17,7 +17,8 @@ What it shows:
 - `scripts/tf_guard.py` refuses every create and delete in its normal mode; with `--allow-changes`
   it allows creates and updates, and a delete or replace only for objects named `SANDBOX`. Any
   action on the VM is always refused (unit tests: `ingestion/tests/test_tf_guard.py`).
-- The prod states were not touched; the OCI and Snowflake plans still show no changes.
+- The prod states were not touched: the demo used only `sandbox/terraform.tfstate`; the OCI plan
+  showed no changes after it (6 Nov); the Snowflake state was not used at all.
 
 Run it again:
 
