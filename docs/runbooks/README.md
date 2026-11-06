@@ -14,6 +14,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | **MODEL: monitoring found a shift or a weaker backtest** | [alerts.md](alerts.md); the numbers' meaning: [model card](../model_card.md#monitoring-finding-m-08-phase-3) |
 | **LATE** / **WATCHDOG** / no OK message on Monday | [alerts.md](alerts.md) |
 | Containers restarting with **Vault mode: missing …**, or **DEPLOY REFUSED: could not read the secrets from OCI Vault** | [vault.md](vault.md#troubleshooting) |
+| **Snowflake refuses the pipeline's login** (IP not allowed) | [network_policy.md](network_policy.md#if-a-login-is-refused) |
 | The VM is down or unreachable | [oracle_vm_setup.md](oracle_vm_setup.md); rollback to the PC until about 19 Nov 2026: [cutover_and_rollback.md](cutover_and_rollback.md) |
 | A deploy failed, or you want to release a change | [deploy.md](deploy.md) |
 | Data for a past period must be redone | [backfill.md](backfill.md) |
@@ -32,6 +33,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | [oracle_vm_setup.md](oracle_vm_setup.md) | Building the Oracle VM from scratch |
 | [cutover_and_rollback.md](cutover_and_rollback.md) | Moving prod between the PC and the VM, and back |
 | [vault.md](vault.md) | Prod secrets in OCI Vault: setup, the switch, rollback, cleanup, changing a secret |
+| [network_policy.md](network_policy.md) | The VM's reserved IP and the Snowflake network policy on the pipeline user |
 | [ssh_key_passphrase.md](ssh_key_passphrase.md) | A passphrase on the VM's SSH key, with the Windows ssh-agent |
 | [../runbook.md](../runbook.md) | Model operations: top-20 review, promotion, rollback, the Databricks environment |
 
