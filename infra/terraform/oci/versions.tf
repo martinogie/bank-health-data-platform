@@ -48,3 +48,8 @@ variable "vm_image_id" {
   description = "OCID of the image the VM was built from (in terraform.tfvars; the VM ignores all changes)"
   type        = string
 }
+
+variable "vm_private_ip_id" {
+  description = "OCID of the VM's primary private IP, which the reserved public IP is assigned to (in terraform.tfvars)"
+  type        = string
+}
