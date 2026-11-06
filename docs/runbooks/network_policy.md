@@ -29,9 +29,14 @@ e. **Your SSH config** (`C:\Users\marti\.ssh\config`): set `HostName` to the new
 f. Tell Claude the new address. Claude checks the VM's outgoing address is the reserved one and
    that the runner is back online.
 
-**Rollback:** nothing to undo on Snowflake yet. If the VM can't be reached, the OCI console's
-cloud shell or serial console still works; the reserved IP can be unassigned and an ephemeral one
-assigned again the same way.
+**Rollback:** nothing to undo on Snowflake yet. If the VM can't be reached on its new address, give
+it an address again from the console, the same way as steps c–d: **⋮ → Edit → Public IP type:
+Ephemeral public IP → Update** (and put that address in the SSH config). Don't count on the OCI
+Cloud Shell: the VM's security list allows SSH only from Martins' home IP, so Cloud Shell can't SSH
+in.
+
+Done on 6 Nov 2026: reserved IP assigned; the VM's outgoing address is the reserved one; the GitHub
+runner came back online by itself; all containers healthy.
 
 ## 2. The network policy (Martins, Snowsight as ACCOUNTADMIN; ~2 minutes)
 
