@@ -1,10 +1,9 @@
-# Website plan (refreshed 6 Nov 2026) — DRAFT for Martins' OK
+# Website plan (agreed 6 Nov 2026)
 
 Bank Health's public site, as one project of a **sector-organised portfolio**. Design reference:
-`C:\Users\marti\projects\bank-health-website-design\` (5 pages, approved 25 Oct). Build prompt:
-`WEBSITE_BUILD_PROMPT.md` there. Data contract: [data/SCHEMA.md](data/SCHEMA.md). Branch
-`feature/website` (worktree `C:\Users\marti\projects\bank-health-website`); nothing is pushed or
-merged without asking, and nothing public (DNS, Cloudflare, deploys) happens without approval.
+the approved 5-page design (25 Oct) and its build prompt, kept outside this repo. Data contract:
+[data/SCHEMA.md](data/SCHEMA.md). Branch `feature/website`; nothing is pushed or merged without
+asking, and nothing public (DNS, Cloudflare, deploys) happens without approval.
 
 ## 1. The portfolio: domains → sites
 
@@ -72,16 +71,30 @@ credentials; project cards use only what's in each project's README.
 requests a day, Workers Paid is **$5/month** (price from Cloudflare's pricing page; confirm at
 setup). The domain registration itself is your existing cost.
 
-**Weekly data refresh without rebuilding anything else** (decision for Stage B):
-- **(a) Recommended: data in Cloudflare R2.** The weekly DAG task uploads the JSON files to a bucket
-  (`bankhealth-data`); the router serves `/bankhealth/data/*` from it. The Bank Health site itself
-  then only deploys when its code changes, and the data refresh touches nothing else. The R2 key
-  goes into OCI Vault like the other secrets. R2 free tier (Cloudflare docs, 6 Nov 2026): 10 GB
-  stored per month, 1 million writes and 10 million reads per month, free egress. The weekly upload
-  is ~4,300 files (~17,000 writes a month) of ~10 MB in total.
-- (b) Redeploy the `bankhealth` Pages project each week with the new data (direct upload from the
-  VM). Simpler, but each week is a full site deploy, and it keeps the site near the file cap as
-  banks are added.
+**Weekly data refresh: Cloudflare R2 (decided 6 Nov, 4a).** The site only redeploys when its code
+changes; the data refresh touches nothing else. R2 free tier (Cloudflare docs, 6 Nov 2026): 10 GB
+stored per month, 1 million writes and 10 million reads per month, free egress. One week is ~4,300
+files (~10 MB), so 5 weeks kept ≈ 50 MB and ~17,000 writes a month.
+
+Conditions (Martins, 6 Nov):
+1. **Publish only after every pipeline check passes**: freshness, volumes, data contracts, dbt
+   tests and the top-20 release check. The upload is the last DAG task and never runs after a
+   failure.
+2. **Versioned weeks, one pointer.** Each run writes to its own prefix
+   (`bankhealth-data/runs/<run date>/…`), then rewrites one small file, `current.json`
+   (`{"run": "<run date>"}`). The router reads the pointer and serves `/bankhealth/data/*` from that
+   prefix. A half-finished upload is never visible.
+3. **Keep at least the previous 4 weeks.** Older prefixes are deleted by the same task only after the
+   new pointer is in place. **Rollback = point `current.json` back to an earlier run** (one
+   documented step in the runbook; no rebuild).
+4. **The R2 API token is a new secret.** Martins creates it (write access to this bucket only) and
+   stores it in OCI Vault; the VM fetches it like the other secrets; it's listed in
+   `ops/credentials.yml` with a rotation date. Nobody else sees or pastes it.
+5. **"Data as of <FDIC quarter> · updated <run date>"** shows in the site header from each file's
+   `dataAsOf` (built in Stage A).
+6. **Billing:** if Cloudflare asks for a payment method to enable R2, I tell you before anything is
+   set up, with the steps to add a billing notification (Cloudflare dashboard → Notifications →
+   Add → Billing / Usage-based billing, sent to your email) so any charge is flagged early.
 
 ## 4. Bank Health site (Stage A, B)
 
@@ -93,7 +106,7 @@ small TypeScript islands; inline SVG charts; no tracking, no cookies. The curren
 |---|---|---|
 | `/` Overview | `overview.json` | BandSummary, BandsByYearChart (toggle H/E/W), Top20Table (filter all / credit / earnings; driver chips), HowToRead |
 | `/watchlist` | `banks_index.json`, `banks/<cert>.json` | BankSearch (all banks), WatchlistStore (localStorage in try/catch + `?certs=`), BankCard (band, probability, reasons, sparklines, "what changed"), CopyLink, CsvExport |
-| `/bank/?cert=NNNN` | `banks/<cert>.json` | BankHeader, ProbabilityPanel, Reasons, WhatIfBars, WaterfallChart, HistoryChart (tabs: NCL, Tier 1, ROA, net income), Flags |
+| `/bank/?cert=NNNN` | `banks/<cert>.json` | BankHeader, ProbabilityPanel, Reasons, PushBars (loan quality / earnings, from SHAP), WaterfallChart, HistoryChart (tabs: NCL, Tier 1, ROA, net income), ReadWithCare, Complaints |
 | `/methods` | `model.json` | MetricsTable (challenger toggle), BandsTable, CalibrationChart, Monitoring, Limitations |
 | `/pipeline` | `pipeline.json` | FlowDiagram, LayerCounts, ChecksList, RunsTable |
 | `/dbt/` (at launch) | the checked dbt docs build | — |
@@ -112,9 +125,11 @@ design's real values, marked `"fixture": true` (a "preview data" label shows); P
 and 375 px, axe (0 serious), Lighthouse (Performance ≥ 90, Accessibility ≥ 95), schema validation;
 CI job `.github/workflows/site.yml`; screenshots in `docs/images/site/`.
 
-**Stage B, real data (backend changes, dev first):** `05_score` adds the what-if probabilities
-and the driver; `scripts/export_site_data.py` + a DAG task after the top-20 check write the five
-files (replacing the watchlist export at launch; `watchlist.json` stays until then).
+**Stage B, real data (dev first; no scoring change):** `scripts/export_site_data.py` writes the five
+files (pushes and driver from the existing SHAP waterfall, as in the fixtures), and a DAG task after
+every check uploads them to R2 under the conditions above (replacing the watchlist export at launch;
+`watchlist.json` stays until then). `05_score` is not touched during the sign-off runs (9, 16 and
+23 Nov).
 
 ## 5. Order
 
@@ -139,13 +154,18 @@ files (replacing the watchlist export at launch; `watchlist.json` stays until th
 3. Add the DNS record (proxied) for `health`.
 4. Add the sector to the home page. Only when its first project is ready.
 
-## Decisions for Martins
+## Decisions (Martins, 6 Nov 2026: "1b, 2 OK, 3 OK, 4a, start A")
 
-1. **What-if and driver** (Stage B): **(a)** as the design says, set the group to the tier median and
-   score again (2 extra predictions per bank in `05_score`) — recommended — or (b) from the SHAP
-   values already computed.
-2. **The data schema** ([data/SCHEMA.md](data/SCHEMA.md)), including one file per bank.
-3. **The portfolio architecture above**: repo name `martinogie/portfolio-site`, the pinned design
-   copy, one router Worker per sector.
-4. **Weekly data refresh**: (a) R2 — recommended — or (b) weekly redeploy.
-5. Start **Bank Health Stage A** now.
+1. **What-if and driver: (b) for launch**, from the existing SHAP values, with honest labels ("Push
+   from loan quality", "Push from earnings"); the driver chip is the larger group. No scoring change
+   during the sign-off runs. The median re-score (a) is on the v6 list in the model card.
+2. **Data schema: OK**, one file per bank, past-due series dropped ([data/SCHEMA.md](data/SCHEMA.md)).
+3. **Architecture: OK**: `martinogie/portfolio-site`, pinned design copy, one router Worker per
+   sector, Finance accent `#8E1B2E`.
+4. **Weekly data refresh: (a) R2**, with the six conditions in section 3.
+5. **Stage A started**: preview data, base `/bankhealth`, no backend change.
+
+Must-haves on the site: the "Model estimate from public FDIC data, not a supervisory rating" line
+on the watchlist and bank pages; the complaint caveats; no tracking or cookies; a CI check that no
+account identifiers or secrets appear in any JSON; nothing that claims a review by AI (the footer may say
+"Built with AI-assisted coding; the design, analysis and review are my own.").

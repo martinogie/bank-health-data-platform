@@ -1,0 +1,15 @@
+{
+  "_about": "Hand-written notes shown on a bank's card and page. Only facts from docs/model_card.md (or a cited source); each note says where it comes from. Keyed by FDIC certificate number.",
+  "24045": {
+    "text": "2026 Q2: a $233m net loss, made up of a $254.5m realised loss on securities and a $162m provision. The provision and the charge-offs are a real credit signal; the securities loss is not.",
+    "source": "Model card, known limits (securities losses)"
+  },
+  "13986": {
+    "text": "No bad loans. The bank breaks even on about $10,000 a quarter, and a $3,000 loss in 2026 Q2 counts towards the two-losses rule. The stricter-label challenger scores it 0.098.",
+    "source": "Model card, known limits (immaterial losses)"
+  },
+  "59245": {
+    "text": "4.9 years old; absorbed EH National Bank in June 2025. The score is driven by earnings, and its loans are clean.",
+    "source": "Model card, known limits (young and recently merged banks)"
+  }
+}

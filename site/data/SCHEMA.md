@@ -1,43 +1,65 @@
-# Website data contract (schemaVersion 1) — DRAFT for Martins' OK
+# Website data contract (schemaVersion 1)
 
-The line between the backend and bank.martinsogiekpolor.com. The site reads only these files; every
-number on it comes from them, never from the page source. Each file carries `schemaVersion`,
-`generatedAt` (ISO time), `quarter` (`YYYY-MM-DD`, the FDIC quarter) and, for fixtures,
-`"fixture": true` (the site then shows a small "preview data" label). JSON Schemas for each file
-live next to this document and are validated in CI.
+The line between the backend and the Bank Health site (`finance.martinsogiekpolor.com/bankhealth`).
+The site reads only these files at runtime; every number on it comes from them, never from the page
+source. JSON Schemas: [schemas/common.schema.json](schemas/common.schema.json) and
+[schemas/files.schema.json](schemas/files.schema.json), checked by `scripts/validate-data.mjs` in CI.
+Agreed with Martins on 6 Nov 2026 (decision 2: one file per bank, no past-due series).
 
-Files (in `site/public/data/`):
+**Every file** carries:
 
-| File | Size (approx.) | Used by |
+| Key | Meaning |
+|---|---|
+| `schemaVersion` | `1` |
+| `generatedAt` | ISO time the file was written |
+| `quarter` | The FDIC quarter, `YYYY-MM-DD` |
+| `dataAsOf` | `{quarterLabel: "2026 Q2", updated: "YYYY-MM-DD"}`: shown in the header strip as "Data as of 2026 Q2 · updated <run date>" |
+| `fixture` | `true` for preview data (the site then shows a "Preview data" label); absent or `false` for live data |
+
+Files (in `site/public/data/`, later served from R2; see [PLAN.md](../PLAN.md)):
+
+| File | Size (preview data) | Used by |
 |---|---|---|
-| `overview.json` | 15 KB | Overview |
-| `banks_index.json` | 450 KB | Watchlist search, Overview filters |
-| `banks/<cert>.json` | ~2 KB each, ~4,300 files | Bank page, Watchlist cards |
-| `model.json` | 10 KB | Methods |
-| `pipeline.json` | 10 KB | Pipeline |
+| `overview.json` | 6 KB | Overview |
+| `banks_index.json` | 750 KB (130 KB compressed) | Watchlist search, Bank finder |
+| `banks/<cert>.json` | ~3 KB each; 26 in the preview, ~4,300 live | Bank page, Watchlist cards |
+| `model.json` | 5 KB | Model & methods |
+| `pipeline.json` | 2 KB | Pipeline |
 
 Bands, as codes everywhere: `H` High, `E` Elevated, `W` Watch, `L` Low, `D` Already in distress,
 `N` New bank – not scored, `F` Office of a foreign bank – not scored.
 
+## Drivers and pushes (decision 1b)
+
+Taken from the bank's existing SHAP waterfall; **no re-scoring**. Each waterfall item's push
+(percentage points) is added to one of two groups:
+
+- **credit** (loan quality): non-current loans, past-due loans, net charge-offs, loan mix and
+  concentration, and their changes;
+- **earnings**: ROA, ROE, net interest margin, efficiency, quarterly net income to assets, and their
+  changes.
+
+`pushes = {credit, earnings}` is the sum of the **positive** pushes in each group. `driver` is the
+group with the larger push, shown as the Credit / Earnings chip. On the page they are labelled
+"Push from loan quality" and "Push from earnings", with a note that they come from the model's
+explanation, not a re-score. The re-score version (each group set to the tier median and scored
+again) is on the v6 list in the model card.
+
 ## `overview.json`
 
-| Key | Type | Meaning |
-|---|---|---|
-| `modelVersion` | int | Model version that scored this quarter (5 today) |
-| `banksScored` | int | Banks with a probability |
-| `bandCounts` | object | Band code → number of banks this quarter |
-| `bandMeaning` | object | Band code → `{min, max}` probability and the plain meaning ("≥ 50% became distressed") |
-| `bandsByYear` | array | `{year, H, E, W, L}`: bank-quarters per band per year (2003 onward; out of sample up to 2019, test 2020–2024; after 2024 the latest scores) |
-| `top20` | array | `{rank, cert, name, state, probability, band, reason, driver}` (the 20 highest probabilities) |
-
-**`driver`** (`credit` \| `earnings`): of the two what-if probabilities in the bank's file (below),
-the group whose reset to the median lowers the probability more. Shown as the Credit / Earnings
-chip.
+| Key | Meaning |
+|---|---|
+| `modelVersion` | Model version that scored this quarter |
+| `banksScored` | Banks with a probability |
+| `bandCounts` | Band code → number of banks this quarter |
+| `bandMeaning` | Band code → `{min, max, meaning}`: probability cut-offs and the plain meaning |
+| `keyFigures` | `{bankQuarters, failures}`: call-report rows and FDIC failure/assistance records |
+| `bandsByYear` | `{year, H, E, W, L}`: bank-quarters per band per year from 2003 (out of sample to 2019, test 2020–2024, then the latest scores) |
+| `top20` | `{rank, cert, name, state, probability, band, reason, driver}` |
 
 ## `banks_index.json`
 
-`{schemaVersion, generatedAt, quarter, banks: [...]}`, one compact row per bank (short keys, for
-search):
+`preview` (fixtures only): the certs that have a full bank file. `banks`: one compact row per bank.
 
 | Key | Meaning |
 |---|---|
@@ -47,55 +69,56 @@ search):
 | `a` | Total assets, $ millions |
 | `b` | Band code |
 | `p` | Probability (3 decimals; `null` for `N`, `F`) |
-| `r` | Top reason, plain words (`null` if none) |
+| `r` | Top reason in plain words (`null` if none) |
 
 ## `banks/<cert>.json`
 
-| Key | Type | Meaning |
-|---|---|---|
-| `profile` | object | `name, city, state, cert, assetsM, established` (date), `ageYears`, `tier` (1–5) |
-| `probability` | number \| null | 3 decimals |
-| `band` | string | Band code |
-| `rank` | int \| null | Rank among scored banks (1 = highest) |
-| `peerPercentile` | int \| null | Share of same-tier banks with a lower probability, 0–100 |
-| `reasons` | array (≤ 3) | `{text, feature, value, median, unit}`: SHAP reasons, compared with the median of the same asset tier |
-| `whatIf` | object \| null | `{today, earningsAtMedian, creditAtMedian}`: the probability now, and with that group of features set to the tier median (see below). `null` for bands `D`, `N`, `F` |
-| `driver` | string \| null | `credit` \| `earnings` (as in overview) |
-| `waterfall` | object \| null | The SHAP waterfall, exactly as `w` in today's `waterfalls/<cert>.json` (base, up to 8 items, other) |
-| `distressLines` | array \| null | Band `D` only: the distress lines crossed (as `d` today) |
-| `history` | object | 8 quarters, oldest first, aligned with `quarters`: `ncl` non-current loans %, `t1` Tier 1 leverage %, `roa` ROA %, `ni` quarterly net income % of assets, `eff` efficiency ratio %. `null` where not reported |
-| `quarters` | array | The 8 quarter labels (`2024 Q3` …) |
-| `complaints` | object \| null | Matched banks only: `{quarter, per1bDeposits}` |
-| `flags` | array | Any of `cblr` (community bank leverage ratio filer), `newBank`, `foreignOffice`, `recentMerger` |
-
-**`whatIf`**, defined: in the scoring notebook, the bank's features of one group are set to the
-median of its asset tier and the model scores it again (2 extra predictions per bank). Groups:
-**credit** = non-current loans, past-due, net charge-offs and their changes; **earnings** = ROA,
-ROE, net interest margin, efficiency and their changes (exact feature lists fixed in the scoring
-code and listed on the Methods page).
+| Key | Meaning |
+|---|---|
+| `profile` | `name, city, state, cert, assetsM, ageYears, tier` (asset tier 1–5) |
+| `probability` | 3 decimals, or `null` |
+| `band` | Band code |
+| `rank`, `scoredBanks` | Rank among scored banks (1 = highest) and how many were scored |
+| `peerPercentile` | Share of same-tier banks with a lower probability, 0–100 |
+| `reasons` | Up to 3 `{text}`: SHAP reasons in plain words, compared with the median of similar-size banks |
+| `pushes` | `{credit, earnings}` in percentage points, or `null` (bands `D`, `N`, `F`) |
+| `driver` | `credit` \| `earnings` \| `null` |
+| `waterfall` | `{b, i, o}`: base probability, up to 8 items `{f, l, v, m, pp}` (feature, label, value, tier median, push), and "all other measures" |
+| `distressLines` | Band `D` only: the distress lines crossed |
+| `history` | 8 quarters, oldest first: `ncl` non-current loans %, `t1` Tier 1 leverage %, `roa` ROA %, `ni` quarterly net income % of assets, `eff` efficiency %; `null` where not reported |
+| `quarters` | The 8 quarter labels (`2024 Q3` …) |
+| `complaints` | Matched banks only: `{quarter, count, per1bDeposits}` |
+| `flags` | Any of `cblr`, `newBank`, `foreignOffice`, `recentMerger` (drives "Read with care") |
+| `note` | Optional curated `{text, source}`; the source is a section of the model card |
 
 ## `model.json`
 
-`version`, `registered`, `metrics` (test 2020–2024: ROC-AUC, PR-AUC, top-10% capture, Brier, for v5,
-the threshold rule and the logistic baseline, with bootstrap intervals), `challenger` (same, strict
-label), `bands` (`code, min, max, trainRate, testRate`), `calibration` (10 groups: predicted vs
-observed), `monitoring` (latest PSI and backtest from `OPS.MODEL_MONITORING`), `limitations`
-(`{title, text}` from the model card). Source: MLflow (version 5 run and tags) and the model card.
+`version`, `registered`, `periods {train, test}`, `test {rows, positives, baseRatePct}`, `models`
+(`{key, name, note, roc, pr, capturePct, brier, current?, challenger?}`), `intervals` (bootstrap),
+`bands` (`{code, name, range, trainRatePct, trainN, testRatePct, testN}`), `calibration`
+(`{title, predictedPct, observedPct}`), `monitoring` (PSI, stable features, backtest range and alert
+line), `limitations` (`{title, text}`), `next` (`{label, title, text}`). Source: MLflow and the model
+card (`content/model_v5.json` holds the figures, each traceable to `docs/model_card.md`).
 
 ## `pipeline.json`
 
-`layers` (`{layer, where, rows, explanation}` from the latest run's `ROWS_DETAIL`), `datasets`
-(per source: FDIC financials, institutions, failures, CFPB complaints), `checks` (`{name, text}`:
-contracts, freshness, volumes, dbt tests, top-20 release check, promotion gate), `runs` (the last 12
-from `OPS.HEALTH_RUNS_LAST_12`, per the [health page contract](../../docs/health_page_contract.md):
-date, result, duration, Databricks minutes, credits, banks scored).
+`datasets` (`{key, label, bronze, silver, gold}` rows added per layer in the latest successful run),
+`marts`, `complaintMatchPct`, `runs` (the last 12 from `OPS.HEALTH_RUNS_LAST_12`: `date, state,
+durationSeconds, databricksMinutes, credits, banksScored`), `latest` (`dbtModelsOk, dbtTestsPass,
+dbtTestsFail, databricksMinutes, durationSeconds`).
 
-## What exists today vs what's new
+## Safety checks on every file
 
-| Data | Today | New in Stage B |
+- No account identifiers or secrets: the CI scan rejects workspace hosts, account locators, OCIDs,
+  IPs, keys and tokens in any JSON.
+- Every file validates against its schema, or the build fails.
+
+## Where the data comes from (Stage B)
+
+| Data | Today | Stage B |
 |---|---|---|
-| Probability, band, reasons, waterfall, distress lines, 8-quarter `ncl t1 roa eff`, complaints | `watchlist.json` + `waterfalls/` (schema 5) | reshaped into these files |
-| Quarterly net income history (`ni`) | in `MART_BANK_SCORECARD` | added to the export |
-| `whatIf`, `driver` | — | **05_score**: 2 extra predictions per bank (credit, earnings at the tier median), stored with the scores |
-| Band counts by year, model metrics, calibration | MLflow (v5), model card | exported to `overview.json`, `model.json` |
-| Recent runs, layer counts | `OPS.HEALTH_RUNS_LAST_12`, `PIPELINE_RUNS` | exported to `pipeline.json` |
+| Probability, band, reasons, waterfall, distress lines, 8-quarter history, complaints | `watchlist.json` + `waterfalls/` (schema 5) | reshaped by `scripts/export_site_data.py` |
+| Quarterly net income history (`ni`) | `MART_BANK_SCORECARD` | added to the export |
+| `pushes`, `driver` | computed from the waterfall in `build_fixtures.py` | same rule in the exporter (no scoring change) |
+| Band counts by year, model metrics, calibration | MLflow (v5), model card | `overview.json`, `model.json` |
+| Recent runs, layer counts | `OPS.HEALTH_RUNS_LAST_12`, `PIPELINE_RUNS` | `pipeline.json` |

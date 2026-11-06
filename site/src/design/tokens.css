@@ -1,0 +1,33 @@
+/* Design tokens (approved design, 25 Oct 2026). Shared by the portfolio; each site sets --accent. */
+:root {
+  --bg: #F6F1E6;
+  --card: #FBF8F1;
+  --ink: #1A1612;
+  --ink-2: #3D352C;
+  --ink-3: #5B5246;
+  --rule: #D9CFBD;
+  --rule-2: #E3DACA;
+  --track: #E8E0D0;
+  --muted-dark: #A99E8A;
+  --footer-text: #E9E1D2;
+  --footer-text-2: #CFC5B3;
+  --accent: #8E1B2E;          /* Finance sector accent */
+  --accent-hover: #5E0F1C;
+
+  --band-H: #8E1B2E;  --band-H-ink: #FFFFFF;
+  --band-E: #B14A14;  --band-E-ink: #FFFFFF;
+  --band-W: #D9A23A;  --band-W-ink: #1A1612;
+  --band-L: #3E5C73;  --band-L-ink: #FFFFFF;
+  --band-D: #2B2420;  --band-D-ink: #FFFFFF;
+  --band-N: repeating-linear-gradient(45deg, #FBF8F1 0 3px, #8A7F6E 3px 4px);
+  --credit: #8E1B2E;
+  --earnings: #3E5C73;
+
+  --serif: "Newsreader Variable", Newsreader, Georgia, serif;
+  --sans: "Inter Variable", Inter, system-ui, sans-serif;
+  --maxw: 1240px;
+  --gutter: 32px;
+}
+@media (max-width: 640px) {
+  :root { --gutter: 16px; }
+}

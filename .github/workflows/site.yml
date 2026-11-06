@@ -1,0 +1,74 @@
+# The Bank Health website (site/): build, check and test it on every change to it.
+# Nothing here deploys, and no secrets are used: the site is built from the data files in
+# site/public/data (preview data until Stage B).
+#
+# Steps: install -> data files match their JSON Schemas -> build -> no identifiers or secrets in any
+# data file or built page -> Playwright at 1440 and 375 px (console errors, outside requests,
+# sideways scroll, cookies, axe accessibility, the page features) -> Lighthouse budget
+# (Performance >= 90, Accessibility >= 95) -> screenshots kept as a run artifact.
+name: Site
+
+on:
+  pull_request:
+    paths: ["site/**", "scripts/check_public_docs.py", ".github/workflows/site.yml"]
+  push:
+    branches: [main]
+    paths: ["site/**", "scripts/check_public_docs.py", ".github/workflows/site.yml"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.event_name }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Same image as local runs: Node, Chromium and Python preinstalled, pinned to the Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
+      options: --ipc=host
+    defaults:
+      run:
+        working-directory: site
+    env:
+      ASTRO_TELEMETRY_DISABLED: "1"
+      CI: "1"
+      HOME: /root
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install
+        run: npm ci
+
+      - name: Data files match their schemas
+        run: node scripts/validate-data.mjs
+
+      - name: Build
+        run: npx astro build
+
+      - name: No identifiers or secrets in data files or built pages
+        # Generic patterns only here (CI has no .env). Locally the same script also checks the real
+        # values from .env; see site/README.md.
+        run: |
+          { find public/data content -name '*.json'; find dist -name '*.html'; } > /tmp/site-files.txt
+          python3 ../scripts/check_public_docs.py $(cat /tmp/site-files.txt)
+
+      - name: Playwright and axe (1440 and 375 px)
+        run: npx playwright test
+
+      - name: Lighthouse budget
+        run: sh scripts/lighthouse.sh
+
+      - name: Keep screenshots and the test report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-screenshots
+          path: |
+            docs/images/site/
+            site/playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore

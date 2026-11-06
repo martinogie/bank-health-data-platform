@@ -1,0 +1,133 @@
+---
+import Layout from "../../design/Layout.astro";
+---
+<Layout title="Model & methods" description="How the Bank Health distress score works, how well it does on unseen data, and where it falls short." current="methods">
+  <div class="wrap page">
+    <aside class="toc stack small">
+      <span class="eyebrow">On this page</span>
+      <a href="#question">The question</a><a href="#results">How well it works</a><a href="#bands">What the bands mean</a>
+      <a href="#calibration">Calibration</a><a href="#monitoring">Monitoring</a><a href="#limits">Known limitations</a><a href="#next">What comes next</a>
+    </aside>
+    <article class="stack" style="gap:64px;min-width:0">
+      <header class="stack" style="gap:14px">
+        <span class="eyebrow accent" data-eyebrow>&nbsp;</span>
+        <h1 class="h1" style="font-size:clamp(36px,4.8vw,64px);line-height:1.05">How the score works, and where it falls short</h1>
+        <p class="lede">A gradient-boosted classifier reads each bank's call-report ratios and estimates the chance it enters distress within a year. Everything below is measured on data the model never saw while it was built.</p>
+      </header>
+
+      <section id="question" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">The question the model answers</h2>
+        <p>For a bank that is healthy today, will it enter <strong>distress</strong> in the next four quarters? A bank counts as distressed when any one of these happens:</p>
+        <div class="tests">
+          <div><strong class="serif">It fails</strong><span>on the FDIC failed-bank list</span></div>
+          <div><strong class="serif">Bad loans pass 3%</strong><span>non-current loans as a share of loans</span></div>
+          <div><strong class="serif">Capital falls below 5%</strong><span>Tier 1 leverage ratio</span></div>
+          <div><strong class="serif">Two losses in a row</strong><span>consecutive quarterly net losses</span></div>
+        </div>
+        <p>Inputs are FDIC call-report measures of capital, asset quality, earnings, liquidity, growth, loan mix and size. Consumer complaints appear on the site for context but are <strong>not</strong> model inputs: their history starts in 2023, and only about a third of complaints can be matched to a bank. Three groups are not scored: banks already in distress, banks under three years old, and US offices of foreign banks, whose capital sits with a parent abroad.</p>
+      </section>
+
+      <section id="results" class="sec stack" style="gap:18px">
+        <div class="head-row rule-top"><h2 class="h2" style="font-size:32px">How well it works</h2>
+          <button type="button" class="btn" data-challenger aria-pressed="false">Compare with the challenger</button></div>
+        <p style="color:var(--ink-2)" data-test-line></p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Model results (scrolls sideways on small screens)"><table style="min-width:620px;font-size:15px">
+          <thead><tr><th scope="col">Model</th><th scope="col" class="r">ROC-AUC</th><th scope="col" class="r">PR-AUC</th><th scope="col" class="r">Distress caught in riskiest 10%</th></tr></thead>
+          <tbody data-models></tbody></table></div>
+        <div class="callouts" data-callouts></div>
+      </section>
+
+      <section id="bands" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">What the bands mean</h2>
+        <p style="color:var(--ink-2)">Each band is a level of risk set on history. Cut-offs were chosen from out-of-sample predictions for 2003–2019, where each year is predicted by a model trained only on earlier years. 2020–2024 is shown for honesty: distress was rarer, so every band ran lower.</p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Band definitions (scrolls sideways on small screens)"><table style="min-width:620px;font-size:15px">
+          <thead><tr><th scope="col">Band</th><th scope="col">Probability</th><th scope="col" class="r">Entered distress, 2003–2019</th><th scope="col" class="r">2020–2024</th></tr></thead>
+          <tbody data-bands></tbody></table></div>
+      </section>
+
+      <section id="calibration" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">Calibration: does 30% mean 30%?</h2>
+        <p style="color:var(--ink-2)">Almost. The model runs slightly high. Because the bands are set from what actually happened, the band labels stay accurate even where the percentages overstate risk a little.</p>
+        <div class="grid-auto" style="gap:28px" data-calib></div>
+      </section>
+
+      <section id="monitoring" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">Is it still working?</h2>
+        <p style="color:var(--ink-2)" data-monitoring></p>
+      </section>
+
+      <section id="limits" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">Known limitations</h2>
+        <div class="stack" data-limits></div>
+      </section>
+
+      <section id="next" class="sec stack" style="gap:18px">
+        <h2 class="h2 rule-top" style="font-size:32px">What comes next</h2>
+        <div class="grid-auto" style="gap:20px" data-next></div>
+        <p class="small muted" style="font-size:14px">Full detail in the <a href="https://github.com/martinogie/bank-health-data-platform/blob/main/docs/model_card.md">model card</a> and the <a href="https://github.com/martinogie/bank-health-data-platform">repository</a>.</p>
+      </section>
+    </article>
+  </div>
+</Layout>
+
+<script>
+  import { loadJson, esc, fmtInt } from "../../lib/site";
+  loadJson("model.json").then((m) => {
+    const q = (s: string) => document.querySelector<HTMLElement>(s)!;
+    q("[data-eyebrow]").textContent = `Model v${m.version} · trained ${m.periods.train} · tested once on ${m.periods.test}`;
+    q("[data-test-line]").textContent = `Test period ${m.periods.test}: ${fmtInt(m.test.rows)} bank-quarters, of which ${fmtInt(m.test.positives)} (${m.test.baseRatePct}%) entered distress. Every model is judged on exactly the same rows.`;
+    let showCh = false;
+    const drawModels = () => {
+      const rows = m.models.filter((x: any) => !x.challenger || showCh);
+      q("[data-models]").innerHTML = rows.map((x: any) => `<tr style="${x.current ? "background:var(--card)" : x.challenger ? "color:var(--ink-3)" : ""}">
+        <th scope="row">${esc(x.name)}<span class="sub">${esc(x.note)}</span></th>
+        <td class="r num">${x.roc.toFixed(3)}</td><td class="r num">${x.pr.toFixed(3)}</td><td class="r num">${x.capturePct.toFixed(1)}%</td></tr>`).join("");
+      const b = q("[data-challenger]");
+      b.setAttribute("aria-pressed", String(showCh));
+      b.textContent = showCh ? "Hide the challenger" : "Compare with the challenger";
+    };
+    q("[data-challenger]").addEventListener("click", () => { showCh = !showCh; drawModels(); });
+    drawModels();
+    const v5 = m.models.find((x: any) => x.key === "v5"), rule = m.models.find((x: any) => x.key === "rule");
+    q("[data-callouts]").innerHTML = [
+      [`${(v5.pr / (m.test.baseRatePct / 100)).toFixed(0)}×`, `PR-AUC of ${v5.pr.toFixed(3)} against a ${m.test.baseRatePct}% base rate: about ${(v5.pr / (m.test.baseRatePct / 100)).toFixed(0)} times better than picking banks at random.`],
+      [`${v5.capturePct}%`, "of all distress cases fall in the riskiest tenth of scores, the figure a reviewer with limited time cares about."],
+      [`${(v5.pr / rule.pr).toFixed(1)}×`, `the PR-AUC of a simple rule that ranks banks by distance to the distress lines (${rule.pr.toFixed(3)}); better in all 1,000 bootstrap samples.`],
+    ].map(([n, t]) => `<div class="callout"><span class="serif" style="font-size:40px;line-height:1">${n}</span><p class="small" style="font-size:14px;color:var(--ink-2);margin-top:6px">${esc(t)}</p></div>`).join("");
+    q("[data-bands]").innerHTML = m.bands.map((b: any) => `<tr><th scope="row"><span class="chip ${b.code}">${esc(b.name)}</span></th><td class="num">${esc(b.range)}</td>
+      <td class="r num">${b.trainRatePct.toFixed(1)}% · ${fmtInt(b.trainN)}</td><td class="r num">${b.testRatePct.toFixed(1)}% · ${fmtInt(b.testN)}</td></tr>`).join("");
+    const bar = (v: number, max: number, c: string) => `<div style="height:12px;background:var(--track)"><div style="height:12px;width:${(v / max * 100).toFixed(1)}%;background:${c}"></div></div>`;
+    q("[data-calib]").innerHTML = m.calibration.map((c: any, i: number) => {
+      const max = Math.max(c.predictedPct, c.observedPct) * 1.15;
+      return `<figure class="stack" style="margin:0;gap:10px"><figcaption style="font-weight:600">${esc(c.title)}</figcaption>
+        <div class="stack" style="gap:4px"><div class="lr"><span>Predicted</span><span class="num">${c.predictedPct}%</span></div>${bar(c.predictedPct, max, i ? "var(--band-L)" : "var(--accent)")}</div>
+        <div class="stack" style="gap:4px"><div class="lr"><span>Observed</span><span class="num">${c.observedPct}%</span></div>${bar(c.observedPct, max, "var(--ink)")}</div></figure>`;
+    }).join("");
+    const mo = m.monitoring;
+    q("[data-monitoring]").textContent = `Every weekly run compares the latest scores with the previous four quarters (score drift, PSI ${mo.scorePsiPrev4}: stable; all ${mo.featuresStable} features stable) and checks every quarter whose outcome is known: from ${mo.backtest.from} to ${mo.backtest.to}, the riskiest tenth caught between ${mo.backtest.captureMinPct}% and ${mo.backtest.captureMaxPct}% of distress cases, never below the ${mo.backtest.alertLinePct}% alert line. Figures from the first monitoring run (3 November 2026).`;
+    q("[data-limits]").innerHTML = m.limitations.map((l: any) => `<div class="limit"><strong class="serif">${esc(l.title)}</strong><span>${esc(l.text)}</span></div>`).join("");
+    q("[data-next]").innerHTML = m.next.map((n: any) => `<div class="next"><span class="eyebrow accent">${esc(n.label)}</span><strong class="serif" style="font-size:22px;font-weight:500">${esc(n.title)}</strong><span style="color:var(--ink-2);font-size:15px">${esc(n.text)}</span></div>`).join("");
+  });
+</script>
+
+<style is:global>
+  .page { padding-top: 56px; padding-bottom: 88px; display: flex; flex-wrap: wrap; gap: 56px; }
+  .toc { flex: 1 1 200px; max-width: 240px; gap: 10px; font-size: 14px; position: sticky; top: 16px; align-self: flex-start; }
+  article { flex: 999 1 640px; }
+  .sec { scroll-margin-top: 24px; }
+  .head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
+  .tests { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  .tests div { padding: 18px; border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; }
+  .tests strong { font-size: 22px; font-weight: 500; }
+  .tests span { font-size: 14px; color: var(--ink-3); }
+  .r { text-align: right; }
+  .sub { display: block; font-weight: 400; font-size: 13px; color: var(--ink-3); }
+  .callouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 20px; }
+  .callout { background: var(--card); border: 1px solid var(--rule); padding: 20px; }
+  .lr { display: flex; justify-content: space-between; font-size: 14px; }
+  .limit { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 8px 32px; padding: 18px 0; border-top: 1px solid var(--rule); }
+  .limit strong { font-size: 20px; font-weight: 500; }
+  .limit span { color: var(--ink-2); }
+  .next { border: 1px solid var(--ink); padding: 22px; display: flex; flex-direction: column; gap: 8px; }
+  @media (max-width: 900px) { .toc { position: static; max-width: none; } }
+</style>

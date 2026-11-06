@@ -1,0 +1,254 @@
+---
+import Layout from "../../design/Layout.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<Layout title="Bank detail" description="One bank's distress score, the reasons behind it and eight quarters of its key ratios." current="bank">
+  <div class="wrap page stack" style="gap:48px">
+    <nav aria-label="Breadcrumb" class="small muted" style="font-size:14px"><a href={`${base}/watchlist/`}>Watchlist</a> / <span data-crumb>Bank detail</span></nav>
+
+    <section data-finder hidden class="stack" style="gap:12px;max-width:640px">
+      <h1 class="h1" style="font-size:clamp(34px,4.4vw,56px)">Find a bank</h1>
+      <label for="find" style="font-weight:600;font-size:14px">Bank name or state</label>
+      <input id="find" type="search" autocomplete="off" placeholder="e.g. Banc of California, TX" aria-controls="find-results" />
+      <ul id="find-results" class="results"></ul>
+    </section>
+
+    <section data-missing hidden class="stack" style="gap:12px">
+      <h1 class="h1" style="font-size:clamp(30px,4vw,48px)" data-missing-title>Not in the preview</h1>
+      <p class="lede" data-missing-text></p>
+    </section>
+
+    <div data-bank hidden class="stack" style="gap:48px">
+      <section class="hero-grid">
+        <div class="stack" style="gap:12px">
+          <span class="eyebrow" data-meta></span>
+          <h1 class="h1" style="font-size:clamp(40px,5.6vw,76px);line-height:1" data-name></h1>
+          <p class="lede" style="max-width:620px" data-stand></p>
+        </div>
+        <div class="tiles">
+          <div class="tile"><span class="tile-l">Probability</span><span class="serif tile-n" style="color:var(--accent)" data-prob></span></div>
+          <div class="tile mid"><span class="tile-l">Band</span><span data-band></span></div>
+          <div class="tile end"><span class="tile-l">Rank</span><span class="serif tile-n" data-rank></span></div>
+        </div>
+      </section>
+
+      <section class="stack" style="gap:18px" data-history-section>
+        <div class="head-row">
+          <h2 class="serif" style="font-weight:500;font-size:clamp(26px,3vw,34px)">Eight quarters of the numbers that matter</h2>
+          <div role="group" aria-label="Choose a measure" class="toggles" data-tabs>
+            <button type="button" class="btn" data-m="ncl" aria-pressed="true">Non-current loans</button>
+            <button type="button" class="btn" data-m="t1" aria-pressed="false">Tier 1 leverage</button>
+            <button type="button" class="btn" data-m="roa" aria-pressed="false">Return on assets</button>
+            <button type="button" class="btn" data-m="ni" aria-pressed="false">Quarterly net income</button>
+          </div>
+        </div>
+        <figure class="card chart-card">
+          <figcaption class="cap"><strong data-chart-title></strong><span class="small muted" data-chart-note></span></figcaption>
+          <svg class="hist" data-chart role="img" viewBox="0 0 800 300" preserveAspectRatio="none" width="100%" height="300"></svg>
+          <div class="qrow" data-chart-q aria-hidden="true"></div>
+        </figure>
+      </section>
+
+      <section class="grid-auto" style="gap:48px">
+        <div class="stack" style="gap:14px">
+          <span class="eyebrow" data-why-eyebrow>Why the score is where it is</span>
+          <h2 class="serif" style="font-weight:500;font-size:clamp(26px,3vw,34px);line-height:1.15" data-why-title>The measures pushing the score up most</h2>
+          <ol class="reasons" data-reasons></ol>
+          <div data-distress></div>
+        </div>
+        <figure class="stack" style="margin:0;gap:14px" data-push-figure>
+          <figcaption style="font-size:14px;color:var(--ink-2)">How much each group of measures pushes this bank's probability, in percentage points, from the bank's SHAP explanation (its largest eight factors)</figcaption>
+          <div data-pushes class="stack" style="gap:14px"></div>
+          <p class="small muted" data-push-note></p>
+        </figure>
+      </section>
+
+      <section class="stack" style="gap:14px" data-waterfall-section>
+        <h2 class="serif" style="font-weight:500;font-size:clamp(24px,2.6vw,30px)">From the average bank to this bank's score</h2>
+        <p class="small muted" style="font-size:14px" data-wf-intro></p>
+        <div data-waterfall class="wf"></div>
+      </section>
+
+      <aside class="care" data-care hidden>
+        <div class="stack" style="gap:8px"><span class="eyebrow" style="color:var(--band-E)">Read with care</span><h2 class="serif" style="font-weight:500;font-size:26px" data-care-title></h2></div>
+        <p style="color:var(--ink-2)" data-care-text></p>
+      </aside>
+
+      <section class="stack" style="gap:8px" data-complaints hidden>
+        <h2 class="serif" style="font-weight:500;font-size:24px">Consumer complaints</h2>
+        <p data-complaints-text></p>
+        <p class="small muted">From the CFPB Consumer Complaint Database, matched to banks by company name; about a third of complaints match a bank, so a missing figure doesn't mean none. Complaints give context and are not model inputs; their history starts in 2023.</p>
+      </section>
+
+      <p class="caveat"><strong>A model estimate from public FDIC data, not a supervisory rating.</strong> <span data-foot></span> ROA is year to date and annualised. <a href={`${base}/methods/`}>How the score works</a></p>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { loadJson, esc, pct0, fmtInt, fixed, money, bankUrl, bandChip, BANDS } from "../../lib/site";
+
+  const q = (s: string) => document.querySelector<HTMLElement>(s)!;
+  const cert = parseInt(new URLSearchParams(location.search).get("cert") ?? "", 10);
+
+  const METRICS: Record<string, { title: string; note: string; color: string }> = {
+    ncl: { title: "Non-current loans, % of loans", note: "Higher is worse. Distress line: 3%", color: "#8E1B2E" },
+    t1: { title: "Tier 1 leverage ratio, %", note: "Lower is worse. Distress line: 5%", color: "#3E5C73" },
+    roa: { title: "Return on assets, % (year to date, annualised)", note: "Below zero means a loss", color: "#1A1612" },
+    ni: { title: "Net income in the quarter, % of assets", note: "Below zero means a loss in that quarter", color: "#B14A14" },
+  };
+
+  function drawChart(b: any, key: string) {
+    const m = METRICS[key], vals: (number | null)[] = b.history[key] ?? [], qs: string[] = b.quarters;
+    const nums = vals.filter((v) => v != null) as number[];
+    q("[data-chart-title]").textContent = m.title;
+    q("[data-chart-note]").textContent = m.note;
+    const svg = q("[data-chart]");
+    if (!nums.length) { svg.innerHTML = `<text x="400" y="150" text-anchor="middle" fill="#5B5246" font-size="16">Not reported for this bank</text>`; svg.setAttribute("aria-label", `${m.title}: not reported`); return; }
+    const hi = Math.max(0, ...nums), lo = Math.min(0, ...nums), span = hi - lo || 1;
+    const H = 240, top = 30, colW = 800 / vals.length;
+    const y = (v: number) => top + ((hi - v) / span) * H;
+    const zy = y(0);
+    let out = `<line x1="0" x2="800" y1="${zy}" y2="${zy}" stroke="#8A7F6E" stroke-dasharray="4 4" />`;
+    vals.forEach((v, i) => {
+      const x = i * colW + colW * 0.18, w = colW * 0.64, last = i === vals.length - 1;
+      if (v == null) { out += `<text x="${i * colW + colW / 2}" y="${zy - 8}" text-anchor="middle" font-size="12" fill="#5B5246">n/a</text>`; return; }
+      const y1 = Math.min(y(v), zy), h = Math.max(2, Math.abs(y(v) - zy)), neg = v < 0;
+      out += `<rect x="${x}" y="${y1}" width="${w}" height="${h}" fill="${neg ? "#8E1B2E" : m.color}" opacity="${last ? 1 : 0.72}" />`;
+      out += `<text x="${i * colW + colW / 2}" y="${neg ? y1 + h + 16 : y1 - 6}" text-anchor="middle" font-size="13" font-weight="${last ? 700 : 500}" fill="#1A1612">${v.toFixed(2)}</text>`;
+    });
+    svg.innerHTML = out;
+    svg.setAttribute("aria-label", `${m.title} by quarter: ` + vals.map((v, i) => `${qs[i]} ${v == null ? "not reported" : v.toFixed(2)}`).join(", "));
+    q("[data-chart-q]").innerHTML = qs.map((x) => `<span>${esc(x)}</span>`).join("");
+    document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.setAttribute("aria-pressed", String(t.dataset.m === key)));
+  }
+
+  function renderBank(b: any) {
+    const p = b.profile;
+    document.title = `${p.name} · Bank Health`;
+    q("[data-crumb]").textContent = p.name;
+    q("[data-meta]").textContent = [p.city, p.state, `CERT ${p.cert}`, p.ageYears != null ? `${p.ageYears} years old` : null].filter(Boolean).join(" · ");
+    q("[data-name]").textContent = p.name;
+    q("[data-stand]").textContent = b.note?.text ?? `${money(p.assetsM)} of assets. ${b.probability != null ? `The model puts its chance of distress in the next twelve months at ${pct0(b.probability)}.` : BANDS[b.band]?.name + "."}`;
+    q("[data-prob]").textContent = b.probability != null ? pct0(b.probability) : "–";
+    q("[data-band]").innerHTML = bandChip(b.band);
+    q("[data-rank]").innerHTML = b.rank ? `${b.rank}<span style="font-size:20px;color:var(--ink-3)"> of ${fmtInt(b.scoredBanks)}</span>` : `–`;
+
+    // reasons
+    q("[data-reasons]").innerHTML = (b.reasons ?? []).map((r: any) => `<li>${esc(r.text)}</li>`).join("") || `<li class="muted">No reasons: this band isn't scored.</li>`;
+    if (b.distressLines?.length) {
+      q("[data-why-title]").textContent = "Already over a distress line";
+      q("[data-distress]").innerHTML = `<p class="small muted">This bank meets a distress test now, so it isn't ranked:</p><ul class="reasons">${b.distressLines.map((d: any) => `<li>${esc(d.l)}${d.v != null ? `: ${fixed(d.v)}` : ""}</li>`).join("")}</ul>`;
+    }
+
+    // pushes (decision 1b): SHAP group pushes, honest labels
+    if (b.pushes) {
+      const rows = [["Probability today", b.probability * 100, "var(--accent)"], ["Push from loan quality", b.pushes.credit, "var(--band-E)"], ["Push from earnings", b.pushes.earnings, "var(--band-E)"]] as [string, number, string][];
+      q("[data-pushes]").innerHTML = rows.map(([label, v, c], i) => `<div class="stack" style="gap:6px">
+        <div style="display:flex;justify-content:space-between;font-size:14px"><span>${label}</span><strong class="num">${i === 0 ? `${v.toFixed(1)}%` : `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)} pts`}</strong></div>
+        <div style="height:14px;background:var(--track)"><div style="height:14px;width:${Math.max(0, Math.min(100, v)).toFixed(1)}%;background:${c}"></div></div></div>`).join("");
+      const drv = b.driver === "credit" ? "loan quality" : b.driver === "earnings" ? "earnings" : null;
+      q("[data-push-note]").textContent = drv ? `The larger push is from ${drv}, so the driver is ${b.driver === "credit" ? "Credit" : "Earnings"}. Pushes come from the model's explanation, not a re-score; the rest of the probability comes from other measures and the base rate.` : "";
+    } else {
+      q("[data-push-figure]").hidden = true;
+    }
+
+    // waterfall
+    if (b.waterfall) {
+      const w = b.waterfall, items: any[] = w.i;
+      const max = Math.max(w.b, ...items.map((i) => Math.abs(i.pp)), Math.abs(w.o), b.probability * 100);
+      const bar = (v: number, color: string) => `<div class="wf-track"><div style="width:${(Math.abs(v) / max * 100).toFixed(1)}%;background:${color};height:100%"></div></div>`;
+      q("[data-wf-intro]").textContent = `Start from the average starting point (${w.b.toFixed(1)}%), add each factor's push, and you reach this bank's ${(b.probability * 100).toFixed(1)}%. Values in percentage points.`;
+      q("[data-waterfall]").innerHTML =
+        `<div class="wf-row"><span>Average starting point</span>${bar(w.b, "#8A7F6E")}<strong class="num">${w.b.toFixed(1)}%</strong></div>` +
+        items.map((i) => `<div class="wf-row"><span>${esc(i.l)}${i.v != null ? ` <span class="muted small">(${fixed(i.v)}${i.m != null ? `; median ${fixed(i.m)}` : ""})</span>` : i.nr ? ` <span class="muted small">(${esc(i.nr)})</span>` : ""}</span>${bar(i.pp, i.pp >= 0 ? "var(--accent)" : "var(--earnings)")}<strong class="num">${i.pp >= 0 ? "+" : "−"}${Math.abs(i.pp).toFixed(1)}</strong></div>`).join("") +
+        `<div class="wf-row"><span>All other measures</span>${bar(w.o, w.o >= 0 ? "var(--accent)" : "var(--earnings)")}<strong class="num">${w.o >= 0 ? "+" : "−"}${Math.abs(w.o).toFixed(1)}</strong></div>` +
+        `<div class="wf-row total"><span>This bank's probability</span>${bar(b.probability * 100, "var(--ink)")}<strong class="num">${(b.probability * 100).toFixed(1)}%</strong></div>`;
+    } else {
+      q("[data-waterfall-section]").hidden = true;
+    }
+
+    // history
+    if (b.history && b.quarters?.length) {
+      document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.addEventListener("click", () => drawChart(b, t.dataset.m!)));
+      drawChart(b, "ncl");
+    } else q("[data-history-section]").hidden = true;
+
+    // read with care: flags and notes
+    const care: [string, string] | null = b.flags?.includes("foreignOffice")
+      ? ["US offices of foreign banks are not scored", "Their capital sits with a parent abroad, so the call report shows no capital ratios. The bank is listed but not scored."]
+      : b.flags?.includes("newBank")
+      ? ["Banks under three years old are not scored", "Start-up losses are expected, but the label would count two losses in a row as distress."]
+      : b.note?.source?.includes("securities")
+      ? ["The model cannot tell a securities sale from a weakening business", "Banks sometimes sell low-yielding bonds at a loss on purpose. The call report shows the realised loss but not the reason, and the current model treats it like an operating loss. A planned version 6 separates securities gains and losses from operating earnings."]
+      : null;
+    if (care) { q("[data-care]").hidden = false; q("[data-care-title]").textContent = care[0]; q("[data-care-text]").textContent = care[1]; }
+
+    if (b.complaints) {
+      q("[data-complaints]").hidden = false;
+      q("[data-complaints-text]").textContent = `${fmtInt(b.complaints.count)} complaints in ${b.complaints.quarter}${b.complaints.per1bDeposits != null ? `, ${fixed(b.complaints.per1bDeposits)} per $1bn of deposits` : ""}.`;
+    }
+    q("[data-foot]").textContent = `Data ${b.dataAsOf.quarterLabel} · model v5 · figures from FDIC call reports.`;
+    q("[data-bank]").hidden = false;
+  }
+
+  function finder(index: any[]) {
+    q("[data-finder]").hidden = false;
+    const input = q("#find") as HTMLInputElement, list = q("#find-results");
+    input.addEventListener("input", () => {
+      const s = input.value.trim().toLowerCase();
+      list.innerHTML = s.length < 2 ? "" : index.filter((b) => b.n.toLowerCase().includes(s) || (b.st ?? "").toLowerCase() === s).slice(0, 10)
+        .map((b) => `<li><a href="${bankUrl(b.c)}">${esc(b.n)}</a> <span class="muted">· ${esc(b.st)} · ${b.p != null ? pct0(b.p) : esc(BANDS[b.b]?.short)}</span></li>`).join("") || `<li class="muted">No bank matches.</li>`;
+    });
+  }
+
+  loadJson("banks_index.json").then(async (ix) => {
+    if (!Number.isFinite(cert)) return finder(ix.banks);
+    const row = ix.banks.find((b: any) => b.c === cert);
+    try {
+      renderBank(await loadJson(`banks/${cert}.json`));
+    } catch {
+      q("[data-missing]").hidden = false;
+      q("[data-crumb]").textContent = row?.n ?? `CERT ${cert}`;
+      if (row) {
+        q("[data-missing-title]").textContent = row.n;
+        q("[data-missing-text]").textContent = `${row.p != null ? `Probability ${pct0(row.p)}, band ${BANDS[row.b]?.name}.` : BANDS[row.b]?.name + "."} The full bank page comes with the live data; this preview has full files for ${ix.preview?.length ?? 0} banks.`;
+      } else {
+        q("[data-missing-title]").textContent = "No bank with that certificate number";
+        q("[data-missing-text]").textContent = "Check the number, or find the bank by name.";
+        finder(ix.banks);
+      }
+    }
+  });
+</script>
+
+<style is:global>
+  .page { padding-top: 32px; padding-bottom: 80px; }
+  input[type="search"] { min-height: 52px; padding: 0 16px; font: 16px var(--sans); background: var(--card); border: 1px solid var(--ink); border-radius: 0; width: 100%; }
+  .results { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 48px; align-items: end; border-bottom: 2px solid var(--ink); padding-bottom: 36px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--rule); }
+  .tile { padding: 18px 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
+  .tile.mid { padding: 18px 16px 0; border-left: 1px solid var(--rule); align-items: flex-start; }
+  .tile.end { padding: 18px 0 0 16px; border-left: 1px solid var(--rule); }
+  .tile-l { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+  .tile-n { font-size: clamp(38px, 5vw, 56px); line-height: 1; }
+  .head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
+  .chart-card { margin: 0; padding: 28px; display: flex; flex-direction: column; gap: 12px; }
+  .cap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+  .hist { display: block; overflow: visible; }
+  .qrow { display: flex; border-top: 1px solid var(--ink); padding-top: 8px; }
+  .qrow span { flex: 1 1 0; min-width: 0; text-align: center; font-size: 12px; color: var(--ink-2); }
+  .reasons { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 16px; }
+  .wf { display: flex; flex-direction: column; border-top: 1px solid var(--ink); }
+  .wf-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
+  .wf-row strong { text-align: right; }
+  .wf-row.total { font-weight: 600; border-bottom: 2px solid var(--ink); }
+  .wf-track { height: 12px; background: var(--track); }
+  .care { border: 1px solid var(--ink); padding: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 28px; background: var(--card); }
+  @media (max-width: 640px) {
+    .chart-card { padding: 14px; } .qrow span { font-size: 9px; }
+    .tile, .tile.mid, .tile.end { padding: 14px 8px 0; } .tile:first-child { padding-left: 0; }
+    .wf-row { grid-template-columns: minmax(0, 1fr) 60px; } .wf-track { grid-column: 1 / -1; grid-row: 2; }
+  }
+</style>

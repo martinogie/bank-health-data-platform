@@ -1,0 +1,206 @@
+---
+import Layout from "../../design/Layout.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<Layout title="Watchlist" description="Track the banks you depend on: score, reasons and two years of key ratios on one page." current="watchlist">
+  <div class="wrap page stack" style="gap:36px">
+    <div class="grid-auto" style="gap:40px;align-items:end">
+      <div class="stack" style="gap:12px">
+        <span class="eyebrow accent">Your watchlist</span>
+        <h1 class="h1" style="font-size:clamp(34px,4.4vw,56px);line-height:1.06">The banks you depend on, on one page</h1>
+        <p class="lede">Add your sponsor bank, the banks holding your deposits and your counterparties. Each card shows the score, the reasons, and how the key ratios have moved over two years.</p>
+      </div>
+      <div class="stack" style="gap:8px;position:relative">
+        <label for="bank-search" style="font-size:14px;font-weight:600">Find a bank by name or state</label>
+        <input id="bank-search" type="search" autocomplete="off" placeholder="e.g. Banc of California, TX" aria-describedby="search-help" aria-controls="search-results" />
+        <ul id="search-results" class="results" hidden></ul>
+        <span id="search-help" class="small muted">Searches all banks. Your list is saved in this browser and in the page link, so you can share it.</span>
+      </div>
+    </div>
+
+    <section aria-label="Summary" class="summary">
+      <div class="sum-counts" data-summary></div>
+      <div class="toggles" style="align-items:center">
+        <span role="status" aria-live="polite" class="small status" data-status></span>
+        <button type="button" class="btn" data-copy>Copy share link</button>
+        <button type="button" class="btn" data-csv>Export CSV</button>
+      </div>
+    </section>
+
+    <div data-empty hidden class="empty serif">Your watchlist is empty. Search above to add a bank.</div>
+    <div class="stack" style="gap:28px" data-cards></div>
+
+    <p class="caveat">
+      <strong>A model estimate from public FDIC data, not a supervisory rating.</strong>
+      <span data-foot-asof></span> ROA is year to date and annualised, as the FDIC reports it.
+      Complaint counts come from the CFPB database and appear only for banks matched to it by name (about a third of complaints match a bank); they give context and are not model inputs.
+      <a href={`${base}/methods/`}>How the score works</a>
+    </p>
+  </div>
+</Layout>
+
+<script>
+  import { loadJson, esc, pct0, fixed, money, bankUrl, bandChip, readWatchlist, saveWatchlist, sparkPoints, downloadCsv, BANDS } from "../../lib/site";
+
+  type IndexRow = { c: number; n: string; ci: string | null; st: string | null; a: number | null; b: string; p: number | null; r: string | null };
+  let watched = readWatchlist();
+  let index: IndexRow[] = [];
+  let preview = new Set<number>();
+  const files = new Map<number, any>();
+  const status = document.querySelector<HTMLElement>("[data-status]")!;
+  const say = (t: string) => { status.textContent = t; };
+
+  async function bankFile(cert: number) {
+    if (files.has(cert)) return files.get(cert);
+    let doc = null;
+    if (preview.has(cert) || !index.length) {
+      try { doc = await loadJson(`banks/${cert}.json`); } catch { doc = null; }
+    }
+    files.set(cert, doc);
+    return doc;
+  }
+
+  function change(label: string, s: (number | null)[], worseUp: boolean) {
+    const a = s[s.length - 2], b = s[s.length - 1];
+    if (a == null || b == null) return `<div class="chg"><span>${label}</span><span class="muted">not reported</span></div>`;
+    const d = b - a, flat = Math.abs(d) < 0.005;
+    const worse = worseUp ? d > 0.005 : d < -0.005;
+    const color = flat ? "var(--ink-3)" : worse ? "var(--accent)" : "var(--earnings)";
+    const delta = flat ? "no change" : `${d > 0 ? "▲" : "▼"} ${Math.abs(d).toFixed(2)} pts`;
+    return `<div class="chg"><span>${label}</span><span class="num">${a.toFixed(2)}% → ${b.toFixed(2)}% <span style="font-weight:600;margin-left:6px;color:${color}">${delta}</span></span></div>`;
+  }
+
+  function spark(label: string, s: (number | null)[], color: string, quarters: string[]) {
+    const { points, last } = sparkPoints(s);
+    const lastV = [...s].reverse().find((v) => v != null);
+    if (!points) return "";
+    return `<figure class="spark"><figcaption><span>${label}</span><strong class="num">${fixed(lastV as number)}%</strong></figcaption>
+      <svg viewBox="0 0 200 56" width="100%" height="56" role="img" aria-label="${esc(label)} over eight quarters: ${s.map((v) => (v == null ? "not reported" : v.toFixed(2))).join(", ")}">
+      <polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      ${last ? `<circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${color}"></circle>` : ""}</svg>
+      <div class="spark-q"><span>${quarters[0]}</span><span>${quarters[quarters.length - 1]}</span></div></figure>`;
+  }
+
+  async function render() {
+    const rows = watched.map((c) => index.find((b) => b.c === c)).filter(Boolean) as IndexRow[];
+    rows.sort((a, b) => (b.p ?? -1) - (a.p ?? -1));
+    const counts: Record<string, number> = { H: 0, E: 0, W: 0, L: 0 };
+    rows.forEach((r) => { if (r.b in counts) counts[r.b]++; });
+    const color: Record<string, string> = { H: "var(--band-H)", E: "var(--band-E)", W: "#7A5A12", L: "var(--band-L)" };
+    document.querySelector("[data-summary]")!.innerHTML =
+      `<div class="stack"><span class="serif sum-n">${rows.length}</span><span class="small muted">banks watched</span></div>` +
+      ["H", "E", "W", "L"].map((k) => `<div class="stack"><span class="serif sum-n" style="color:${color[k]}">${counts[k]}</span><span class="small muted">${BANDS[k].name}</span></div>`).join("");
+    document.querySelector<HTMLElement>("[data-empty]")!.hidden = rows.length > 0;
+
+    const cards = await Promise.all(rows.map(async (r) => {
+      const f = await bankFile(r.c);
+      const meta = [r.ci, r.st, `CERT ${r.c}`, money(r.a) + " assets", f?.profile?.ageYears != null ? `${f.profile.ageYears} years old` : null].filter(Boolean).join(" · ");
+      const reasons = (f?.reasons?.map((x: any) => x.text) ?? (r.r ? [r.r] : [])).map((t: string) => `<li>${esc(t)}</li>`).join("");
+      const h = f?.history, q: string[] = f?.quarters ?? [];
+      const note = f?.note?.text ? `<p class="notice" style="margin-top:6px">${esc(f.note.text)}</p>` : "";
+      const scoreLine = r.p != null ? "chance of distress in the next twelve months" : esc(BANDS[r.b]?.name ?? "");
+      return `<article class="bank-card">
+        <div class="card-head">
+          <div class="stack" style="gap:4px">
+            <h2 class="serif card-name"><a href="${bankUrl(r.c)}">${esc(r.n)}</a></h2>
+            <span class="muted" style="font-size:14px">${esc(meta)}</span>
+          </div>
+          <button type="button" class="btn ghost" data-remove="${r.c}" aria-label="Remove ${esc(r.n)} from watchlist">Remove</button>
+        </div>
+        <div class="grid-cols">
+          <div class="stack" style="gap:10px">
+            <div style="display:flex;align-items:baseline;gap:14px;flex-wrap:wrap"><span class="serif big-pct">${r.p != null ? pct0(r.p) : "–"}</span>${bandChip(r.b)}</div>
+            <span style="font-size:14px;color:var(--ink-2)">${scoreLine}</span>${note}
+          </div>
+          <div class="stack" style="gap:10px"><h3 class="mini">Why</h3>${reasons ? `<ol class="reasons">${reasons}</ol>` : `<p class="muted small">No reasons for this band.</p>`}</div>
+          ${h ? `<div class="stack" style="gap:10px"><h3 class="mini">What changed since last quarter</h3>${change("Non-current loans", h.ncl, true)}${change("Tier 1 leverage", h.t1, false)}${change("Return on assets", h.roa, false)}</div>` : ""}
+        </div>
+        ${h ? `<div class="sparks">${spark("Non-current loans", h.ncl, "#8E1B2E", q)}${spark("Tier 1 leverage", h.t1, "#3E5C73", q)}${spark("Return on assets", h.roa, "#1A1612", q)}</div>`
+            : `<p class="small muted">The full card (history, changes) comes with the live data; the preview has full files for ${preview.size} banks.</p>`}
+      </article>`;
+    }));
+    document.querySelector("[data-cards]")!.innerHTML = cards.join("");
+    document.querySelectorAll<HTMLButtonElement>("[data-remove]").forEach((b) => b.addEventListener("click", () => {
+      const c = Number(b.dataset.remove);
+      watched = watched.filter((x) => x !== c);
+      saveWatchlist(watched);
+      say("Removed");
+      render();
+      renderResults();
+    }));
+  }
+
+  const input = document.querySelector<HTMLInputElement>("#bank-search")!;
+  const list = document.querySelector<HTMLUListElement>("#search-results")!;
+  function renderResults() {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 2) { list.hidden = true; return; }
+    const hits = index.filter((b) => b.n.toLowerCase().includes(q) || (b.st ?? "").toLowerCase() === q).slice(0, 8);
+    list.hidden = false;
+    list.innerHTML = hits.length ? hits.map((b) => {
+      const on = watched.includes(b.c);
+      return `<li><span><strong>${esc(b.n)}</strong> <span class="muted">· ${esc(b.st)} · ${b.p != null ? pct0(b.p) : esc(BANDS[b.b]?.short)}</span></span>
+        <button type="button" class="btn" data-toggle="${b.c}" aria-pressed="${on}">${on ? "Remove" : "Add"}<span class="sr-only"> ${esc(b.n)}</span></button></li>`;
+    }).join("") : `<li class="muted small">No bank matches.</li>`;
+    list.querySelectorAll<HTMLButtonElement>("[data-toggle]").forEach((btn) => btn.addEventListener("click", () => {
+      const c = Number(btn.dataset.toggle);
+      watched = watched.includes(c) ? watched.filter((x) => x !== c) : [...watched, c];
+      saveWatchlist(watched);
+      say(watched.includes(c) ? "Added" : "Removed");
+      renderResults();
+      render();
+    }));
+  }
+  input.addEventListener("input", renderResults);
+
+  document.querySelector("[data-copy]")!.addEventListener("click", async () => {
+    const url = new URL(location.href);
+    if (watched.length) url.searchParams.set("certs", watched.join(","));
+    try { await navigator.clipboard.writeText(url.toString()); say("Link copied"); }
+    catch { say("Copy the address bar: it holds your list"); }
+  });
+  document.querySelector("[data-csv]")!.addEventListener("click", () => {
+    const rows = watched.map((c) => index.find((b) => b.c === c)).filter(Boolean) as IndexRow[];
+    downloadCsv("bank-health-watchlist.csv", [["cert", "bank", "city", "state", "assets_millions", "band", "probability", "top_reason"],
+      ...rows.map((r) => [r.c, r.n, r.ci, r.st, r.a, BANDS[r.b]?.name ?? r.b, r.p, r.r])]);
+    say("CSV downloaded");
+  });
+
+  loadJson("banks_index.json").then((ix) => {
+    index = ix.banks;
+    preview = new Set(ix.preview ?? []);
+    if (!new URLSearchParams(location.search).get("certs") && watched.length === 0 && ix.fixture) {
+      watched = [24045, 19629, 59245, 13986].filter((c) => index.some((b) => b.c === c));  // preview starter list
+    }
+    document.querySelector("[data-foot-asof]")!.textContent = `Data ${ix.dataAsOf.quarterLabel}.`;
+    render();
+  });
+</script>
+
+<style is:global>
+  .page { padding-top: 56px; padding-bottom: 80px; }
+  input[type="search"] { min-height: 52px; padding: 0 16px; font: 16px var(--sans); color: var(--ink); background: var(--card); border: 1px solid var(--ink); border-radius: 0; width: 100%; }
+  .results { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ink); border-top: none; background: var(--card); }
+  .results li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-top: 1px solid var(--rule-2); font-size: 15px; }
+  .results .btn { min-width: 96px; }
+  .summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); padding: 16px 0; }
+  .sum-counts { display: flex; flex-wrap: wrap; gap: 28px; }
+  .sum-n { font-size: 34px; line-height: 1; }
+  .status { color: var(--earnings); min-width: 120px; text-align: right; }
+  .empty { padding: 48px; border: 1px dashed #8A7F6E; text-align: center; color: var(--ink-3); font-size: 20px; }
+  .bank-card { background: var(--card); border: 1px solid var(--rule); border-top: 4px solid var(--ink); padding: 28px; display: flex; flex-direction: column; gap: 22px; }
+  .card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-start; }
+  .card-name { font-size: 30px; font-weight: 500; line-height: 1.15; }
+  .btn.ghost { border-color: #8A7F6E; color: var(--ink-2); font-weight: 500; }
+  .grid-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 28px; }
+  .big-pct { font-size: 58px; line-height: 1; font-weight: 500; }
+  .mini { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .reasons { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+  .chg { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; padding-bottom: 6px; border-bottom: 1px solid var(--rule-2); flex-wrap: wrap; }
+  .sparks { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: 16px; }
+  .spark { margin: 0; border: 1px solid var(--rule-2); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; background: var(--bg); }
+  .spark figcaption { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-3); }
+  .spark figcaption strong { color: var(--ink); }
+  .spark-q { display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+  @media (max-width: 640px) { .page { padding-top: 32px; } .bank-card { padding: 18px; } .big-pct { font-size: 46px; } .status { text-align: left; } }
+</style>
