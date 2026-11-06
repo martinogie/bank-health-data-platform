@@ -15,12 +15,20 @@ from __future__ import annotations
 import json
 import math
 import re
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 
 from ingestion.environment import assert_can_publish
 
-SCHEMA_VERSION = 3  # 3: "w" SHAP waterfall and "d" distress lines; 2: bands N and F (not scored)
+SCHEMA_VERSION = 5  # 5: waterfalls in waterfalls/<cert>.json ("wf" flag); 3: "w" and "d"; 2: bands N, F
+# The SHAP waterfalls (8 items, ~740 bytes a bank) live in one small file per bank, fetched by the page
+# only for the bank being viewed. Inside watchlist.json they made it 5.5 MB for 3,876 banks (prod run of
+# 6 Nov 2026), and a single waterfalls file would be about 2.9 MB, near the limit again; per-bank files
+# stay small at any count (Martins chose this, option B).
+WATERFALL_DIR = "waterfalls"
+WATERFALL_PATH = WATERFALL_DIR + "/{c}.json"
+MAX_WATERFALL_BYTES = 8 * 1024
 HISTORY_QUARTERS = 8
 MAX_BYTES = 3 * 1024 * 1024
 
@@ -328,7 +336,7 @@ def build_payload(
         }
         w, d = waterfall(r.get("shap_waterfall")), distress(r.get("distress_lines"))
         if w:
-            rec["w"] = w
+            rec["wf"] = 1  # its waterfall is in waterfalls/<cert>.json (build_waterfalls)
         if d is not None:
             rec["d"] = d
         if r.get("has_cfpb_complaints"):
@@ -350,6 +358,7 @@ def build_payload(
             "history": [quarter_label(q) for q in quarters],
             "metrics": {k: {"label": v[1], "unit": v[2], "higherIsBetter": v[3]} for k, v in METRICS.items()},
             "bands": {v: k for k, v in BAND_CODES.items()},
+            "waterfallPath": WATERFALL_PATH,
         },
         "peers": peers,
         "banks": banks,
@@ -396,7 +405,8 @@ def validate_payload(payload: dict) -> None:
         need(b["p"] is None or 0 <= b["p"] <= 1, f"bank {b['c']}: probability out of range")
         need(b.get("pp") is None or 0 <= b["pp"] <= 100, f"bank {b['c']}: percentile out of range")
         need(len(b["r"]) <= 3, f"bank {b['c']}: more than 3 reasons")
-        need("w" not in b or len(b["w"]["i"]) <= 8, f"bank {b['c']}: more than 8 waterfall items")
+        need("w" not in b, f"bank {b['c']}: waterfalls belong in {WATERFALL_DIR}/, not in watchlist.json")
+        need(b.get("wf", 1) == 1, f"bank {b['c']}: wf must be 1 when present")
         need(
             "d" not in b or b["b"] == "D", f"bank {b['c']}: distress lines only for banks already in distress"
         )
@@ -408,6 +418,66 @@ def validate_payload(payload: dict) -> None:
             (b["p"] is None) == (b["b"] in ("N", "F")),
             f"bank {b['c']}: only not-scored banks (N, F) have no probability",
         )
+
+
+def build_waterfalls(bank_rows: list[dict]) -> dict[int, dict]:
+    """{cert: file content} for every bank with a SHAP waterfall: {"c": cert, "q": quarter, "w": ...}.
+
+    The same banks get "wf": 1 in watchlist.json (build_payload)."""
+    out = {}
+    for r in bank_rows:
+        w = waterfall(r.get("shap_waterfall"))
+        if w:
+            q = _as_date(r.get("report_date"))
+            out[int(r["cert"])] = {"c": int(r["cert"]), "q": q.isoformat() if q else None, "w": w}
+    return out
+
+
+def validate_waterfall(doc: dict) -> None:
+    if not isinstance(doc.get("c"), int) or not isinstance(doc.get("w"), dict):
+        raise ValueError(f"waterfall file for {doc.get('c')!r}: needs an int c and an object w")
+    items = doc["w"].get("i")
+    if not isinstance(items, list) or len(items) > 8:
+        raise ValueError(f"waterfall file for bank {doc['c']}: i must be a list of at most 8 items")
+
+
+def write_waterfalls(docs: dict[int, dict], site_dir: Path) -> tuple[int, int]:
+    """Write site_dir/waterfalls/<cert>.json for every bank, replacing the whole folder at once.
+
+    Written into a fresh temporary folder that is then swapped in, so the published folder never
+    mixes two weeks, and files of banks no longer listed disappear. Returns (files, total bytes);
+    fails before touching the live folder if any file is invalid or over MAX_WATERFALL_BYTES."""
+    site_dir = Path(site_dir)
+    live, tmp, old = (
+        site_dir / WATERFALL_DIR,
+        site_dir / (WATERFALL_DIR + ".tmp"),
+        site_dir / (WATERFALL_DIR + ".old"),
+    )
+    for d in (tmp, old):
+        if d.exists():
+            shutil.rmtree(d)
+    tmp.mkdir(parents=True)
+    total = 0
+    try:
+        for cert, doc in sorted(docs.items()):
+            validate_waterfall(doc)
+            text = json.dumps(doc, ensure_ascii=False, separators=(",", ":"))
+            size = len(text.encode("utf-8"))
+            if size > MAX_WATERFALL_BYTES:
+                raise ValueError(
+                    f"waterfall file for bank {cert} would be {size:,} bytes, over {MAX_WATERFALL_BYTES:,}"
+                )
+            (tmp / f"{cert}.json").write_text(text, encoding="utf-8")
+            total += size
+    except Exception:
+        shutil.rmtree(tmp, ignore_errors=True)  # the live folder is untouched
+        raise
+    if live.exists():
+        live.rename(old)
+    tmp.rename(live)
+    if old.exists():
+        shutil.rmtree(old)
+    return len(docs), total
 
 
 def write_payload(payload: dict, path: Path) -> int:
@@ -491,6 +561,16 @@ def export(conn, out_path: Path, today: date | None = None) -> dict:
     assert_can_publish("the watchlist (site/data/watchlist.json)")
     banks, history, peers = fetch_rows(conn)
     payload = build_payload(banks, history, peers, today or date.today())
+    validate_payload(payload)  # check the main file (rules and size) before writing anything
+    main_bytes = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if main_bytes > MAX_BYTES:
+        raise ValueError(f"watchlist.json would be {main_bytes:,} bytes, over the {MAX_BYTES:,} limit")
+    docs = build_waterfalls(banks)
+    flagged = {b["c"] for b in payload["banks"] if b.get("wf")}
+    if flagged != set(docs):
+        raise ValueError(f"wf flags ({len(flagged)}) and waterfall files ({len(docs)}) don't match")
+    # Waterfalls first: the main file then never points at a bank file that isn't there yet.
+    n_files, wf_bytes = write_waterfalls(docs, Path(out_path).parent)
     size = write_payload(payload, out_path)
     meta = payload["meta"]
     return {
@@ -499,4 +579,6 @@ def export(conn, out_path: Path, today: date | None = None) -> dict:
         "banks": meta["banks"],
         "quarter": meta["quarterLabel"],
         "model_version": meta["modelVersion"],
+        "waterfall_files": n_files,
+        "waterfall_bytes": wf_bytes,
     }

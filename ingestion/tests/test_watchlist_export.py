@@ -365,3 +365,61 @@ def test_not_reported_waterfall_items_say_so():
     a, b = wx.waterfall(raw)["i"]
     assert a["nr"] == "Not reported: the missing figure itself raised the score" and a["v"] is None
     assert b["nr"] == "Not reported: the missing figure itself lowered the score"
+
+
+# ------------------------------------------------------------------ waterfall files (schema 5)
+# 6 Nov 2026: waterfalls inside watchlist.json made it 5.5 MB; they now live in one file per bank.
+WF = json.dumps(
+    {
+        "base_pct": 4.0,
+        "items": [{"f": "roa_pct", "v": -1.0, "m": 0.9, "pp": 30.0}],
+        "other_pp": 1.0,
+        "p_pct": 35.0,
+    }
+)
+
+
+def test_banks_with_a_waterfall_are_flagged_and_carry_no_waterfall_inline():
+    rows = [
+        bank_row(cert=1, risk_band="High", distress_probability=0.6, shap_waterfall=WF),
+        bank_row(cert=2, risk_band="Low", distress_probability=0.01),
+    ]
+    p = wx.build_payload(rows, [], peer_rows(), date(2026, 11, 6))
+    wx.validate_payload(p)
+    by_cert = {b["c"]: b for b in p["banks"]}
+    assert by_cert[1]["wf"] == 1 and "w" not in by_cert[1]
+    assert "wf" not in by_cert[2]
+    assert p["meta"]["schema"] == 5 and p["meta"]["waterfallPath"] == "waterfalls/{c}.json"
+    docs = wx.build_waterfalls(rows)
+    assert set(docs) == {1}
+    assert docs[1]["c"] == 1 and docs[1]["q"] == "2026-06-30" and docs[1]["w"]["i"][0]["f"] == "roa_pct"
+
+
+def test_the_validator_refuses_a_waterfall_inside_watchlist_json():
+    p = payload()
+    p["banks"][0]["w"] = {"b": 4.0, "i": [], "o": 0.0}
+    with pytest.raises(ValueError, match="waterfalls belong in waterfalls/"):
+        wx.validate_payload(p)
+
+
+def test_waterfall_files_replace_the_whole_folder(tmp_path):
+    docs = wx.build_waterfalls([bank_row(cert=c, shap_waterfall=WF) for c in (1, 2)])
+    assert wx.write_waterfalls(docs, tmp_path)[0] == 2
+    assert sorted(p.name for p in (tmp_path / "waterfalls").iterdir()) == ["1.json", "2.json"]
+    # next week bank 2 is gone and bank 3 is new: no stale file, no leftovers
+    docs = wx.build_waterfalls([bank_row(cert=c, shap_waterfall=WF) for c in (1, 3)])
+    n, total = wx.write_waterfalls(docs, tmp_path)
+    assert n == 2 and total > 0
+    assert sorted(p.name for p in (tmp_path / "waterfalls").iterdir()) == ["1.json", "3.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["waterfalls"]
+    assert json.loads((tmp_path / "waterfalls" / "3.json").read_text())["c"] == 3
+
+
+def test_a_bad_waterfall_file_leaves_last_weeks_folder_alone(tmp_path):
+    good = wx.build_waterfalls([bank_row(cert=1, shap_waterfall=WF)])
+    wx.write_waterfalls(good, tmp_path)
+    bad = {5: {"c": 5, "q": "2026-06-30", "w": {"b": 1, "i": [{"f": "x"}] * 9, "o": 0}}}  # 9 items
+    with pytest.raises(ValueError, match="at most 8 items"):
+        wx.write_waterfalls(bad, tmp_path)
+    assert sorted(p.name for p in (tmp_path / "waterfalls").iterdir()) == ["1.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["waterfalls"]  # no temporary folder left

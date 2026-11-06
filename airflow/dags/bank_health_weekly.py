@@ -32,7 +32,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `check_volumes` | rows added to bronze per source vs the usual (0, under 50% or over 3x alerts; a backfill only reports them); silver, gold, marts and scored banks vs the median of the last 4 successful weekly runs; the share of complaints matched to a bank (alert if more than 2 points below the usual) (`ingestion/volume_checks.py`) | read-only |
 | `check_model` | model monitoring (`07_monitor`): PSI of the score and features vs the previous 4 quarters and vs 2001–2019, the backtest from 2020 -> `OPS.MODEL_MONITORING`; a MODEL message when alerts are on (`MODEL_MONITOR_ALERTS`). Never fails the run | replaces this run's rows |
 | `check_credentials` | Databricks token expiry (token API) and the dates in `ops/credentials.yml`: an EXPIRING message for anything due within 14 days. Never fails the run | read-only |
-| `export_watchlist` | prod only: refresh `watchlist.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | file replaced atomically |
+| `export_watchlist` | prod only: refresh `watchlist.json` and `waterfalls/<cert>.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | waterfall folder swapped in first, then the file replaced atomically |
 | `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
 
 **Alerts** (Slack and Discord, `ingestion/alerts.py`): any task failing after its last retry, the
@@ -674,7 +674,8 @@ def bank_health_weekly():
     @task(
         doc_md="Refresh watchlist.json (one record per scored bank) for the watchlist page, in "
         "WATCHLIST_DIR outside the git checkout. Overwrites the file atomically, so it is safe to re-run. "
-        "To publish, copy it to site/data/ on a branch and open a pull request."
+        "Also writes waterfalls/<cert>.json (one small file per bank, swapped in as a whole folder first). "
+        "To publish, copy watchlist.json and the waterfalls/ folder to site/data/ on a branch and open a pull request."
     )
     def export_watchlist() -> dict:
         import logging
