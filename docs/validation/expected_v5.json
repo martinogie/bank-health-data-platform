@@ -1,0 +1,50 @@
+{
+  "_about": "What docs/model_card.md says about v5 (registered 2026-10-25). scripts/validation_reproduce.py compares these with the metrics MLflow logged for the @champion version's training run. Tolerances cover the rounding in the model card only. 'where' says which record is compared: the training run's logged metric, or the model version's tag.",
+  "model": "bank_health.ml.distress_model",
+  "alias": "champion",
+  "version": "5",
+  "metrics": {
+    "test_roc_auc": {
+      "expected": 0.8515,
+      "tolerance": 5e-05,
+      "source": "model card, test results 2020-2024",
+      "where": "run_metric"
+    },
+    "test_pr_auc": {
+      "expected": 0.333,
+      "tolerance": 0.0005,
+      "source": "model card, test results 2020-2024",
+      "where": "run_metric"
+    },
+    "test_top_decile_capture": {
+      "expected": 0.526,
+      "tolerance": 0.0005,
+      "source": "model card, test results 2020-2024",
+      "where": "run_metric"
+    },
+    "test_brier": {
+      "expected": 0.0436,
+      "tolerance": 5e-05,
+      "source": "model card, test results 2020-2024",
+      "where": "run_metric"
+    },
+    "band_cutoff_high": {
+      "expected": 0.358027,
+      "tolerance": 5e-07,
+      "source": "model card, bands (scoring reads these version tags: _scoring_rules.BAND_TAGS)",
+      "where": "version_tag"
+    },
+    "band_cutoff_elevated": {
+      "expected": 0.162898,
+      "tolerance": 5e-07,
+      "source": "model card, bands (scoring reads these version tags: _scoring_rules.BAND_TAGS)",
+      "where": "version_tag"
+    },
+    "band_cutoff_watch": {
+      "expected": 0.035561,
+      "tolerance": 5e-07,
+      "source": "model card, bands (scoring reads these version tags: _scoring_rules.BAND_TAGS)",
+      "where": "version_tag"
+    }
+  }
+}
