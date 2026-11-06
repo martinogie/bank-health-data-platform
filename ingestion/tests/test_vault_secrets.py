@@ -46,11 +46,11 @@ def test_fetch_writes_every_secret_into_the_runtime_dir(tmp_path, capsys):
     assert (env / "SLACK_WEBHOOK_URL").read_text() == "value-of-prod-slack-webhook-123"
     key = (tmp_path / "keys" / "snowflake_rsa_key.p8").read_text()
     assert key == "fake key line 1\nfake key line 2\n"  # kept as is, one newline added at the end
-    assert len(list(env.iterdir())) == 7
+    assert len(list(env.iterdir())) == 8
     if os.name == "posix":
         assert (env / "DATABRICKS_TOKEN").stat().st_mode & 0o777 == 0o600
     out = capsys.readouterr()
-    assert "8 secrets written" in out.out
+    assert "9 secrets written" in out.out
     assert_no_values(out.out + out.err)
 
 
@@ -163,7 +163,7 @@ def test_cleanup_script_dry_run_then_apply(tmp_path):
     )  # fmt: skip
 
     dry = run("--no-restart")
-    assert dry.returncode == 0 and "DRY RUN" in dry.stdout and "8 line(s)" in dry.stdout
+    assert dry.returncode == 0 and "DRY RUN" in dry.stdout and "9 line(s)" in dry.stdout
     assert env.read_text().count("=") == len(lines)  # nothing changed
 
     done = run("--apply", "--no-restart")
@@ -194,3 +194,33 @@ def test_cleanup_script_lists_the_same_vault_names_as_the_fetch_script():
     block = text[text.index("local vault_names=(") : text.index(")", text.index("local vault_names=("))]
     names = set(block.replace("local vault_names=(", "").split())
     assert names == {t for k, t in vs.SECRETS.values() if k == "env"}
+
+
+def run_db_conn(env_extra):
+    script = (ROOT / "airflow" / "include" / "db_conn.sh").as_posix()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BANK_HEALTH_")}
+    return subprocess.run([BASH, script], capture_output=True, text=True, env={**env, **env_extra})
+
+
+@pytest.mark.skipif(BASH is None or os.name != "posix", reason="needs a POSIX bash")
+def test_db_conn_uses_the_default_password_until_the_switch(tmp_path):
+    r = run_db_conn({})
+    assert r.returncode == 0 and r.stdout == "postgresql+psycopg2://airflow:airflow@postgres/airflow"
+
+
+@pytest.mark.skipif(BASH is None or os.name != "posix", reason="needs a POSIX bash")
+def test_db_conn_reads_the_vault_password_after_the_switch(tmp_path):
+    (tmp_path / "env").mkdir()
+    (tmp_path / "env" / "AIRFLOW_DB_PASSWORD").write_text("abc123XYZabc123XYZabc123")
+    on = {"BANK_HEALTH_DB_PASSWORD_FROM_VAULT": "1", "BANK_HEALTH_SECRETS_DIR": str(tmp_path)}
+    r = run_db_conn(on)
+    assert (
+        r.returncode == 0
+        and r.stdout == "postgresql+psycopg2://airflow:abc123XYZabc123XYZabc123@postgres/airflow"
+    )
+    (tmp_path / "env" / "AIRFLOW_DB_PASSWORD").write_text("has spaces & @ signs")
+    bad = run_db_conn(on)
+    assert bad.returncode == 1 and "letters and digits only" in bad.stderr and "@ signs" not in bad.stderr
+    (tmp_path / "env" / "AIRFLOW_DB_PASSWORD").unlink()
+    missing = run_db_conn(on)
+    assert missing.returncode == 1 and "is missing" in missing.stderr

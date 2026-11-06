@@ -16,6 +16,7 @@ before, so the pipeline code is unchanged. Nothing secret stays on disk once the
 | `prod-airflow-jwt-secret` | `AIRFLOW__API_AUTH__JWT_SECRET` | Airflow's API and task tokens |
 | `prod-airflow-admin-password` | `_AIRFLOW_WWW_USER_PASSWORD` | the admin user, created by `airflow-init` |
 | `prod-slack-webhook`, `prod-discord-webhook` | `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` | alerts |
+| `prod-airflow-db-password` | `/run/bank-health/env/AIRFLOW_DB_PASSWORD` | Airflow's own metadata database, through `airflow/include/db_conn.sh`, once switched (below) |
 
 - Vault `bank-health-vault` (standard vault, software key `bank-health-secrets-key`: free).
   Its OCID is in `/srv/bank-health/app/airflow/.env` as `BANK_HEALTH_VAULT_ID` (not secret, but
@@ -28,8 +29,7 @@ before, so the pipeline code is unchanged. Nothing secret stays on disk once the
   (refreshes the RAM copy on every deploy).
 - **Not in Vault, on purpose:** the Postgres mirror and pgAdmin passwords (`POSTGRES_PASSWORD`,
   `POSTGRES_VIEWER_PASSWORD`, `PGADMIN_PASSWORD`). The mirror runs on Martins' PC only, not on the
-  VM; their copies on the VM are removed in the cleanup. Airflow's own metadata database password
-  (`prod-airflow-db-password`) is changed later, in its own small PR with its own rollback.
+  VM; their copies on the VM were removed in the cleanup (6 Nov 2026).
 
 ## The two modes
 
@@ -130,6 +130,41 @@ without those lines, overwrites and removes the old copies (`shred`), recreates 
 runs the smoke check and checks that Docker's stored container settings hold none of the 7 Vault
 names. (On a journaling or copy-on-write disk, `shred` can't guarantee every old block is gone, but
 no readable copy remains.) Then confirm with `vault_secrets.py check-running`: all 7 match.
+
+## Airflow's database password and the admin password
+
+Airflow's own metadata database (run history, variables) started with the default password
+`airflow`; it is reachable only inside Docker's own network. Airflow now reads the database address
+from a command (`airflow/include/db_conn.sh`): the default password until the switch, the Vault one
+(`prod-airflow-db-password`) after it.
+
+**Order matters:** the Vault secret `prod-airflow-db-password` must exist **before** the code that
+lists it is deployed; otherwise the deploy's Vault read refuses (safely, nothing changes).
+
+1. **Martins, in the OCI console** (Vault `bank-health-vault` → Secrets):
+   - **Create Secret** `prod-airflow-db-password`, key `bank-health-secrets-key`, Plain-Text, value:
+     **letters and digits only, at least 24** (it goes into a URL). For example, on the PC:
+     `& "C:\Program Files\Git\usr\bin\openssl.exe" rand -hex 24`.
+   - On `prod-airflow-admin-password`: **Create Secret Version** with a strong new value, **at least
+     16 characters** (any characters). Keep both in the password manager.
+2. Merge the PR and approve the deploy. The deploy reads the new secret into RAM; nothing else
+   changes yet.
+3. **The database switch** (as deploy, not on a Monday morning, no run in progress):
+   ```bash
+   /srv/bank-health/app/deploy/airflow_db_password.sh            # dry run: checks only
+   /srv/bank-health/app/deploy/airflow_db_password.sh --apply    # database + Airflow -> Vault password
+   ```
+   It sets the database user's password (over stdin, never on a command line), adds
+   `BANK_HEALTH_DB_PASSWORD_FROM_VAULT=1` to `airflow/.env`, recreates the containers and runs the
+   smoke check. **Rollback:** `airflow_db_password.sh --rollback` (both back to `airflow`).
+4. **The admin password:** `/srv/bank-health/app/deploy/airflow_admin_reset.sh` reads Vault, resets
+   the admin user to the new value inside the scheduler container, and checks an API login with it.
+   **Rollback:** make the previous secret version current again in the console (or add a version
+   with the old value), then run the script again.
+
+Tested in dev on 6 Nov 2026: switch off (unchanged), Vault mode, switch on with a random test
+password (all healthy, the database reached with the new password), admin reset (API login 201),
+rollback (default password again, all healthy).
 
 ## Changing a secret later (rotation)
 

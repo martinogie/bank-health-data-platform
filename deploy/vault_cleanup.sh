@@ -30,9 +30,10 @@ main() {
     done
     local env_file="$root/secrets/.env" compose_env="$root/app/airflow/.env"
     local runtime="${BANK_HEALTH_RUNTIME:-/run/bank-health}"
-    # Names only. The first 7 must match SECRETS in deploy/vault_secrets.py (a test checks it).
+    # Names only. These must match SECRETS in deploy/vault_secrets.py (a test checks it).
     local vault_names=(DATABRICKS_TOKEN SNOWFLAKE_PRIVATE_KEY_PASSPHRASE AIRFLOW__CORE__FERNET_KEY
-        AIRFLOW__API_AUTH__JWT_SECRET _AIRFLOW_WWW_USER_PASSWORD SLACK_WEBHOOK_URL DISCORD_WEBHOOK_URL)
+        AIRFLOW__API_AUTH__JWT_SECRET _AIRFLOW_WWW_USER_PASSWORD SLACK_WEBHOOK_URL DISCORD_WEBHOOK_URL
+        AIRFLOW_DB_PASSWORD)
     local mirror_names=(POSTGRES_USER POSTGRES_PASSWORD POSTGRES_VIEWER_PASSWORD PGADMIN_EMAIL PGADMIN_PASSWORD)
     local files=("$root/secrets/.env.save" "$root/secrets/keys/snowflake_rsa_key.p8" "$root/app/airflow/.env.before-vault")
 
