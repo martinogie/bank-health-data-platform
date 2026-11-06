@@ -23,9 +23,12 @@ protecting is the ability to run, change or spend on the infrastructure.
   read it, so it can't rewrite the rule that restrains it.
 - Spending: resource monitors and an account budget (spending limit 5) stop runaway cost
   ([ADR 0004](docs/adr/0004-snowflake-with-a-postgresql-mirror.md)).
-- **Network policy** (Phase 4, PR 7; planned): `SVC_BANK_PIPELINE` may log in only from the VM's
-  reserved IP (plus the owner's home IP until 20 Nov 2026, while the PC is the rollback). The other
-  service users get no policy, on purpose:
+- **Network policy** (Phase 4, PR 7; [network_policy.md](docs/runbooks/network_policy.md)):
+  `SVC_BANK_PIPELINE` may log in only from the VM's reserved IP (plus the owner's home IP until
+  20 Nov 2026, while the PC is the rollback), through the network rule
+  `BANK_HEALTH.CONTROL.PIPELINE_ALLOWED_IPS` and the policy `SVC_BANK_PIPELINE_POLICY`. Before it
+  was set, that user's 6-day login history held only those two addresses. The other service users
+  get no policy, on purpose:
   - `SVC_BANK_CI` runs on GitHub-hosted runners, whose addresses are many and change; it is
     read-only on prod and writes only temporary schemas in dev.
   - `SVC_BANK_DEV` runs from the owner's PC on a changing home IP; it can't reach prod.
