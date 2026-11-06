@@ -44,4 +44,4 @@ What limits it today:
 **Recommendation:** A now; C is a cheap improvement if wanted (one `ALTER SCHEMA` by Martins); B
 only if the pipeline role were ever shared or exposed beyond its one service user.
 
-Decision: ______ (Martins, date)
+**Decision: A, keep as is** (Martins, 6 Nov 2026).

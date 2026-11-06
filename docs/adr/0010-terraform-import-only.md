@@ -70,6 +70,9 @@ Created by Terraform (not imported): the OCI quota policy `bank-health-free-tier
 
 ## Consequences
 
+- The SANDBOX demo (6 Nov 2026, [sandbox_demo.md](../sandbox_demo.md)) ran the full create and
+  destroy cycle on a throwaway bucket with its own state; the guard blocked both in import-only mode
+  and passed them with `--allow-changes`.
 - Drift shows up as a non-empty plan; a clean plan is evidence the live setup matches the code.
 - Changes made on purpose (for example lowering the credit caps around 15 Nov 2026) go
   through a plan Martins approves, then the apply.
