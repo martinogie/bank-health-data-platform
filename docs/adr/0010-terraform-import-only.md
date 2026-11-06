@@ -63,6 +63,10 @@ Terraform describes what **already exists**, by importing it. It does not create
 | Martins' own Snowflake user | a person, not platform infrastructure |
 | Grants (about 100, including 10 future grants) | kept in the SQL scripts (`snowflake/setup*.sql`), decided by Martins on 3 Nov 2026. The grants on `MARTS` travel with the schema that write-audit-publish swaps every week (ADR 0005); the future grants are set by the setup scripts; the objects dbt creates are dbt's. Managing part of this in Terraform and part in SQL or dbt would have two tools fighting over the same grants, and each of the remaining ~60 grants needs a hand-built import ID |
 | The state bucket; Oracle's default "Tenant Admin Policy" | bootstrap and provider defaults |
+| Schema `BANK_HEALTH.CONTROL` and its `PROD_SCHEDULER` row (PR 10) | created by `snowflake/setup_control.sql` as ACCOUNTADMIN; the schema can be imported later, the row stays SQL (cutover changes it) |
+
+Created by Terraform (not imported): the OCI quota policy `bank-health-free-tier-only` (PR 10,
+`infra/terraform/oci/quotas.tf`), applied only after Martins approved its plan.
 
 ## Consequences
 

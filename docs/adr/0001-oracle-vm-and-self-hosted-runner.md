@@ -45,7 +45,7 @@ Compose stack, and an Airflow image that already builds for linux/arm64.
   `pull_request` trigger. The runner user has no Docker access, can't read secrets, and may run
   only `deploy.sh`, which only fast-forwards to the current `main`. Whoever controls the GitHub
   account controls the VM, so two-factor authentication matters. Fast removal is in the runbook.
-- **One scheduler at a time** is enforced by `OPS.PROD_SCHEDULER`, not only by procedure
+- **One scheduler at a time** is enforced by `CONTROL.PROD_SCHEDULER`, not only by procedure
   ([cutover_and_rollback.md](../runbooks/cutover_and_rollback.md)).
 - **A down VM can't report itself**, so a GitHub Actions watchdog checks the run log from outside
   every Monday ([ADR 0002](0002-alert-channels-slack-and-discord.md)).

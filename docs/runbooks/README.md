@@ -31,6 +31,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | [oracle_vm_setup.md](oracle_vm_setup.md) | Building the Oracle VM from scratch |
 | [cutover_and_rollback.md](cutover_and_rollback.md) | Moving prod between the PC and the VM, and back |
 | [vault.md](vault.md) | Prod secrets in OCI Vault: setup, the switch, rollback, cleanup, changing a secret |
+| [ssh_key_passphrase.md](ssh_key_passphrase.md) | A passphrase on the VM's SSH key, with the Windows ssh-agent |
 | [../runbook.md](../runbook.md) | Model operations: top-20 review, promotion, rollback, the Databricks environment |
 
 Service levels: [../slos.md](../slos.md). Decisions behind all of this: [../adr/](../adr/).
