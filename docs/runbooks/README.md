@@ -6,6 +6,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 |---|---|
 | **FAILED: bank_health_weekly / \<task\>** in Slack or Discord | [alerts.md](alerts.md): what to do for each alert |
 | … *Databricks Free Edition daily quota reached* | [quota_errors.md](quota_errors.md#databricks-free-edition-daily-quota) |
+| … *Databricks refused the request (429 …)* | [quota_errors.md](quota_errors.md#databricks-refused-a-request-429) |
 | … *Snowflake credit cap reached* (or the watchdog says so) | [quota_errors.md](quota_errors.md#snowflake-credit-cap-reached) |
 | **FAILED … check_freshness** / **check_volumes** | [alerts.md](alerts.md) (first steps and thresholds) |
 | **FAILED … check_contracts** (a source API changed) | [alerts.md](alerts.md); the contracts: `ingestion/contracts/`, [ADR 0007](../adr/0007-data-contracts-before-bronze.md) |
