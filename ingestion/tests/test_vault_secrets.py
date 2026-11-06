@@ -81,23 +81,21 @@ def test_fetch_refuses_a_missing_runtime_dir(tmp_path, capsys):
     assert "does not exist" in capsys.readouterr().err and not missing.exists()
 
 
-def test_check_env_reports_matches_and_differences_without_values(tmp_path, capsys):
-    env_file = tmp_path / "old.env"
-    env_file.write_text(
-        "DATABRICKS_TOKEN=dapi-token\n"
-        'SLACK_WEBHOOK_URL="value-of-prod-slack-webhook-123"\n'
-        "DISCORD_WEBHOOK_URL=something-else\n"
-        "SNOWFLAKE_PRIVATE_KEY_PASSPHRASE=\n"
-    )
-    assert vs.main(["check-env", str(env_file)], reader=fake_reader(VALUES)) == 1
+def test_check_running_compares_fingerprints_without_values(capsys):
+    import hashlib
+
+    def running(var):  # what the running scheduler holds: all as in Vault, except Discord
+        target = {t: n for n, (k, t) in vs.SECRETS.items() if k == "env"}[var]
+        value = "something-else" if var == "DISCORD_WEBHOOK_URL" else VALUES[target]
+        return hashlib.sha256(value.strip().encode()).hexdigest()
+
+    assert vs.main(["check-running"], reader=fake_reader(VALUES), running=running) == 1
     out = capsys.readouterr().out
-    assert "prod-databricks-token: matches DATABRICKS_TOKEN" in out
-    assert "prod-slack-webhook: matches SLACK_WEBHOOK_URL" in out
+    assert "prod-databricks-token: matches DATABRICKS_TOKEN" in out  # stray newline ignored
     assert "prod-discord-webhook: DIFFERS from DISCORD_WEBHOOK_URL" in out
-    assert "prod-snowflake-key-passphrase: differs by design" in out
-    assert "prod-airflow-fernet-key: AIRFLOW__CORE__FERNET_KEY not in the file" in out
+    assert "prod-snowflake-private-key: keys/snowflake_rsa_key.p8: a file, not compared" in out
     assert_no_values(out)
-    assert "something-else" not in out
+    assert "something-else" not in out and hashlib.sha256(b"x").hexdigest()[:8] not in out
 
 
 def test_the_vault_id_comes_from_the_compose_env(tmp_path):
@@ -136,3 +134,63 @@ def test_load_secrets_sh_exports_in_vault_mode_and_stops_when_one_is_missing(tmp
     assert "started" not in bad.stdout
     off = run_loader("", 'echo "env mode ${DATABRICKS_TOKEN:-unset}"')
     assert off.returncode == 0 and off.stdout.strip() == "env mode unset"
+
+
+@pytest.mark.skipif(BASH is None or os.name != "posix", reason="needs a POSIX bash")
+def test_cleanup_script_dry_run_then_apply(tmp_path):
+    """deploy/vault_cleanup.sh against a fake /srv/bank-health (no Docker: --no-restart)."""
+    root, runtime = tmp_path / "srv", tmp_path / "run"
+    runtime.mkdir()  # on the VM the systemd unit creates it
+    (root / "secrets" / "keys").mkdir(parents=True)
+    (root / "app" / "airflow").mkdir(parents=True)
+    (root / "app" / "airflow" / ".env").write_text(
+        "BANK_HEALTH_RUNTIME_SECRETS_DIR=/run/bank-health\nBANK_HEALTH_KEYS_DIR=/run/bank-health/keys\n"
+    )
+    names = [t for k, t in vs.SECRETS.values() if k == "env"]
+    lines = [f"{n}=secret-{i}" for i, n in enumerate(names)] + [
+        "POSTGRES_PASSWORD=mirror",
+        "SNOWFLAKE_ACCOUNT=keep-me",
+    ]
+    env = root / "secrets" / ".env"
+    env.write_text("\n".join(lines) + "\n")
+    for f in ("secrets/.env.save", "secrets/keys/snowflake_rsa_key.p8", "app/airflow/.env.before-vault"):
+        (root / f).write_text("old")
+    assert vs.main(["fetch", "--runtime-dir", str(runtime)], reader=fake_reader(VALUES)) == 0
+    script = (ROOT / "deploy" / "vault_cleanup.sh").as_posix()
+    run = lambda *a: subprocess.run(  # noqa: E731
+        [BASH, script, *a], capture_output=True, text=True,
+        env={**os.environ, "BANK_HEALTH_ROOT": str(root), "BANK_HEALTH_RUNTIME": str(runtime)},
+    )  # fmt: skip
+
+    dry = run("--no-restart")
+    assert dry.returncode == 0 and "DRY RUN" in dry.stdout and "8 line(s)" in dry.stdout
+    assert env.read_text().count("=") == len(lines)  # nothing changed
+
+    done = run("--apply", "--no-restart")
+    assert done.returncode == 0, done.stderr
+    assert env.read_text() == "SNOWFLAKE_ACCOUNT=keep-me\n"
+    assert (
+        not (root / "secrets" / ".env.save").exists()
+        and not (root / "secrets/keys/snowflake_rsa_key.p8").exists()
+    )
+    assert not (root / "app/airflow/.env.before-vault").exists()
+    assert "secret-" not in done.stdout + done.stderr  # values never printed
+
+
+@pytest.mark.skipif(BASH is None or os.name != "posix", reason="needs a POSIX bash")
+def test_cleanup_script_refuses_without_vault_mode(tmp_path):
+    root = tmp_path / "srv"
+    (root / "app" / "airflow").mkdir(parents=True)
+    (root / "app" / "airflow" / ".env").write_text("BANK_HEALTH_KEYS_DIR=/srv/bank-health/secrets/keys\n")
+    r = subprocess.run(
+        [BASH, (ROOT / "deploy" / "vault_cleanup.sh").as_posix(), "--apply", "--no-restart"],
+        capture_output=True, text=True, env={**os.environ, "BANK_HEALTH_ROOT": str(root)},
+    )  # fmt: skip
+    assert r.returncode == 1 and "Vault mode is not on" in r.stderr
+
+
+def test_cleanup_script_lists_the_same_vault_names_as_the_fetch_script():
+    text = (ROOT / "deploy" / "vault_cleanup.sh").read_text()
+    block = text[text.index("local vault_names=(") : text.index(")", text.index("local vault_names=("))]
+    names = set(block.replace("local vault_names=(", "").split())
+    assert names == {t for k, t in vs.SECRETS.values() if k == "env"}
