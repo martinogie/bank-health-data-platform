@@ -64,6 +64,22 @@ text into a test in `ingestion/tests/test_alerts.py` and extend the pattern.
 - The run log keeps a history of run durations (`OPS.PIPELINE_RUNS`). A steady climb in run time
   is the early warning.
 
+## Databricks refused a request (429)
+
+The alert says **Databricks refused the request (429 RESOURCE_EXHAUSTED; not confirmed as the
+daily quota)**. Databricks answered "Cannot create the resource, please try again later" without
+mentioning a quota. On 6 Nov 2026 this hit the Git folder update in `sync_databricks_job` with no
+compute used that day; a **Pull** in the browser then worked, and the next runs only had small
+updates to pull.
+
+1. **Don't retry the run straight away.** Check whether compute was used today (Databricks →
+   Jobs & Pipelines → Runs). If runs did use a lot of compute, treat it as the daily quota (above).
+2. If the failed task is `sync_databricks_job`: open the Git folder `bank-health-data-platform`
+   in the browser, click the branch name → **Pull**. If that works, the folder is current; start
+   the run again (or wait for the next scheduled one).
+3. If the browser pull fails too, note its exact message and leave Databricks alone until the next
+   day.
+
 ## Snowflake credit cap reached
 
 Snowflake **resource monitors** cap credits per month and suspend a warehouse at 100%:

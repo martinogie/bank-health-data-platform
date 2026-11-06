@@ -36,6 +36,5 @@ SELECT * FROM BANK_HEALTH.CONTROL.PROD_SCHEDULER;             -- one row: oracle
 SELECT (SELECT HOST_ID FROM BANK_HEALTH.OPS.PROD_SCHEDULER)
      = (SELECT HOST_ID FROM BANK_HEALTH.CONTROL.PROD_SCHEDULER) AS SAME_HOST;   -- TRUE
 
--- 3. LATER, only after PR 10 is deployed, check_environment has passed against CONTROL in prod,
---    and Martins has said OK. Not part of the first run of this file.
--- DROP TABLE BANK_HEALTH.OPS.PROD_SCHEDULER;
+-- 3. Done on 6 Nov 2026 by Martins, after the guard passed against CONTROL in prod:
+--    DROP TABLE BANK_HEALTH.OPS.PROD_SCHEDULER;   (kept here as the record; don't run it again)

@@ -149,6 +149,20 @@ def test_other_errors_are_not_quota_errors(text):
     assert not alerts.is_databricks_quota_error(text)
 
 
+# The real error of 6 Nov 2026: a Git folder update refused with no compute used that day.
+REFUSED_GIT_PULL = (
+    'HTTPError: Databricks PATCH /api/2.0/repos/2265540122155698 failed: 429 {"error_code":"RESOURCE_EXHAUSTED",'
+    '"message":"Cannot create the resource, please try again later."}'
+)
+
+
+def test_a_bare_resource_exhausted_is_not_called_the_daily_quota():
+    assert not alerts.is_databricks_quota_error(REFUSED_GIT_PULL)
+    label, runbook = alerts.quota_reason(REFUSED_GIT_PULL)
+    assert label == alerts.REFUSED_LINE and "not confirmed as the daily quota" in label
+    assert runbook.endswith("#databricks-refused-a-request-429")
+
+
 # The exact error from the dev run of 30 Oct 2026 (load_snowflake), which was mislabelled as a
 # Databricks quota stop because it contains the word "quota".
 SNOWFLAKE_CAP_ERROR = (
