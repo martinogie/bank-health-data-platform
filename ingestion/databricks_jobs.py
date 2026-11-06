@@ -8,8 +8,11 @@ What runs where follows BANK_HEALTH_ENV (ingestion/environment.py):
 
 The job runs the notebooks in order on serverless compute:
     bronze -> silver -> gold -> train_model -> score
-Its settings live here (versioned with the repo) and `create_or_update_job` is
-idempotent: an existing job with the same name is reset to these settings.
+Since Phase 4 (PR 9) the job definitions are owned by the Databricks Asset Bundle
+(databricks.yml): the jobs are deployed with `databricks bundle deploy`, prod through the GitHub
+"production" approval. The pipeline only checks the job exists (`existing_job_id`) and makes the
+notebooks current; it no longer rewrites the job, so the two can't overwrite each other.
+`job_settings` stays as the reference a unit test compares databricks.yml with.
 
 `retrain` defaults to "false": weekly runs score with the current @champion model;
 04_train_model only retrains when run with retrain=true.
@@ -180,23 +183,24 @@ def job_settings(repo_path: str, s: Settings | None = None) -> dict:
     }
 
 
-def create_or_update_job(api: DatabricksAPI, settings: dict) -> int:
-    """Create the job, or reset the existing job with the same name. Returns job_id."""
-    jobs = api.call("GET", "/api/2.2/jobs/list", params={"name": settings["name"]}).get("jobs", [])
+def existing_job_id(api: DatabricksAPI, name: str) -> int:
+    """The id of the one job called `name` (deployed by the bundle); never creates or changes it."""
+    jobs = api.call("GET", "/api/2.2/jobs/list", params={"name": name}).get("jobs", [])
+    if not jobs:
+        raise RuntimeError(f"no job named {name}: deploy the bundle (databricks bundle deploy)")
     if len(jobs) > 1:
-        raise RuntimeError(f"{len(jobs)} jobs named {settings['name']}; expected at most one")
-    if jobs:
-        job_id = jobs[0]["job_id"]
-        api.call("POST", "/api/2.2/jobs/reset", json={"job_id": job_id, "new_settings": settings})
-        log.info("Updated job %s (%s)", settings["name"], job_id)
-    else:
-        job_id = api.call("POST", "/api/2.2/jobs/create", json=settings)["job_id"]
-        log.info("Created job %s (%s)", settings["name"], job_id)
-    return int(job_id)
+        raise RuntimeError(f"{len(jobs)} jobs named {name}; expected exactly one")
+    job_id = int(jobs[0]["job_id"])
+    deployment = (
+        api.call("GET", "/api/2.2/jobs/get", params={"job_id": job_id}).get("settings", {}).get("deployment")
+    )
+    managed = (deployment or {}).get("kind") == "BUNDLE"
+    log.info("Job %s (%s): %s", name, job_id, "bundle-managed" if managed else "NOT bundle-managed yet")
+    return job_id
 
 
 if __name__ == "__main__":
-    # Manual: python -m ingestion.databricks_jobs   (creates/updates the job, prints its id)
+    # Manual: python -m ingestion.databricks_jobs   (syncs the notebooks, checks the job, prints its id)
     import sys
     from pathlib import Path
 
@@ -206,6 +210,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     load_env()
     api = DatabricksAPI.from_env()
-    job = job_settings(sync_notebooks(api))
-    job_id = create_or_update_job(api, job)
-    print(f"job {job['name']}: id {job_id}")
+    sync_notebooks(api)
+    name = current_settings().databricks_job_name or ""
+    print(f"job {name}: id {existing_job_id(api, name)}")

@@ -1,0 +1,124 @@
+# Databricks Asset Bundle (Phase 4, PR 9): the Databricks job definitions as code.
+#
+# The bundle owns the two existing jobs (bound, not recreated: no duplicates):
+#   prod  bank_health_pipeline       notebooks from the Git folder (pulled to main by the pipeline)
+#   dev   bank_health_pipeline_dev   notebooks uploaded from a checkout by the dev pipeline
+# It defines the jobs only. Notebooks reach the workspace as before, so the bundle uploads no files.
+# Airflow's sync_databricks_job no longer rewrites the job; it only checks the job exists and makes
+# the notebooks current (ingestion/databricks_jobs.py).
+#
+#   databricks bundle validate -t dev --profile bank-health
+#   databricks bundle deploy   -t dev --profile bank-health      # dev: from Martins' PC
+#   prod: .github/workflows/databricks_bundle.yml, through the GitHub "production" approval
+#
+# The workspace address is not written here (public repo): the CLI takes it from the login
+# profile (--profile bank-health) or DATABRICKS_HOST (GitHub secret).
+#
+# Keep in step with ingestion/databricks_jobs.py (NOTEBOOK_TASKS, ENVIRONMENT_VERSION): a unit
+# test compares them.
+
+bundle:
+  name: bank_health
+
+sync:
+  exclude:
+    - "**"
+
+variables:
+  env:
+    description: Environment the notebooks run as (checked by each notebook against the catalog)
+  catalog:
+    description: Unity Catalog catalog
+  job_name:
+    description: Name of the existing job this target owns
+  notebook_root:
+    description: Workspace folder holding the notebooks
+
+resources:
+  jobs:
+    pipeline:
+      name: ${var.job_name}
+      description: "Bank Health: bronze -> silver -> gold -> train (only if retrain=true) -> score -> monitor"
+      max_concurrent_runs: 1
+      queue:
+        enabled: true
+      timeout_seconds: 10800
+      parameters:
+        - name: catalog
+          default: ${var.catalog}
+        - name: env
+          default: ${var.env}
+        - name: retrain
+          default: "false"
+      tags:
+        project: bank_health
+        env: ${var.env}
+      environments:
+        - environment_key: pinned
+          spec:
+            environment_version: "2"
+      tasks:
+        - task_key: bronze
+          notebook_task:
+            notebook_path: ${var.notebook_root}/01_bronze
+            source: WORKSPACE
+          timeout_seconds: 3600
+          max_retries: 0
+          environment_key: pinned
+        - task_key: silver
+          depends_on: [{task_key: bronze}]
+          notebook_task:
+            notebook_path: ${var.notebook_root}/02_silver
+            source: WORKSPACE
+          timeout_seconds: 3600
+          max_retries: 0
+          environment_key: pinned
+        - task_key: gold
+          depends_on: [{task_key: silver}]
+          notebook_task:
+            notebook_path: ${var.notebook_root}/03_gold
+            source: WORKSPACE
+          timeout_seconds: 3600
+          max_retries: 0
+          environment_key: pinned
+        - task_key: train_model
+          depends_on: [{task_key: gold}]
+          notebook_task:
+            notebook_path: ${var.notebook_root}/04_train_model
+            source: WORKSPACE
+          timeout_seconds: 3600
+          max_retries: 0
+          environment_key: pinned
+        - task_key: score
+          depends_on: [{task_key: train_model}]
+          notebook_task:
+            notebook_path: ${var.notebook_root}/05_score
+            source: WORKSPACE
+          timeout_seconds: 1800
+          max_retries: 0
+          environment_key: pinned
+        - task_key: monitor
+          depends_on: [{task_key: score}]
+          notebook_task:
+            notebook_path: ${var.notebook_root}/07_monitor
+            source: WORKSPACE
+          timeout_seconds: 1800
+          max_retries: 0
+          environment_key: pinned
+
+targets:
+  dev:
+    default: true
+    variables:
+      env: dev
+      catalog: bank_health_dev
+      job_name: bank_health_pipeline_dev
+      notebook_root: /Users/${workspace.current_user.userName}/bank-health-dev-run/databricks/notebooks
+  prod:
+    workspace:
+      root_path: /Workspace/Users/${workspace.current_user.userName}/.bundle/${bundle.name}/prod
+    variables:
+      env: prod
+      catalog: bank_health
+      job_name: bank_health_pipeline
+      notebook_root: /Users/${workspace.current_user.userName}/bank-health-data-platform/databricks/notebooks

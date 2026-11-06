@@ -1,0 +1,51 @@
+# Deploy the Databricks Asset Bundle (databricks.yml) to PROD, after you approve it (Phase 4, PR 9).
+#
+# The bundle owns the prod job bank_health_pipeline (bound to the existing job, so no duplicate).
+# Dev is deployed from Martins' PC (`databricks bundle deploy -t dev --profile bank-health`).
+#
+# Runs on push to main when the bundle or the job definition changes, or by hand. Never on pull
+# requests, and every run waits for the "production" environment approval. Secrets (environment
+# "production"): DATABRICKS_HOST (the workspace address; not in the public repo) and
+# DATABRICKS_TOKEN_BUNDLE (Martins' token, 90-day expiry; the weekly check_credentials task warns 14
+# days before it expires). See docs/runbooks/databricks_bundle.md.
+name: Databricks bundle (prod)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - databricks.yml
+      - .github/workflows/databricks_bundle.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: databricks-bundle-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'martinogie/bank-health-data-platform' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production   # required reviewer: you
+    timeout-minutes: 15
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN_BUNDLE }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Databricks CLI 1.22.1 (pinned by commit)
+        uses: databricks/setup-cli@8de769ec2543ee05e456ee2121350efc7efc4bda   # v1.22.1
+      - name: Validate
+        run: databricks bundle validate -t prod
+      - name: Plan (what the deploy will change), and refuse to create or delete a job
+        # The prod job is bound to the bundle; a plan that adds a job would create a duplicate, and
+        # one that deletes would remove the real job. Only updates may go through.
+        run: |
+          databricks bundle plan -t prod | tee plan.txt
+          grep -Eq "Plan: 0 to add, [0-9]+ to change, 0 to delete" plan.txt \
+            || { echo "REFUSED: the plan would add or delete a job"; exit 1; }
+      - name: Deploy
+        run: databricks bundle deploy -t prod
