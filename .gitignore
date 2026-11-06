@@ -49,3 +49,6 @@ terraform.tfvars
 
 # dbt docs build output (docs/dbt_docs_publishing.md); published only with the website
 site_build/
+
+# Databricks Asset Bundle local cache (databricks bundle ...); state lives in the workspace
+.databricks/

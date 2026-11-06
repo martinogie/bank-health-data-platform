@@ -33,6 +33,7 @@ Find the right page by what you see. Every alert names its task; start from the 
 | [oracle_vm_setup.md](oracle_vm_setup.md) | Building the Oracle VM from scratch |
 | [cutover_and_rollback.md](cutover_and_rollback.md) | Moving prod between the PC and the VM, and back |
 | [vault.md](vault.md) | Prod secrets in OCI Vault: setup, the switch, rollback, cleanup, changing a secret |
+| [databricks_bundle.md](databricks_bundle.md) | The Databricks jobs as code (Asset Bundle): change, deploy, the prod workflow, its token |
 | [network_policy.md](network_policy.md) | The VM's reserved IP and the Snowflake network policy on the pipeline user |
 | [ssh_key_passphrase.md](ssh_key_passphrase.md) | A passphrase on the VM's SSH key, with the Windows ssh-agent |
 | [../runbook.md](../runbook.md) | Model operations: top-20 review, promotion, rollback, the Databricks environment |

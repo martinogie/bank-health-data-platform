@@ -17,7 +17,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `upload_raw` | fresh files and their schema files -> Databricks Volume; reused files only if the Volume lacks them | uploads overwrite |
 | `save_watermarks` | remember how far we got (after the upload succeeded). Backfill: not moved | writes the same values again |
 | `decide_retrain` | retrain only if a new FDIC quarter arrived or `retrain_model` is true. Backfill: never | pure decision |
-| `sync_databricks_job` | prod: pull the Git folder to main; dev: upload this checkout's notebooks. Create/update the job | both idempotent |
+| `sync_databricks_job` | prod: pull the Git folder to main; dev: upload this checkout's notebooks. Check the job exists (its definition is the bundle's, `databricks.yml`) | both idempotent |
 | `run_databricks_job` | bronze -> silver -> gold -> train (only if `decide_retrain` says so) -> score -> monitor | Auto Loader checkpoints; silver/gold/scores overwrite; job allows 1 run at a time |
 | `load_snowflake` | Databricks exports -> Snowflake `RAW` | each table replaced by an atomic swap |
 | `sanity_check_top20` | fails if the 20 riskiest scored banks include a new bank, a foreign-bank office or a 0% capital ratio | read-only |
@@ -504,12 +504,17 @@ def bank_health_weekly():
         Variable.set(CFPB_WATERMARK, cfpb_result["watermark"])
         return {"fdic": fdic_result["watermark"], "cfpb": cfpb_result["watermark"]}
 
-    @task(doc_md="Pull the Databricks Git folder to latest main and create/update the job definition.")
+    @task(
+        doc_md="Make the notebooks current (prod: pull the Git folder to main; dev: upload) and check the "
+        "job exists. The job definition is owned by the Databricks Asset Bundle (databricks.yml)."
+    )
     def sync_databricks_job() -> int:
         from ingestion import databricks_jobs as dj
 
         api = dj.DatabricksAPI.from_env()
-        return dj.create_or_update_job(api, dj.job_settings(dj.sync_notebooks(api, ENV), ENV))
+        dj.sync_notebooks(api, ENV)  # prod: pull the Git folder to main; dev: upload the notebooks
+        # The job definition is the bundle's (databricks.yml); only check it exists, never rewrite it.
+        return dj.existing_job_id(api, JOB_NAME or "")
 
     run_databricks_job = DatabricksRunNowOperator(
         task_id="run_databricks_job",
