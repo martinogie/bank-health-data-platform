@@ -20,7 +20,11 @@ from pathlib import Path
 
 from ingestion.environment import assert_can_publish
 
-SCHEMA_VERSION = 3  # 3: "w" SHAP waterfall and "d" distress lines; 2: bands N and F (not scored)
+SCHEMA_VERSION = 4  # 4: "w" only for High/Elevated; 3: "w" waterfall and "d" distress lines; 2: bands N, F
+# The waterfall (8 items, ~740 bytes a bank) goes only to the bands a visitor drills into: for all
+# 3,876 scored banks it made the file 5.5 MB, over MAX_BYTES (prod run of 6 Nov 2026; Martins chose
+# this over a second file or a higher limit).
+WATERFALL_BANDS = ("H", "E")
 HISTORY_QUARTERS = 8
 MAX_BYTES = 3 * 1024 * 1024
 
@@ -327,7 +331,7 @@ def build_payload(
             "h": build_history(hist_by_cert.get(cert, []), quarters),
         }
         w, d = waterfall(r.get("shap_waterfall")), distress(r.get("distress_lines"))
-        if w:
+        if w and rec["b"] in WATERFALL_BANDS:
             rec["w"] = w
         if d is not None:
             rec["d"] = d
@@ -350,6 +354,7 @@ def build_payload(
             "history": [quarter_label(q) for q in quarters],
             "metrics": {k: {"label": v[1], "unit": v[2], "higherIsBetter": v[3]} for k, v in METRICS.items()},
             "bands": {v: k for k, v in BAND_CODES.items()},
+            "waterfallBands": list(WATERFALL_BANDS),
         },
         "peers": peers,
         "banks": banks,
@@ -397,6 +402,9 @@ def validate_payload(payload: dict) -> None:
         need(b.get("pp") is None or 0 <= b["pp"] <= 100, f"bank {b['c']}: percentile out of range")
         need(len(b["r"]) <= 3, f"bank {b['c']}: more than 3 reasons")
         need("w" not in b or len(b["w"]["i"]) <= 8, f"bank {b['c']}: more than 8 waterfall items")
+        need(
+            "w" not in b or b["b"] in WATERFALL_BANDS, f"bank {b['c']}: waterfall only for {WATERFALL_BANDS}"
+        )
         need(
             "d" not in b or b["b"] == "D", f"bank {b['c']}: distress lines only for banks already in distress"
         )

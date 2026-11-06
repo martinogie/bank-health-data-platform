@@ -23,7 +23,7 @@ Source tables (Snowflake `BANK_HEALTH.MARTS`):
 
 | Key | Type | Meaning |
 |---|---|---|
-| `schema` | int | Schema version (currently 3: adds `w` and `d`) |
+| `schema` | int | Schema version (currently 4: `w` only for High and Elevated banks; 3 added `w` and `d`) |
 | `quarter` | string | Data quarter-end, `YYYY-MM-DD` |
 | `quarterLabel` | string | e.g. `2026 Q2` |
 | `exported` | string | Export date, `YYYY-MM-DD` |
@@ -33,6 +33,7 @@ Source tables (Snowflake `BANK_HEALTH.MARTS`):
 | `history` | string[8] | Quarter labels for every history array, **oldest first** |
 | `metrics` | object | For each history key: `label`, `unit`, `higherIsBetter` (`null` = neither) |
 | `bands` | object | Band code → band name |
+| `waterfallBands` | array | Band codes whose banks carry `w` (today `["H", "E"]`) |
 | `newBankYears` | number | Age below which a bank is flagged as new (3) |
 
 ## `peers`
@@ -58,7 +59,7 @@ bank, using the bank's current tier.
 | `b` | string | Risk band: `H` High (top 5%), `E` Elevated (next 10%), `W` Watch (next 25%), `L` Low, `D` Already in distress (not ranked) |
 | `pp` | int \| null | Percentile of `p` among banks in the same tier, 0–100 (share of same-size banks with a lower probability). `null` for band `D` |
 | `r` | string[≤3] | Top reasons in plain words, e.g. `Non-current loans: 2.73% of loans (median of similar-size banks: 0.36% of loans)`. SHAP reasons compare with banks of the same asset-size tier; the fallback method (rare) with all scored banks, and says so |
-| `w` | object, optional | Scored banks: the SHAP waterfall. `b` = base rate % (the model's average starting point), `i` = up to 8 items `{f: feature, l: plain label, v: bank value, m: median of similar-size banks, pp: push in percentage points of probability (+ raises risk)}`, largest first, `o` = all other features together (pp). `b` + every `pp` + `o` = the bank's probability × 100. `v` is `null` where the bank doesn't report the item; such an item also has `nr`, a note to show instead of a value, e.g. `Not reported: the missing figure itself raised the score` |
+| `w` | object, optional | **High and Elevated banks only** (the bands in `meta.waterfallBands`; for all banks the file was 5.5 MB): the SHAP waterfall. `b` = base rate % (the model's average starting point), `i` = up to 8 items `{f: feature, l: plain label, v: bank value, m: median of similar-size banks, pp: push in percentage points of probability (+ raises risk)}`, largest first, `o` = all other features together (pp). `b` + every `pp` + `o` = the bank's probability × 100. `v` is `null` where the bank doesn't report the item; such an item also has `nr`, a note to show instead of a value, e.g. `Not reported: the missing figure itself raised the score` |
 | `d` | array, optional | Banks already in distress (band `D`): the distress lines crossed, `{k: noncurrent_loans_above \| tier1_leverage_below \| two_quarterly_losses, l: plain label, v: value}` |
 | `h` | object | Last 8 quarters, aligned with `meta.history`, oldest first, `null` where not reported: `ncl` non-current loans % of loans, `t1` Tier 1 leverage %, `roa` return on assets %, `eff` efficiency ratio %, `dep` deposit growth year on year %. 2 decimals |
 | `cx` | int | Complaints in the data quarter. Present only if the bank was matched to CFPB complaints |

@@ -365,3 +365,29 @@ def test_not_reported_waterfall_items_say_so():
     a, b = wx.waterfall(raw)["i"]
     assert a["nr"] == "Not reported: the missing figure itself raised the score" and a["v"] is None
     assert b["nr"] == "Not reported: the missing figure itself lowered the score"
+
+
+def test_only_high_and_elevated_banks_carry_a_waterfall():
+    """6 Nov 2026: waterfalls for every scored bank made the file 5.5 MB (limit 3 MB)."""
+    import json as _json
+
+    w = _json.dumps({"base_pct": 4.0, "items": [{"f": "roa_pct", "v": -1.0, "m": 0.9, "pp": 30.0}],
+                     "other_pp": 1.0, "p_pct": 35.0})  # fmt: skip
+    rows = [
+        bank_row(cert=1, risk_band="High", distress_probability=0.6, shap_waterfall=w),
+        bank_row(cert=2, risk_band="Elevated", distress_probability=0.2, shap_waterfall=w),
+        bank_row(cert=3, risk_band="Watch", distress_probability=0.05, shap_waterfall=w),
+        bank_row(cert=4, risk_band="Low", distress_probability=0.01, shap_waterfall=w),
+    ]
+    p = wx.build_payload(rows, [], peer_rows(), date(2026, 11, 6))
+    wx.validate_payload(p)
+    has_w = {b["c"]: "w" in b for b in p["banks"]}
+    assert has_w == {1: True, 2: True, 3: False, 4: False}
+    assert p["meta"]["waterfallBands"] == ["H", "E"] and p["meta"]["schema"] == 4
+
+
+def test_the_validator_refuses_a_waterfall_on_a_lower_band():
+    p = payload()
+    p["banks"][0]["w"] = {"b": 4.0, "i": [], "o": 0.0}  # the fixture bank is Low
+    with pytest.raises(ValueError, match="waterfall only for"):
+        wx.validate_payload(p)
