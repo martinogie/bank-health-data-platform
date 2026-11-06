@@ -450,4 +450,5 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
 ---
 
 Built by **Martins Ogiekpolor** · [github.com/martinogie](https://github.com/martinogie) · Built with
-AI-assisted coding; the design, analysis and review are my own. MIT licence.
+AI-assisted coding ([Claude Code](https://claude.com/claude-code), listed as a contributor); the design,
+analysis and review are my own. MIT licence.
