@@ -60,16 +60,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now bank-health-secrets.service
 systemctl status bank-health-secrets.service --no-pager | head -5   # "status=0/SUCCESS"
 
-# 5. Check: the files exist (names only), and Vault equals today's .env where it should
+# 5. Check: the files exist (names only), and Vault equals what the running Airflow uses
 sudo ls /run/bank-health/env /run/bank-health/keys
-sudo -u deploy -H /srv/bank-health/venv/bin/python /srv/bank-health/app/deploy/vault_secrets.py \
-    check-env /srv/bank-health/secrets/.env
+sudo -u deploy -H /srv/bank-health/venv/bin/python /srv/bank-health/app/deploy/vault_secrets.py check-running
 ```
 
-Step 5 must show `matches` for the 6 copied values and `differs by design` for the key and its
-passphrase. A `DIFFERS` means a copy-paste slip: fix that secret in the console (new version), then
-`sudo systemctl restart bank-health-secrets.service` and check again. The stack is still in `.env`
-mode during all of this; nothing it uses has changed.
+Step 5 compares fingerprints (never values) of each Vault secret with the variable in the running
+scheduler. Before the switch it must show `matches` for the 6 copied values (the passphrase is new,
+so it differs until the switch); after the switch, all 7 match. A `DIFFERS` on a copied value means
+a copy-paste slip: fix that secret in the console (new version), then
+`sudo systemctl restart bank-health-secrets.service` and check again. (It replaced `check-env`,
+which compared with the `.env` file and misread a line with text after the value, 5 Nov 2026.)
 
 ## The switch (not on a Monday morning; no run in progress)
 
@@ -113,17 +114,22 @@ What goes, on the VM: from `/srv/bank-health/secrets/.env` the lines `DATABRICKS
 `_AIRFLOW_WWW_USER_PASSWORD`, `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` and the mirror leftovers
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_VIEWER_PASSWORD`, `PGADMIN_EMAIL`, `PGADMIN_PASSWORD`;
 the editor backup `/srv/bank-health/secrets/.env.save`; the unencrypted key
-`/srv/bank-health/secrets/keys/snowflake_rsa_key.p8`; and `.env.before-vault`. The exact commands
-come with the cleanup PR. After it, Vault is the only copy (plus Martins' password manager), and
-the rollback above no longer applies.
+`/srv/bank-health/secrets/keys/snowflake_rsa_key.p8`; and `.env.before-vault`. After it, Vault is
+the only copy (plus Martins' password manager), and the rollback above no longer applies.
 
-After the cleanup and a `docker compose up -d`, Docker's stored container settings hold no secret
-(this prints 0):
+`deploy/vault_cleanup.sh` does it, as deploy (not on a Monday morning; no run in progress):
 
 ```bash
-docker inspect airflow-airflow-scheduler-1 --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 \
-  | grep -cxE 'DATABRICKS_TOKEN|SNOWFLAKE_PRIVATE_KEY_PASSPHRASE|AIRFLOW__CORE__FERNET_KEY|AIRFLOW__API_AUTH__JWT_SECRET|_AIRFLOW_WWW_USER_PASSWORD|SLACK_WEBHOOK_URL|DISCORD_WEBHOOK_URL'
+ssh bank-health-vm
+/srv/bank-health/app/deploy/vault_cleanup.sh            # dry run: lists what would go, changes nothing
+/srv/bank-health/app/deploy/vault_cleanup.sh --apply    # only with Martins' OK
 ```
+
+It stops unless Vault mode is on and the RAM copy is complete. With `--apply` it rewrites `.env`
+without those lines, overwrites and removes the old copies (`shred`), recreates the containers,
+runs the smoke check and checks that Docker's stored container settings hold none of the 7 Vault
+names. (On a journaling or copy-on-write disk, `shred` can't guarantee every old block is gone, but
+no readable copy remains.) Then confirm with `vault_secrets.py check-running`: all 7 match.
 
 ## Changing a secret later (rotation)
 

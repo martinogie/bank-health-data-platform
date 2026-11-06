@@ -4,7 +4,7 @@
 Runs on the VM as the deploy user, in /srv/bank-health/venv (oci SDK, deploy/requirements-vault.txt):
 
     vault_secrets.py fetch                # Vault -> /run/bank-health/{env,keys}/ (RAM only, mode 600)
-    vault_secrets.py check-env FILE       # do Vault's values equal the ones in FILE (an old .env)?
+    vault_secrets.py check-running        # do Vault's values equal what the running Airflow uses?
 
 Auth is the instance principal: the dynamic group bank-health-vm-dg and the policy
 bank-health-vm-read-secrets let this VM read secret bundles from bank-health-vault only. No key or
@@ -13,7 +13,7 @@ is BANK_HEALTH_VAULT_ID in /srv/bank-health/app/airflow/.env (git-ignored, Compo
 
 Rules: every secret is read before anything is written (a failure leaves the old files as they
 were); files are replaced atomically; values are never printed or logged, only names, OK/FAILED,
-and for check-env "matches" / "DIFFERS".
+and for check-running "matches" / "DIFFERS" (SHA-256 fingerprints are compared, never shown).
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ import argparse
 import base64
 import hashlib
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -42,11 +43,10 @@ SECRETS: dict[str, tuple[str, str]] = {
     "prod-discord-webhook": ("env", "DISCORD_WEBHOOK_URL"),
     "prod-snowflake-private-key": ("file", "keys/snowflake_rsa_key.p8"),
 }
-# Changed on purpose by the Vault switch (the key is now encrypted, so it has a passphrase):
-# check-env reports them as "differs by design" instead of comparing.
-DIFFER_BY_DESIGN = {"prod-snowflake-key-passphrase", "prod-snowflake-private-key"}
+SCHEDULER = "airflow-airflow-scheduler-1"
 
 Reader = Callable[[str], str]  # secret name -> value
+Fingerprint = Callable[[str], str]  # env var name -> SHA-256 of its value in the running scheduler
 
 
 class FetchError(RuntimeError):
@@ -111,19 +111,49 @@ def parse_env_file(path: Path) -> dict[str, str]:
     return out
 
 
-def compare_with_env(values: dict[str, str], env: dict[str, str]) -> list[tuple[str, str]]:
-    """(secret name, result) per secret; results never contain a value."""
-    digest = lambda s: hashlib.sha256(s.strip().encode()).hexdigest()  # noqa: E731
+def compare_with_running(values: dict[str, str], running: Fingerprint) -> list[tuple[str, str]]:
+    """(secret name, result) per secret: does Vault equal what the running Airflow uses?
+
+    Compares SHA-256 fingerprints (Vault value vs the scheduler process's variable). This replaced
+    check-env (comparing with the .env file): Compose drops text after a value on the same line,
+    which made check-env report a false DIFFERS on 5 Nov 2026."""
     results = []
     for name, (kind, target) in SECRETS.items():
-        if name in DIFFER_BY_DESIGN:
-            results.append((name, "differs by design (encrypted key + passphrase)"))
-        elif kind == "env" and target in env:
-            same = digest(values[name]) == digest(env[target])
-            results.append((name, f"matches {target}" if same else f"DIFFERS from {target}"))
-        else:
-            results.append((name, f"{target} not in the file"))
+        if kind != "env":
+            results.append((name, f"{target}: a file, not compared"))
+            continue
+        vault = hashlib.sha256(values[name].strip().encode()).hexdigest()
+        results.append((name, f"matches {target}" if running(target) == vault else f"DIFFERS from {target}"))
     return results
+
+
+# Runs inside the scheduler container: the fingerprint of one variable in the RUNNING scheduler
+# process (/proc/<pid>/environ). Not `docker exec ... "$VAR"`: a new exec shell only sees Docker's
+# stored settings (the old .env), not what the entrypoint exported from Vault (found 6 Nov 2026).
+_PROC_FINGERPRINT = """
+import hashlib, os, sys
+var = sys.argv[1]
+pids = []
+for d in os.listdir("/proc"):
+    if d.isdigit():
+        try:
+            if "airflow scheduler" in open(f"/proc/{d}/cmdline", "rb").read().replace(b"\\0", b" ").decode():
+                pids.append(int(d))
+        except OSError:
+            pass
+env = dict(kv.split("=", 1) for kv in open(f"/proc/{min(pids)}/environ", "rb").read().decode().split("\\0") if "=" in kv)
+print(hashlib.sha256(env.get(var, "").strip().encode()).hexdigest())
+"""
+
+
+def docker_fingerprint(var: str) -> str:  # pragma: no cover - needs the running stack on the VM
+    out = subprocess.run(
+        ["docker", "exec", SCHEDULER, "python", "-c", _PROC_FINGERPRINT, var],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return out.stdout.strip()
 
 
 def vault_id_from(path: Path) -> str:
@@ -146,13 +176,14 @@ def oci_reader(vault_id: str) -> Reader:  # pragma: no cover - needs the VM's in
     return read
 
 
-def main(argv: list[str] | None = None, reader: Reader | None = None) -> int:
+def main(
+    argv: list[str] | None = None, reader: Reader | None = None, running: Fingerprint | None = None
+) -> int:
     parser = argparse.ArgumentParser(description="Prod secrets from OCI Vault into RAM.")
     sub = parser.add_subparsers(dest="cmd", required=True)
     fetch = sub.add_parser("fetch", help="Vault -> runtime dir (RAM)")
     fetch.add_argument("--runtime-dir", type=Path, default=RUNTIME_DIR)
-    check = sub.add_parser("check-env", help="compare Vault with an old .env (match/differ only)")
-    check.add_argument("env_file", type=Path)
+    check = sub.add_parser("check-running", help="compare Vault with the running Airflow (match/differ only)")
     for p in (fetch, check):
         p.add_argument("--compose-env", type=Path, default=COMPOSE_ENV, help="holds BANK_HEALTH_VAULT_ID")
     args = parser.parse_args(argv)
@@ -173,7 +204,7 @@ def main(argv: list[str] | None = None, reader: Reader | None = None) -> int:
         written = write_runtime(values, args.runtime_dir)
         print(f"vault: {len(written)} secrets written to {args.runtime_dir} (RAM): " + ", ".join(written))
         return 0
-    results = compare_with_env(values, parse_env_file(args.env_file))
+    results = compare_with_running(values, running or docker_fingerprint)
     for name, result in results:
         print(f"{name}: {result}")
     return 1 if any("DIFFERS" in r for _, r in results) else 0
