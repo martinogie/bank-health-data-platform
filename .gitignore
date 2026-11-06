@@ -46,3 +46,6 @@ infra/terraform/**/backend.hcl
 crash.log
 *.auto.tfvars
 terraform.tfvars
+
+# dbt docs build output (docs/dbt_docs_publishing.md); published only with the website
+site_build/
