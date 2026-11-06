@@ -68,7 +68,12 @@ x-airflow-common:
     # One DAG file that rarely changes: re-parse every 2 min instead of every 30 s (saves CPU)
     AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: 120
     AIRFLOW__CORE__AUTH_MANAGER: airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    # The metadata-database address comes from a command (include/db_conn.sh): the original
+    # password by default; the Vault password once BANK_HEALTH_DB_PASSWORD_FROM_VAULT=1 is set in
+    # airflow/.env on the VM (deploy/airflow_db_password.sh). Never a fixed value here: a fixed
+    # AIRFLOW__DATABASE__SQL_ALCHEMY_CONN would win over the command.
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN_CMD: /opt/airflow/include/db_conn.sh
+    BANK_HEALTH_DB_PASSWORD_FROM_VAULT: ${BANK_HEALTH_DB_PASSWORD_FROM_VAULT:-0}
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__CORE__DEFAULT_TIMEZONE: America/Chicago
@@ -103,6 +108,8 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: airflow
+      # Used only when the database is first created. On the prod VM the password was changed
+      # afterwards to the Vault one (deploy/airflow_db_password.sh); this line doesn't undo that.
       POSTGRES_PASSWORD: airflow   # local-only container, not reachable from outside
       POSTGRES_DB: airflow
     volumes:

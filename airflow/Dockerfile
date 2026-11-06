@@ -18,6 +18,7 @@ RUN python -m venv /home/airflow/dbt_venv \
 # 3. Startup wrapper that turns plain .env values into Airflow connections
 COPY --chmod=755 include/entrypoint.sh /opt/airflow/include/entrypoint.sh
 COPY --chmod=644 include/load_secrets.sh /opt/airflow/include/load_secrets.sh
+COPY --chmod=755 include/db_conn.sh /opt/airflow/include/db_conn.sh
 COPY include/connections_from_env.py /opt/airflow/include/connections_from_env.py
 
 ENV PYTHONPATH=/opt/airflow \

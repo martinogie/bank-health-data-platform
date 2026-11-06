@@ -41,6 +41,7 @@ SECRETS: dict[str, tuple[str, str]] = {
     "prod-airflow-admin-password": ("env", "_AIRFLOW_WWW_USER_PASSWORD"),
     "prod-slack-webhook": ("env", "SLACK_WEBHOOK_URL"),
     "prod-discord-webhook": ("env", "DISCORD_WEBHOOK_URL"),
+    "prod-airflow-db-password": ("env", "AIRFLOW_DB_PASSWORD"),  # read by airflow/include/db_conn.sh
     "prod-snowflake-private-key": ("file", "keys/snowflake_rsa_key.p8"),
 }
 SCHEDULER = "airflow-airflow-scheduler-1"

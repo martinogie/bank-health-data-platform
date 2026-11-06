@@ -63,8 +63,8 @@ One Always Free Arm VM, Pay As You Go account with a $5 budget alert.
 |---|---|---|
 | Snowflake private key (pipeline) | file on the VM, `/srv/bank-health/secrets/keys`, mode 600, owner `deploy` | OCI Vault (`prod-snowflake-private-key`), encrypted with a passphrase (`prod-snowflake-key-passphrase`), read into RAM (`/run/bank-health/keys`) |
 | Databricks token, Airflow Fernet and JWT keys, admin password, Slack and Discord webhooks | `/srv/bank-health/secrets/.env`, mode 600 | OCI Vault (7 secrets named `prod-*`), read by the VM as itself into RAM (`/run/bank-health/env`) at boot and on each deploy; exported when a container starts |
-| Airflow's metadata database password | the default `airflow`, in `docker-compose.yaml` (reachable only inside Docker's network) | `prod-airflow-db-password`, in its own PR after the Vault switch |
-| Postgres mirror and pgAdmin passwords | the owner's PC (the mirror runs only there); stray copies in the VM's `.env` | PC only; the VM copies are removed in the Vault cleanup |
+| Airflow's metadata database password | the default `airflow`, in `docker-compose.yaml` (reachable only inside Docker's network) | `prod-airflow-db-password` in Vault, read through `airflow/include/db_conn.sh` once switched (`deploy/airflow_db_password.sh`) |
+| Postgres mirror and pgAdmin passwords | the owner's PC (the mirror runs only there); stray copies in the VM's `.env` | PC only; the VM copies were removed in the Vault cleanup (6 Nov 2026) |
 | Dev keys and `.env` | the owner's PC, git-ignored | unchanged (dev only) |
 | CI key, prod webhooks for the watchdog | GitHub encrypted secrets | unchanged |
 | Terraform state (Phase 4) | – | private, versioned OCI Object Storage bucket; contains no secret values |

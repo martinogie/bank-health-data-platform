@@ -53,6 +53,8 @@ def main(env_path: Path, keys_dir: Path, out: Path) -> None:
     )
     values = {name: env.get(name, "") for name in ENV_NAMES}
     values["SNOWFLAKE_PRIVATE_KEY_PASSPHRASE"] = new_pass
+    if not values.get("AIRFLOW_DB_PASSWORD"):  # dev has none: a random one (letters and digits)
+        values["AIRFLOW_DB_PASSWORD"] = secrets.token_hex(16)
     missing = [n for n, v in values.items() if not v.strip()]
     for name, value in values.items():
         if value.strip():
