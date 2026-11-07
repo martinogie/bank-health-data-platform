@@ -88,6 +88,20 @@ test("watchlist: a ?certs= link renders in a fresh browser; CSV export downloads
   await ctx.close();
 });
 
+test("watchlist with live-shaped data (no preview list): full cards load, no preview wording", async ({ page }) => {
+  await page.route("**/data/banks_index.json", async (route) => {
+    const body = await (await route.fetch()).json();
+    delete body.preview;
+    body.fixture = false;
+    await route.fulfill({ json: body });
+  });
+  const ix = await (await page.request.get(`${B}/data/banks_index.json`)).json();
+  await page.goto(`${B}/watchlist/?certs=${ix.preview[0]}`);
+  await settle(page);
+  await expect(page.locator(".sparks").first()).toBeVisible();
+  await expect(page.locator("main")).not.toContainText("preview has full files");
+});
+
 test("watchlist works with storage blocked", async ({ browser }) => {
   const ctx = await browser.newContext();
   await ctx.addInitScript(() => {
