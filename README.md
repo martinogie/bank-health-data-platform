@@ -21,7 +21,7 @@ It gives each bank's top three reasons and compares it with banks of the same si
 **watchlist** lets you enter the banks you deal with and see their scores, trends and reasons on
 one page.
 
-**Try the watchlist:** [martinogie.github.io/bank-health-data-platform/watchlist.html](https://martinogie.github.io/bank-health-data-platform/watchlist.html)
+**Try the watchlist:** [finance.martinsogiekpolor.com/bankhealth/watchlist/](https://finance.martinsogiekpolor.com/bankhealth/watchlist/)
 
 It runs on 26 years of FDIC call reports for 27,835 banks and nearly 2 million CFPB consumer
 complaints, through a full production-style pipeline.
@@ -144,7 +144,7 @@ the median and measuring how much the probability falls.
 
 ## Watchlist
 
-[`watchlist.html`](https://martinogie.github.io/bank-health-data-platform/watchlist.html) answers the
+[`watchlist.html`](https://finance.martinsogiekpolor.com/bankhealth/watchlist/) answers the
 question for one organisation's own banks. Search by name, city, state or FDIC certificate number
 and add the banks you depend on. Each card shows:
 
