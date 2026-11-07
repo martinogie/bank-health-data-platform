@@ -25,8 +25,8 @@ Query for the page: `SELECT * FROM BANK_HEALTH.OPS.HEALTH_RUNS_LAST_12 ORDER BY 
 | `RUN_ID` | text | Airflow run id, e.g. `scheduled__2026-11-02T12:00:00+00:00` |
 | `ENVIRONMENT` | text | `prod` (or `dev` in the dev view) |
 | `HOST_ID` | text | the machine that ran it: `oracle-vm` (or `pc` before cutover) |
-| `STARTED_AT`, `ENDED_AT` | timestamp with time zone | when the run started and when `record_run` finished |
-| `DURATION_MINUTES` | number | end − start, one decimal |
+| `STARTED_AT`, `ENDED_AT` | timestamp with time zone | when the run first started (for a resumed run, the original start, not the resume) and when `record_run` finished |
+| `DURATION_MINUTES` | number | end − start, one decimal (a resumed run includes the time it waited for the fix) |
 | `STATE` | text | `success` or `failed` |
 | `FAILED_TASKS` | text | the task(s) that failed, comma-separated; empty on success |
 | `BRONZE_ROWS`, `SILVER_ROWS`, `GOLD_ROWS` | number | Databricks row totals per layer (all tables in the layer; gold = `bank_quarter`) |
@@ -45,6 +45,9 @@ Query for the page: `SELECT * FROM BANK_HEALTH.OPS.HEALTH_RUNS_LAST_12 ORDER BY 
 | `SLO_MET` | boolean | succeeded by Monday 12:00 America/Chicago that week (the objective) |
 | `HAD_VOLUME_ANOMALY` | boolean | `check_volumes` flagged a row-count drop or jump |
 | `MODEL_NAME`, `MODEL_VERSION`, `MODEL_ALIAS` | text | the model that scored this run, e.g. `bank_health.ml.distress_model`, `5`, `champion` |
+| `RESUMED`, `RESUMED_AT` | boolean, timestamp | the run failed, was fixed, and its tasks were cleared to resume it; when the last resume began |
+| `ATTEMPTS` | number | 1 for a normal run; 2+ for a resumed run |
+| `EARLIER_ATTEMPTS` | array | each earlier attempt, oldest first: `{state, started_at, ended_at, failed_tasks}`. Show failed attempts; don't hide them |
 
 A value is **NULL** when its source didn't exist in that run. For example, a run that failed
 before Databricks has no layer counts, and dev runs record no credits (no `MONITOR USAGE`). The
