@@ -23,6 +23,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 const social = new URL(`${base}/social.png`, Astro.site).href;
 const fullTitle = `${title} · Bank Health`;
+const HOME = "https://martinsogiekpolor.com/"; // Martins' portfolio home page
 const nav = [
   ["overview", "Overview", `${base}/`],
   ["watchlist", "Watchlist", `${base}/watchlist/`],
@@ -54,6 +55,12 @@ const nav = [
   <body data-base={base}>
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
+      <!-- Back to Martins' portfolio home (bio and all projects) from any Bank Health page. -->
+      <div class="home-bar">
+        <div class="wrap"><a href={HOME} data-home>
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 11h3v9h6v-6h2v6h6v-9h3z" fill="currentColor"/></svg>
+          Home<span class="home-who"> · Martins Ogiekpolor</span></a></div>
+      </div>
       <div class="wrap header-row">
         <a class="brand" href={`${base}/`}>
           <span class="brand-name">Bank Health</span>
@@ -91,7 +98,7 @@ const nav = [
         </div>
         <div class="stack" style="gap:8px">
           <span class="foot-label">Built by</span>
-          <span>Martins Ogiekpolor</span>
+          <a href={HOME}>Martins Ogiekpolor</a>
           <a href="https://github.com/martinogie/bank-health-data-platform">Code on GitHub</a>
           <a href={`${base}/pipeline/`}>How the pipeline works</a>
           <span style="color:var(--footer-text-2)">Built with AI-assisted coding; the design, analysis and review are my own.</span>

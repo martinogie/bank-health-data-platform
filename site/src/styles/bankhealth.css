@@ -25,3 +25,8 @@
 .bar-track { height: 8px; background: var(--track); flex: 1 1 auto; }
 .bar-fill { height: 100%; }
 .notice { border-left: 2px solid var(--band-W); padding-left: 12px; font-family: var(--serif); font-style: italic; color: var(--ink-2); }
+
+/* "Home" bar above the header: back to Martins' portfolio home from any page. */
+.home-bar { border-bottom: 1px solid var(--rule); font-size: 13px; }
+.home-bar a { display: inline-flex; align-items: center; gap: 6px; padding: 8px 0; color: var(--ink-2); text-decoration: none; }
+.home-bar a:hover { color: var(--ink); text-decoration: underline; }
