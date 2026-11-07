@@ -45,12 +45,14 @@ asking, and nothing public (DNS, Cloudflare, deploys) happens without approval.
 | `martinogie/portfolio-site` (proposed name) | `packages/design/` (the design system), `site/` (home + `/finance/` lobby; later one lobby per sector), `workers/sector-router/` (the router, one config per sector) | Pages project `portfolio`; one Worker per sector |
 | `martinogie/bank-health-data-platform` (this repo) | the Bank Health site in `site/` (Astro, base `/bankhealth`) | Pages project `bankhealth` |
 
-**The design system** (fonts Newsreader + Inter, colour tokens, header and footer, BandChip-style
-components, page layout) lives in `portfolio-site/packages/design/`, versioned with git tags
-(`design-v1.0.0`, …). Each project site keeps a **pinned copy** (`site/src/design/`, with a `VERSION`
-file), updated with one documented command when a new design version is wanted. Why a copy and not
-a package: no registry, no install token, and a project site never breaks or redeploys because the
-portfolio changed. CI checks the copy matches its `VERSION`.
+**The design system** (fonts Newsreader + Inter, colour tokens, sector accents, base styles,
+header and footer) lives in `portfolio-site/packages/design/`, versioned with git tags
+(`design-v1.0.0`, …). Each project site keeps a **pinned copy**: Bank Health pins
+**design-v1.0.1, Finance** in `site/src/design/` (`DESIGN.json` lists the version and a SHA-256 per
+file), written by `portfolio-site/scripts/pin-design.mjs`. Why a copy and not a package: no
+registry, no install token, and a project site never breaks or redeploys because the portfolio
+changed. CI (`site.yml`) runs `src/design/check-design.mjs`, which fails if the copy was edited.
+Bank Health's own styles (risk bands, chips, bars) are in `site/src/styles/bankhealth.css`.
 
 **Accent per sector:** the tokens are shared; each site sets `--accent` once. Finance: `#8E1B2E`
 (the Bank Health burgundy). Other sectors pick theirs when they are created.

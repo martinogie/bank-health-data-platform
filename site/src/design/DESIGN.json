@@ -1,0 +1,13 @@
+{
+  "version": "1.0.1",
+  "tag": "design-v1.0.1",
+  "sector": "finance",
+  "source": "martinogie/portfolio-site packages/design",
+  "files": [
+    {"sha256":"4785ccc879c802056c1bd752260f0f390677970cf24110c00dddc1b4f09e8b44","path":"tokens.css"},
+    {"sha256":"1782c799aa7568e5dd40732104dcd282dc5c6ca7e67466aee328d7e058cfa788","path":"base.css"},
+    {"sha256":"be89cd661d9d109b11301b8fc03bc333f2fd3ab0ee3d78a09bc3fa9dc417e12d","path":"chrome.css"},
+    {"sha256":"0abf056bab10b9b1877a0b1f75e4d8f90000a2a4e0ce4593097bc73999ba34b0","path":"sectors/finance.css"},
+    {"sha256":"112003bb8d13ffed00bdf7fd63ef91b652fcfcdbd2db42a7ee318547bb2bdede","path":"check-design.mjs"}
+  ]
+}

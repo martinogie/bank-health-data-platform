@@ -1,4 +1,4 @@
-/* Base styles and shared building blocks (mirrors the inline styles of the approved design). */
+/* Portfolio design system: base styles and shared building blocks. */
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; }
@@ -31,19 +31,6 @@ p { margin: 0; }
 .btn.big { min-height: 48px; padding: 0 22px; font-size: 15px; }
 .toggles { display: flex; flex-wrap: wrap; gap: 8px; }
 
-.chip { display: inline-block; padding: 4px 12px; font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
-.chip.H { background: var(--band-H); color: var(--band-H-ink); }
-.chip.E { background: var(--band-E); color: var(--band-E-ink); }
-.chip.W { background: var(--band-W); color: var(--band-W-ink); }
-.chip.L { background: var(--band-L); color: var(--band-L-ink); }
-.chip.D { background: var(--band-D); color: var(--band-D-ink); }
-.chip.N, .chip.F { background: var(--card); color: var(--ink); border: 1px dashed #8A7F6E; }
-.driver { display: inline-block; padding: 3px 10px; font-size: 12px; font-weight: 600; border: 1px solid; }
-.driver.credit { color: var(--credit); border-color: var(--credit); }
-.driver.earnings { color: var(--earnings); border-color: var(--earnings); }
-
-.bar-track { height: 8px; background: var(--track); flex: 1 1 auto; }
-.bar-fill { height: 100%; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
 th { font-weight: 600; text-align: left; }
@@ -53,9 +40,9 @@ td, th { padding: 12px 8px; vertical-align: top; }
 td:first-child, th:first-child { padding-left: 0; }
 
 .card { background: var(--card); border: 1px solid var(--rule); }
-.notice { border-left: 2px solid var(--band-W); padding-left: 12px; font-family: var(--serif); font-style: italic; color: var(--ink-2); }
 .caveat { font-size: 13px; color: var(--ink-3); border-top: 1px solid var(--rule); padding-top: 16px; }
 .loading { color: var(--ink-3); font-size: 14px; }
+.placeholder { background: repeating-linear-gradient(-45deg, var(--card) 0 8px, var(--bg) 8px 16px); border: 1px dashed var(--ink-3); padding: 12px 14px; color: var(--ink-2); font-family: var(--sans); font-size: 14px; }
 
 /* The hidden attribute always wins over page display rules. */
 [hidden] { display: none !important; }

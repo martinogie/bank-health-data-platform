@@ -1,0 +1,24 @@
+/* Portfolio design system: the page chrome every site shares (skip link, header, navigation,
+   the thin strip under the header, footer). Each site writes its own header and footer markup
+   with these class names. */
+.skip { position: absolute; left: -9999px; top: 0; background: var(--ink); color: var(--bg); padding: 8px 12px; }
+.skip:focus { left: 8px; top: 8px; z-index: 10; }
+.site-header { border-bottom: 1px solid var(--ink); background: var(--bg); }
+.header-row { padding-top: 18px; padding-bottom: 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+.brand { text-decoration: none; color: var(--ink); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.brand:hover { color: var(--ink); }
+.brand-name { font-family: var(--serif); font-size: 28px; font-weight: 600; letter-spacing: -0.01em; }
+.brand-tag { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.nav a { padding: 10px 14px; font-size: 14px; color: var(--ink); text-decoration: none; border-bottom: 2px solid transparent; }
+.nav a[aria-current="page"] { font-weight: 600; border-bottom-color: var(--accent); }
+/* At least a screen tall, so the footer starts below the fold and can't jump while data loads. */
+main { min-height: 100vh; }
+.strip { border-top: 1px solid var(--rule); }
+.strip-row { padding-top: 8px; padding-bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px 20px; color: var(--ink-3); }
+.preview { color: var(--accent); font-weight: 600; border: 1px solid var(--accent); padding: 0 8px; }
+.site-footer { background: var(--ink); color: var(--footer-text); margin-top: 24px; }
+.site-footer a { color: var(--bg); }
+.footer-grid { padding-top: 48px; padding-bottom: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 32px; font-size: 14px; }
+.foot-label { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-dark); }
+@media (max-width: 640px) { .nav a { padding: 10px 8px; } }

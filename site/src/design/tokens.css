@@ -1,4 +1,5 @@
-/* Design tokens (approved design, 25 Oct 2026). Shared by the portfolio; each site sets --accent. */
+/* Portfolio design system: tokens. Shared by every site; each sector sets its accent in
+   sectors/<sector>.css. Colours from the approved Bank Health design (25 Oct 2026). */
 :root {
   --bg: #F6F1E6;
   --card: #FBF8F1;
@@ -11,17 +12,10 @@
   --muted-dark: #A99E8A;
   --footer-text: #E9E1D2;
   --footer-text-2: #CFC5B3;
-  --accent: #8E1B2E;          /* Finance sector accent */
-  --accent-hover: #5E0F1C;
 
-  --band-H: #8E1B2E;  --band-H-ink: #FFFFFF;
-  --band-E: #B14A14;  --band-E-ink: #FFFFFF;
-  --band-W: #D9A23A;  --band-W-ink: #1A1612;
-  --band-L: #3E5C73;  --band-L-ink: #FFFFFF;
-  --band-D: #2B2420;  --band-D-ink: #FFFFFF;
-  --band-N: repeating-linear-gradient(45deg, #FBF8F1 0 3px, #8A7F6E 3px 4px);
-  --credit: #8E1B2E;
-  --earnings: #3E5C73;
+  /* Neutral until a sector sets its own (sectors/*.css). */
+  --accent: #1A1612;
+  --accent-hover: #3D352C;
 
   --serif: "Newsreader Variable", Newsreader, Georgia, serif;
   --sans: "Inter Variable", Inter, system-ui, sans-serif;
