@@ -45,7 +45,8 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   type IndexRow = { c: number; n: string; ci: string | null; st: string | null; a: number | null; b: string; p: number | null; r: string | null };
   let watched = readWatchlist();
   let index: IndexRow[] = [];
-  let preview = new Set<number>();
+  // The preview data lists the few banks that have a full file; the live data has no list: every bank has one.
+  let preview: Set<number> | null = null;
   const files = new Map<number, any>();
   const status = document.querySelector<HTMLElement>("[data-status]")!;
   const say = (t: string) => { status.textContent = t; };
@@ -53,7 +54,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   async function bankFile(cert: number) {
     if (files.has(cert)) return files.get(cert);
     let doc = null;
-    if (preview.has(cert) || !index.length) {
+    if (!preview || preview.has(cert)) {
       try { doc = await loadJson(`banks/${cert}.json`); } catch { doc = null; }
     }
     files.set(cert, doc);
@@ -116,7 +117,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           ${h ? `<div class="stack" style="gap:10px"><h3 class="mini">What changed since last quarter</h3>${change("Non-current loans", h.ncl, true)}${change("Tier 1 leverage", h.t1, false)}${change("Return on assets", h.roa, false)}</div>` : ""}
         </div>
         ${h ? `<div class="sparks">${spark("Non-current loans", h.ncl, "#8E1B2E", q)}${spark("Tier 1 leverage", h.t1, "#3E5C73", q)}${spark("Return on assets", h.roa, "#1A1612", q)}</div>`
-            : `<p class="small muted">The full card (history, changes) comes with the live data; the preview has full files for ${preview.size} banks.</p>`}
+            : preview
+              ? `<p class="small muted">The full card (history, changes) comes with the live data; the preview has full files for ${preview.size} banks.</p>`
+              : `<p class="small muted">No quarterly history for this bank in this week's data.</p>`}
       </article>`;
     }));
     document.querySelector("[data-cards]")!.innerHTML = cards.join("");
@@ -168,7 +171,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
   loadJson("banks_index.json").then((ix) => {
     index = ix.banks;
-    preview = new Set(ix.preview ?? []);
+    preview = ix.preview ? new Set(ix.preview) : null;
     if (!new URLSearchParams(location.search).get("certs") && watched.length === 0 && ix.fixture) {
       watched = [24045, 19629, 59245, 13986].filter((c) => index.some((b) => b.c === c));  // preview starter list
     }

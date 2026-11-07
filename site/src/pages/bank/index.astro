@@ -236,7 +236,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       q("[data-crumb]").textContent = row?.n ?? `CERT ${cert}`;
       if (row) {
         q("[data-missing-title]").textContent = row.n;
-        q("[data-missing-text]").textContent = `${row.p != null ? `Probability ${pct0(row.p)}, band ${BANDS[row.b]?.name}.` : BANDS[row.b]?.name + "."} The full bank page comes with the live data; this preview has full files for ${ix.preview?.length ?? 0} banks.`;
+        q("[data-missing-text]").textContent = `${row.p != null ? `Probability ${pct0(row.p)}, band ${BANDS[row.b]?.name}.` : BANDS[row.b]?.name + "."} ${ix.preview ? `The full bank page comes with the live data; this preview has full files for ${ix.preview.length} banks.` : "There is no full page for this bank in this week's data."}`;
       } else {
         q("[data-missing-title]").textContent = "No bank with that certificate number";
         q("[data-missing-text]").textContent = "Check the number, or find the bank by name.";
