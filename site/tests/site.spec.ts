@@ -275,6 +275,17 @@ test("an unknown address gets the 404 page with status 404, not indexed, with a 
   expect(axe.violations).toEqual([]);
 });
 
+test("every page has a Home link back to the portfolio home, and the footer name links there too", async ({ page }) => {
+  for (const path of ["/", "/watchlist/", "/bank/", "/methods/", "/pipeline/", "/no-such-page/"]) {
+    await page.goto(`${B}${path}`);
+    const home = page.locator("[data-home]");
+    await expect(home).toBeVisible();
+    await expect(home).toHaveAttribute("href", "https://martinsogiekpolor.com/");
+    await expect(home).toContainText("Home");
+    await expect(page.locator("footer").getByRole("link", { name: "Martins Ogiekpolor" })).toHaveAttribute("href", "https://martinsogiekpolor.com/");
+  }
+});
+
 test("built site: no wording that claims a review by AI", () => {
   const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
   for (const f of walk("dist").filter((f) => /\.(html|js|json)$/.test(f))) {
