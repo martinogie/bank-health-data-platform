@@ -250,6 +250,17 @@ test("pages carry a canonical link and social preview tags, and are not marked n
 
 // The phrase is assembled here so it never appears written out in the repo.
 const REVIEW_CLAIM = new RegExp(["A", "I"].join("") + "[- ]" + "review", "i");
+test("an unknown address gets the 404 page with status 404, not indexed, with a way back", async ({ page }) => {
+  const res = await page.goto(`${B}/no-such-page/`);
+  expect(res?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("This page doesn't exist");
+  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", "noindex");
+  await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Bank Health overview" })).toHaveAttribute("href", `${B}/`);
+  const axe = await new AxeBuilder({ page }).analyze();
+  expect(axe.violations).toEqual([]);
+});
+
 test("built site: no wording that claims a review by AI", () => {
   const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
   for (const f of walk("dist").filter((f) => /\.(html|js|json)$/.test(f))) {

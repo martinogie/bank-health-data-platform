@@ -13,9 +13,10 @@ import "../styles/bankhealth.css";
 interface Props {
   title: string;
   description: string;
-  current: "overview" | "watchlist" | "bank" | "methods" | "pipeline";
+  current?: "overview" | "watchlist" | "bank" | "methods" | "pipeline";
+  noindex?: boolean; // the 404 page
 }
-const { title, description, current } = Astro.props;
+const { title, description, current, noindex = false } = Astro.props;
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 // The public address of this page (canonical link and social previews). The preview addresses
 // (*.pages.dev) get "noindex" from public/_headers, so only this domain is indexed.
@@ -37,7 +38,7 @@ const nav = [
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
     <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Bank Health" />
