@@ -26,7 +26,9 @@ jobs:
   site:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # Same image as local runs: Node, Chromium and Python preinstalled, pinned to the Playwright version.
+    # Same image as local runs: Node 26.13.0, npm 11.20.0, Chromium and Python preinstalled, pinned
+    # to the Playwright version. The toolchain step below fails if it ever drifts from site/.nvmrc
+    # and packageManager in site/package.json (the versions on Martins' PC).
     container:
       image: mcr.microsoft.com/playwright:v1.65.0-noble
       options: --ipc=host
@@ -34,13 +36,19 @@ jobs:
       run:
         working-directory: site
     env:
-      ASTRO_TELEMETRY_DISABLED: "1"
+      ASTRO_TELEMETRY_DISABLED: "1"   # no Astro telemetry from CI (also off on the dev PC)
       CI: "1"
       HOME: /root
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install
+      - name: Toolchain matches the pinned Node and npm
+        run: |
+          want_node="v$(cat .nvmrc)"; want_npm="$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+          echo "node $(node -v) (want $want_node), npm $(npm -v) (want $want_npm)"
+          test "$(node -v)" = "$want_node" && test "$(npm -v)" = "$want_npm"
+
+      - name: Install exactly the lockfile
         run: npm ci
 
       - name: Pinned design copy matches its release (martinogie/portfolio-site)
