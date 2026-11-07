@@ -42,7 +42,6 @@ EARNINGS = {
 }  # fmt: skip
 
 
-
 def _half_up(x: float, places: int) -> str:
     return str(Decimal(str(x)).quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
 
@@ -60,14 +59,23 @@ def money_m(m: float) -> str:
     return f"${_half_up(a * 1000, 0)}k"
 
 
-SIZE_REASON = re.compile(r"Size \(total assets\): \$[\d.,]+(?:k|m|bn)( \(median of similar-size banks: \$[\d.,]+(?:k|m|bn)\))?")
+SIZE_REASON = re.compile(
+    r"Size \(total assets\): \$[\d.,]+(?:k|m|bn)( \(median of similar-size banks: \$[\d.,]+(?:k|m|bn)\))?"
+)
 
 
 def size_reason(text: str, assets_m: float | None, w: dict | None) -> str:
     """Re-format the size reason with money_m (the backend rounds differently: $6m vs $6.5m)."""
     if assets_m is None or not SIZE_REASON.search(text):
         return text
-    med = next((i["m"] for i in (w or {}).get("i", []) if i.get("f") == "log_total_assets" and i.get("m") is not None), None)
+    med = next(
+        (
+            i["m"]
+            for i in (w or {}).get("i", [])
+            if i.get("f") == "log_total_assets" and i.get("m") is not None
+        ),
+        None,
+    )
     tail = f" (median of similar-size banks: {money_m(math.exp(med) / 1e6)})" if med is not None else ""
     return SIZE_REASON.sub(f"Size (total assets): {money_m(assets_m)}{tail}", text)
 
@@ -79,15 +87,17 @@ def summary(quarter: str, ni_k: float | None, assets_k: float | None) -> dict | 
     kind = "net loss" if ni_k < 0 else "net income"
     pct = _half_up(abs(100 * ni_k / assets_k), 2)
     sign = "−" if ni_k < 0 else ""
-    return {"text": f"{quarter}: {kind} of {money_m(abs(ni_k) / 1000)} in the quarter ({sign}{pct}% of assets), "
-                    f"on total assets of {money_m(assets_k / 1000)}.",
-            "source": f"FDIC call report, {quarter}"}
+    return {
+        "text": f"{quarter}: {kind} of {money_m(abs(ni_k) / 1000)} in the quarter ({sign}{pct}% of assets), "
+        f"on total assets of {money_m(assets_k / 1000)}.",
+        "source": f"FDIC call report, {quarter}",
+    }
 
 
 # Band meaning (model card, "Bands"): probability cut-offs and the share that became distressed.
 BAND_MEANING = {
-# Meanings from the observed distress rates in the model card ("Bands": 2003-2019 / 2020-2024):
-# H 50.0% / 43.8%, E 25.0% / 20.0%, W 10.0% / 6.5%, L 2.8% / 1.2%.
+    # Meanings from the observed distress rates in the model card ("Bands": 2003-2019 / 2020-2024):
+    # H 50.0% / 43.8%, E 25.0% / 20.0%, W 10.0% / 6.5%, L 2.8% / 1.2%.
     "H": {"min": 0.358, "max": None, "meaning": "About 4 to 5 in 10 enter distress within a year"},
     "E": {"min": 0.163, "max": 0.358, "meaning": "About 1 in 5 to 1 in 4"},
     "W": {"min": 0.036, "max": 0.163, "meaning": "About 1 in 15 to 1 in 10"},
@@ -154,7 +164,9 @@ def main() -> None:
         y, m = int(r["report_date"][:4]), int(r["report_date"][5:7])
         lab = f"{y} Q{(m - 1) // 3 + 1}"
         if r["total_assets_k"] and r["net_income_qtr_k"] is not None:
-            ni.setdefault(int(r["cert"]), {})[lab] = round(100 * r["net_income_qtr_k"] / r["total_assets_k"], 2)
+            ni.setdefault(int(r["cert"]), {})[lab] = round(
+                100 * r["net_income_qtr_k"] / r["total_assets_k"], 2
+            )
             if lab == meta["quarterLabel"]:
                 latest_ni[int(r["cert"])] = (r["net_income_qtr_k"], r["total_assets_k"])
 
@@ -166,7 +178,9 @@ def main() -> None:
         (OUT / rel).write_text(json.dumps(doc, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
     wfs = {b["c"]: waterfall_of(b["c"]) for b in banks if b.get("wf")}
-    reasons = {b["c"]: [size_reason(t, b.get("a"), wfs.get(b["c"])) for t in (b.get("r") or [])] for b in banks}
+    reasons = {
+        b["c"]: [size_reason(t, b.get("a"), wfs.get(b["c"])) for t in (b.get("r") or [])] for b in banks
+    }
 
     # banks_index.json: every bank (search)
     write("banks_index.json", {**head, "preview": sorted(preview), "banks": [
@@ -183,7 +197,9 @@ def main() -> None:
         drivers[b["c"]] = driver
         if b["c"] not in preview:
             continue
-        flags = (["newBank"] if b["b"] == "N" or b.get("nb") else []) + (["foreignOffice"] if b["b"] == "F" else [])
+        flags = (["newBank"] if b["b"] == "N" or b.get("nb") else []) + (
+            ["foreignOffice"] if b["b"] == "F" else []
+        )
         history = {k: v for k, v in b["h"].items()}
         history["ni"] = [ni.get(b["c"], {}).get(q) for q in labels]
         write(f"banks/{b['c']}.json", {**head,
@@ -212,7 +228,9 @@ def main() -> None:
     })  # fmt: skip
 
     # model.json (figures copied from docs/model_card.md, v5)
-    write("model.json", {**head, **json.loads((SITE / "content" / "model_v5.json").read_text(encoding="utf-8"))})
+    write(
+        "model.json", {**head, **json.loads((SITE / "content" / "model_v5.json").read_text(encoding="utf-8"))}
+    )
 
     # pipeline.json. Resumed runs (failed, fixed, tasks cleared) are shown as one run with the
     # failed attempt kept: from the health view's RESUMED / EARLIER_ATTEMPTS in Stage B; for the
