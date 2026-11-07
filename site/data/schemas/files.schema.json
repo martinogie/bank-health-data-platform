@@ -64,7 +64,9 @@
       "type": "object",
       "required": ["datasets", "runs", "latest"],
       "properties": {
-        "latest": {"type": "object", "required": ["dbtModelsOk", "dbtTestsPass", "dbtTestsWarn", "dbtTestsFail", "durationSeconds"]}
+        "latest": {"type": "object", "required": ["dbtModelsOk", "dbtTestsPass", "dbtTestsWarn", "dbtTestsFail", "durationSeconds"]},
+        "runs": {"type": "array", "items": {"type": "object", "required": ["date", "state", "durationSeconds", "resumed", "earlierAttempts"],
+          "properties": {"resumed": {"type": "boolean"}, "earlierAttempts": {"type": "array", "items": {"type": "object", "required": ["state", "failedTasks", "durationSeconds"]}}}}}
       }
     }
   }

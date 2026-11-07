@@ -104,7 +104,9 @@ card (`content/model_v5.json` holds the figures, each traceable to `docs/model_c
 
 `datasets` (`{key, label, bronze, silver, gold}` rows added per layer in the latest successful run),
 `marts`, `complaintMatchPct`, `runs` (the last 12 from `OPS.HEALTH_RUNS_LAST_12`: `date, state,
-durationSeconds, databricksMinutes, credits, banksScored`), `latest` (`dbtModelsOk, dbtTestsPass,
+durationSeconds, databricksMinutes, credits, banksScored, resumed, earlierAttempts`; a run resumed after
+a fix is one entry timed from its first start, `resumed: true`, with each earlier attempt as
+`{state, failedTasks, durationSeconds}`, from the health view's `RESUMED` / `EARLIER_ATTEMPTS`), `latest` (`dbtModelsOk, dbtTestsPass,
 dbtTestsWarn, dbtTestsFail, databricksMinutes, durationSeconds`; tests total = pass + warn + fail). A run without a
 recorded duration has `durationSeconds: null` and shows "not recorded".
 

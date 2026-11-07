@@ -66,7 +66,7 @@ import Layout from "../../design/Layout.astro";
         <div class="table-scroll" tabindex="0" role="region" aria-label="Recent runs (scrolls sideways on small screens)"><table style="min-width:460px;font-size:14px">
           <thead><tr><th scope="col">Run</th><th scope="col">Result</th><th scope="col">Duration</th><th scope="col">Databricks</th></tr></thead>
           <tbody data-runs></tbody></table></div>
-        <p class="small muted">From the pipeline's run log (the last runs on the production server).</p>
+        <p class="small muted">From the pipeline's run log (the last runs on the production server). A run that failed and was resumed after a fix shows as one run, timed from its first start, with the failed attempt underneath.</p>
       </div>
     </section>
 
@@ -78,7 +78,12 @@ import Layout from "../../design/Layout.astro";
 <script>
   import { loadJson, esc, fmtInt } from "../../lib/site";
   // Durations from the run log; under a minute in seconds; "not recorded" when the log has none.
-  const mins = (s: number | null) => (s == null ? "not recorded" : s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
+  const mins = (s: number | null) => {
+    if (s == null) return "not recorded";
+    if (s < 60) return `${Math.round(s)} s`;
+    const m = Math.round(s / 60);
+    return m < 90 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+  };
   const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   loadJson("pipeline.json").then((p) => {
     const q = (s: string) => document.querySelector<HTMLElement>(s)!;
@@ -102,8 +107,20 @@ import Layout from "../../design/Layout.astro";
     document.querySelectorAll<HTMLButtonElement>("[data-ds]").forEach((b) => b.addEventListener("click", () => draw(b.dataset.ds!)));
     draw(p.datasets[0].key);
     const style = (s: string) => s === "success" ? "border:1px solid var(--band-L);color:var(--band-L)" : "border:1px solid var(--accent);color:var(--accent)";
-    q("[data-runs]").innerHTML = p.runs.map((r: any) => `<tr><td>${day(r.date)}</td><td><span style="display:inline-block;padding:2px 10px;font-size:12px;font-weight:600;${style(r.state)}">${r.state === "success" ? "Succeeded" : "Failed"}</span></td>
-      <td style="color:var(--ink-2)">${mins(r.durationSeconds)}</td><td style="color:var(--ink-2)">${r.databricksMinutes == null ? "not recorded" : `${r.databricksMinutes} min`}</td></tr>`).join("");
+    // A run resumed after a fix is one run: its result and total time from the first start, with
+    // each earlier (failed) attempt listed underneath. Failures stay visible.
+    const chip = (s: string) => `<span class="run-chip" style="${style(s)}">${s === "success" ? "Succeeded" : "Failed"}</span>`;
+    q("[data-runs]").innerHTML = p.runs.map((r: any) => {
+      const main = `<tr class="${r.resumed ? "run-group" : ""}"><td>${day(r.date)}</td>
+        <td>${chip(r.state)}${r.resumed ? `<span class="small muted run-note">resumed after a fix</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${mins(r.durationSeconds)}${r.resumed ? `<span class="small muted run-note">from first start</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${r.databricksMinutes == null ? "not recorded" : `${r.databricksMinutes} min`}${r.resumed && r.databricksMinutes != null ? `<span class="small muted run-note">whole run</span>` : ""}</td></tr>`;
+      const earlier = (r.earlierAttempts ?? []).map((a: any, i: number) => `<tr class="run-attempt">
+        <td><span class="muted">↳ Attempt ${i + 1}</span></td>
+        <td>${chip(a.state)}${a.failedTasks ? `<span class="small muted run-note">${esc(a.failedTasks)}</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${mins(a.durationSeconds)}</td><td></td></tr>`).join("");
+      return main + earlier;
+    }).join("");
     q("[data-figs]").innerHTML = [
       [fmtInt(p.latest.dbtTestsPass + p.latest.dbtTestsWarn + p.latest.dbtTestsFail), `dbt tests on the warehouse tables in the latest run: ${fmtInt(p.latest.dbtTestsPass)} passed, ${fmtInt(p.latest.dbtTestsWarn)} warned, ${fmtInt(p.latest.dbtTestsFail)} failed`],
       [fmtInt(p.latest.dbtModelsOk), "dbt models built and published"],
@@ -135,5 +152,9 @@ import Layout from "../../design/Layout.astro";
   .check { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: flex-start; }
   .check svg { flex: none; margin-top: 3px; }
   @media (max-width: 520px) { .facts { grid-template-columns: 1fr; } .facts div.b { padding-left: 0; border-left: none; } }
+  .run-chip { display: inline-block; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .run-note { display: block; margin-top: 4px; font-size: 12px; }
+  tr.run-group td { border-bottom: none; }
+  tr.run-attempt td { padding-top: 4px; font-size: 13px; background: var(--card); }
   .figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 20px; border-top: 2px solid var(--ink); padding-top: 24px; }
 </style>

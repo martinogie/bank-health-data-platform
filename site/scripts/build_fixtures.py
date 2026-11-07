@@ -18,6 +18,7 @@ import json
 import math
 import re
 import shutil
+from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -213,7 +214,30 @@ def main() -> None:
     # model.json (figures copied from docs/model_card.md, v5)
     write("model.json", {**head, **json.loads((SITE / "content" / "model_v5.json").read_text(encoding="utf-8"))})
 
-    # pipeline.json
+    # pipeline.json. Resumed runs (failed, fixed, tasks cleared) are shown as one run with the
+    # failed attempt kept: from the health view's RESUMED / EARLIER_ATTEMPTS in Stage B; for the
+    # two runs logged before that fix, from Airflow's own task history (airflow_attempts.json).
+    att_file = IN / "airflow_attempts.json"
+    resumed = {k: v for k, v in json.loads(att_file.read_text(encoding="utf-8")).items()
+               if not k.startswith("_")} if att_file.exists() else {}  # fmt: skip
+
+    def iso(t: str) -> datetime:
+        return datetime.fromisoformat(t.replace("Z", "+00:00"))
+
+    def run_entry(h: dict, r: dict | None) -> dict:
+        entry = {"date": h["started_at"][:10], "state": h["state"],
+                 "durationSeconds": round(h["duration_minutes"] * 60) if h.get("duration_minutes") is not None else None,
+                 "databricksMinutes": h.get("databricks_minutes"), "credits": h.get("credits"),
+                 "banksScored": h.get("scored_banks"), "resumed": False, "earlierAttempts": []}  # fmt: skip
+        if r:
+            first, end = iso(r["first_started_at"]), iso(h["ended_at"])
+            entry.update(date=r["first_started_at"][:10], resumed=True,
+                         durationSeconds=round((end - first).total_seconds()),
+                         earlierAttempts=[{"state": a["state"], "failedTasks": a["failed_tasks"],
+                                           "durationSeconds": round((iso(a["ended_at"]) - iso(a["started_at"])).total_seconds())}
+                                          for a in r["attempts"]])  # fmt: skip
+        return entry
+
     datasets = {
         "fdic_financials": ("Financials", rows["bronze"]["fdic_financials"], rows["silver"]["fdic_financials"], rows["gold"]["bank_quarter"]),
         "fdic_institutions": ("Institutions", rows["bronze"]["fdic_institutions"], rows["silver"]["fdic_institutions"], None),
@@ -224,10 +248,7 @@ def main() -> None:
         "datasets": [{"key": k, "label": v[0], "bronze": v[1], "silver": v[2], "gold": v[3]} for k, v in datasets.items()],
         "marts": rows["marts"],
         "complaintMatchPct": rows["match"]["complaints_matched_to_bank_pct"],
-        "runs": [{"date": h["started_at"][:10], "state": h["state"],
-                  "durationSeconds": round(h["duration_minutes"] * 60) if h.get("duration_minutes") is not None else None,
-                  "databricksMinutes": h.get("databricks_minutes"), "credits": h.get("credits"),
-                  "banksScored": h.get("scored_banks")} for h in sf["health"]],
+        "runs": [run_entry(h, resumed.get(h["run_id"])) for h in sf["health"]],
         "latest": {"dbtModelsOk": run["dbt_models_ok"], "dbtTestsPass": run["dbt_tests_pass"],
                    "dbtTestsWarn": next(h["dbt_tests_warn"] for h in sf["health"] if h["run_id"] == run["run_id"]),
                    "dbtTestsFail": run["dbt_tests_fail"], "databricksMinutes": run["databricks_minutes"],

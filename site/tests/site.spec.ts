@@ -174,7 +174,16 @@ test("pipeline: durations from the run log, and the dbt test counts", async ({ p
   await settle(page);
   const cells = await page.locator("[data-runs] td:nth-child(3)").allTextContents();
   expect(cells.length).toBeGreaterThan(0);
-  for (const c of cells) expect(c).toMatch(/^(\d+ (min|s)|not recorded)$/);
+  for (const c of cells) expect(c.trim()).toMatch(/^(\d+ (min|s)|\d+ h \d+ min|not recorded)(from first start)?$/);
+  // Resumed runs: one run "resumed after a fix", with the failed attempt still shown underneath.
+  const resumed = page.locator("tr.run-group");
+  expect(await resumed.count()).toBeGreaterThan(0);
+  for (const row of await resumed.all()) {
+    await expect(row).toContainText("resumed after a fix");
+    const attempt = row.locator("xpath=following-sibling::tr[1]");
+    await expect(attempt).toHaveClass(/run-attempt/);
+    await expect(attempt).toContainText("Failed");
+  }
   // The big number (total) and its label are separate elements; total = passed + warned + failed.
   const label = page.getByText(/^dbt tests on the warehouse tables in the latest run: \d+ passed, \d+ warned, \d+ failed$/);
   await expect(label).toBeVisible();
