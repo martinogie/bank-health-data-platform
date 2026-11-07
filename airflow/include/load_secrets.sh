@@ -10,6 +10,7 @@
 # empty and nothing happens; the values come from the env_file as before.
 #
 # The names must match SECRETS in deploy/vault_secrets.py (a unit test checks that).
+BANK_HEALTH_VAULT_OPTIONAL_ENV_NAMES="R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_ENDPOINT"
 BANK_HEALTH_VAULT_ENV_NAMES="DATABRICKS_TOKEN SNOWFLAKE_PRIVATE_KEY_PASSPHRASE AIRFLOW__CORE__FERNET_KEY AIRFLOW__API_AUTH__JWT_SECRET _AIRFLOW_WWW_USER_PASSWORD SLACK_WEBHOOK_URL DISCORD_WEBHOOK_URL AIRFLOW_DB_PASSWORD"
 
 if [ -n "${BANK_HEALTH_SECRETS_DIR:-}" ]; then
@@ -26,5 +27,12 @@ if [ -n "${BANK_HEALTH_SECRETS_DIR:-}" ]; then
     echo "Vault mode: missing in $BANK_HEALTH_SECRETS_DIR/env:$_bh_missing. Run deploy/vault_secrets.py fetch on the host. Not starting." >&2
     exit 1
   fi
+  # Optional (OPTIONAL_SECRETS in deploy/vault_secrets.py): exported when present, never required.
+  for _bh_name in $BANK_HEALTH_VAULT_OPTIONAL_ENV_NAMES; do
+    _bh_file="$BANK_HEALTH_SECRETS_DIR/env/$_bh_name"
+    if [ -s "$_bh_file" ]; then
+      export "$_bh_name=$(cat "$_bh_file")"
+    fi
+  done
   unset _bh_missing _bh_name _bh_file
 fi

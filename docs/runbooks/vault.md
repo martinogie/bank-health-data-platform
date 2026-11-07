@@ -17,6 +17,7 @@ before, so the pipeline code is unchanged. Nothing secret stays on disk once the
 | `prod-airflow-admin-password` | `_AIRFLOW_WWW_USER_PASSWORD` | the admin user, created by `airflow-init` |
 | `prod-slack-webhook`, `prod-discord-webhook` | `SLACK_WEBHOOK_URL`, `DISCORD_WEBHOOK_URL` | alerts |
 | `prod-airflow-db-password` | `/run/bank-health/env/AIRFLOW_DB_PASSWORD` | Airflow's own metadata database, through `airflow/include/db_conn.sh`, once switched (below) |
+| `prod-r2-access-key-id`, `prod-r2-secret-access-key`, `prod-r2-endpoint` | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT` | the site publish DAG only. **Optional**: when missing, Airflow still starts and only `bank_health_publish_site` fails (`OPTIONAL_SECRETS` in `deploy/vault_secrets.py`) |
 
 - Vault `bank-health-vault` (standard vault, software key `bank-health-secrets-key`: free).
   Its OCID is in `/srv/bank-health/app/airflow/.env` as `BANK_HEALTH_VAULT_ID` (not secret, but

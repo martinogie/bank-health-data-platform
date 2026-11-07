@@ -44,6 +44,13 @@ SECRETS: dict[str, tuple[str, str]] = {
     "prod-airflow-db-password": ("env", "AIRFLOW_DB_PASSWORD"),  # read by airflow/include/db_conn.sh
     "prod-snowflake-private-key": ("file", "keys/snowflake_rsa_key.p8"),
 }
+# Optional: fetched and exported when present in Vault, skipped (never blocking) when not. Only the
+# site publish DAG uses them, so a missing R2 token can never stop Airflow or the weekly run.
+OPTIONAL_SECRETS: dict[str, tuple[str, str]] = {
+    "prod-r2-access-key-id": ("env", "R2_ACCESS_KEY_ID"),
+    "prod-r2-secret-access-key": ("env", "R2_SECRET_ACCESS_KEY"),
+    "prod-r2-endpoint": ("env", "R2_ENDPOINT"),
+}
 SCHEDULER = "airflow-airflow-scheduler-1"
 
 Reader = Callable[[str], str]  # secret name -> value
@@ -69,7 +76,19 @@ def read_all(read: Reader) -> dict[str, str]:
         values[name] = value
     if failed:
         raise FetchError("could not read: " + ", ".join(failed))
+    for name in OPTIONAL_SECRETS:  # missing or empty: skipped, never a failure
+        try:
+            value = read(name)
+        except Exception:
+            continue
+        if value.strip():
+            values[name] = value
     return values
+
+
+def _present(values: dict[str, str]) -> dict[str, tuple[str, str]]:
+    """Every required secret, plus the optional ones that were found."""
+    return {**SECRETS, **{n: t for n, t in OPTIONAL_SECRETS.items() if n in values}}
 
 
 def _write_atomic(path: Path, content: str) -> None:
@@ -84,7 +103,7 @@ def _write_atomic(path: Path, content: str) -> None:
 def write_runtime(values: dict[str, str], runtime_dir: Path) -> list[str]:
     """Write the values under runtime_dir; returns the relative paths written."""
     written = []
-    for name, (kind, target) in SECRETS.items():
+    for name, (kind, target) in _present(values).items():
         value = values[name]
         if kind == "env":
             rel = f"env/{target}"
@@ -119,7 +138,7 @@ def compare_with_running(values: dict[str, str], running: Fingerprint) -> list[t
     check-env (comparing with the .env file): Compose drops text after a value on the same line,
     which made check-env report a false DIFFERS on 5 Nov 2026."""
     results = []
-    for name, (kind, target) in SECRETS.items():
+    for name, (kind, target) in _present(values).items():
         if kind != "env":
             results.append((name, f"{target}: a file, not compared"))
             continue
@@ -204,6 +223,9 @@ def main(
             return 1
         written = write_runtime(values, args.runtime_dir)
         print(f"vault: {len(written)} secrets written to {args.runtime_dir} (RAM): " + ", ".join(written))
+        skipped = [n for n in OPTIONAL_SECRETS if n not in values]
+        if skipped:
+            print("vault: optional, not in Vault (skipped): " + ", ".join(skipped))
         return 0
     results = compare_with_running(values, running or docker_fingerprint)
     for name, result in results:
