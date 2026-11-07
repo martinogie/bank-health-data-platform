@@ -64,7 +64,7 @@ jobs:
         # Generic patterns only here (CI has no .env). Locally the same script also checks the real
         # values from .env; see site/README.md.
         run: |
-          { find public/data content -name '*.json'; find dist -name '*.html'; } > /tmp/site-files.txt
+          { find public/data ../ingestion/site_contract -name '*.json'; find dist -name '*.html'; } > /tmp/site-files.txt
           python3 ../scripts/check_public_docs.py $(cat /tmp/site-files.txt)
 
       - name: Playwright and axe (1440 and 375 px)
