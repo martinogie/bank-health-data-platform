@@ -209,6 +209,33 @@ test("watchlist page carries the rating line and the complaint caveat", async ({
   await expect(page.getByText("Built with AI-assisted coding; the design, analysis and review are my own.")).toBeVisible();
 });
 
+test("security headers on every response; the CSP allows no third-party source; no inline scripts", async ({ request }) => {
+  for (const path of ["/bankhealth/", "/bankhealth/watchlist/", "/bankhealth/data/overview.json"]) {
+    const h = (await request.get(path)).headers();
+    const csp = h["content-security-policy"] ?? "";
+    expect(csp, path).toContain("default-src 'self'");
+    expect(csp, path).toContain("script-src 'self'");
+    expect(csp, path).toContain("frame-ancestors 'none'");
+    expect(csp.match(/https?:\/\/|\*/g), `${path}: no third-party or wildcard sources`).toBeNull();
+    expect(h["x-content-type-options"], path).toBe("nosniff");
+    expect(h["referrer-policy"], path).toBe("strict-origin-when-cross-origin");
+  }
+  const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
+  for (const f of walk("dist").filter((f) => f.endsWith(".html"))) {
+    const inline = [...readFileSync(f, "utf-8").matchAll(/<script(?![^>]*\bsrc=)[^>]*>/g)].map((m) => m[0]);
+    expect(inline, `${f}: inline scripts are blocked by the CSP`).toEqual([]);
+  }
+  expect(readFileSync("dist/_headers", "utf-8")).toContain("Strict-Transport-Security: max-age=31536000");
+});
+
+test("pages carry a canonical link and social preview tags, and are not marked noindex", async ({ page }) => {
+  await page.goto("/bankhealth/methods/");
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", "https://finance.martinsogiekpolor.com/bankhealth/methods/");
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute("content", "https://finance.martinsogiekpolor.com/bankhealth/social.png");
+  await expect(page.locator('meta[name="robots"]')).toHaveCount(0);
+  expect(statSync("dist/social.png").size).toBeGreaterThan(10_000);
+});
+
 // The phrase is assembled here so it never appears written out in the repo.
 const REVIEW_CLAIM = new RegExp(["A", "I"].join("") + "[- ]" + "review", "i");
 test("built site: no wording that claims a review by AI", () => {

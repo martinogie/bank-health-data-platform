@@ -224,3 +224,30 @@ def test_db_conn_reads_the_vault_password_after_the_switch(tmp_path):
     (tmp_path / "env" / "AIRFLOW_DB_PASSWORD").unlink()
     missing = run_db_conn(on)
     assert missing.returncode == 1 and "is missing" in missing.stderr
+
+
+def test_optional_r2_secrets_are_written_when_present_and_skipped_when_not(tmp_path, capsys):
+    # Not in Vault yet: the fetch still succeeds (Airflow must start), and says what it skipped.
+    assert vs.main(["fetch", "--runtime-dir", str(tmp_path)], reader=fake_reader(VALUES)) == 0
+    assert not (tmp_path / "env" / "R2_ENDPOINT").exists()
+    out = capsys.readouterr().out
+    assert (
+        "optional, not in Vault (skipped): prod-r2-access-key-id, prod-r2-secret-access-key, prod-r2-endpoint"
+        in out
+    )
+    # In Vault: written like the others, never printed.
+    r2 = {"prod-r2-access-key-id": "r2-key-id-xyz", "prod-r2-secret-access-key": "r2-secret-xyz",
+          "prod-r2-endpoint": "https://acct.r2.example"}  # fmt: skip
+    assert vs.main(["fetch", "--runtime-dir", str(tmp_path)], reader=fake_reader({**VALUES, **r2})) == 0
+    assert (tmp_path / "env" / "R2_SECRET_ACCESS_KEY").read_text() == "r2-secret-xyz"
+    out = capsys.readouterr()
+    assert "12 secrets written" in out.out and "skipped" not in out.out
+    for value in r2.values():
+        assert value not in out.out + out.err
+
+
+def test_load_secrets_sh_lists_the_same_optional_names():
+    text = (ROOT / "airflow" / "include" / "load_secrets.sh").read_text()
+    line = next(l for l in text.splitlines() if l.startswith("BANK_HEALTH_VAULT_OPTIONAL_ENV_NAMES="))
+    shell_names = set(line.split("=", 1)[1].strip('"').split())
+    assert shell_names == {target for kind, target in vs.OPTIONAL_SECRETS.values() if kind == "env"}

@@ -1,0 +1,18 @@
+# Cloudflare Pages response headers for the Bank Health site. The router Worker on
+# finance.martinsogiekpolor.com sets the same security headers (and drops the preview-only noindex).
+# CSP: everything from this site only, no third-party sources. 'unsafe-inline' for styles only
+# (the pages use style attributes); scripts are bundled files, never inline.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()
+  Cross-Origin-Opener-Policy: same-origin
+
+# The preview addresses are never indexed (only the public domain is).
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

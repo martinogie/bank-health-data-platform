@@ -10,10 +10,10 @@ name: Site
 
 on:
   pull_request:
-    paths: ["site/**", "scripts/check_public_docs.py", ".github/workflows/site.yml"]
+    paths: ["site/**", "scripts/check_public_docs.py", "ingestion/public_scan.py", "ingestion/site_export.py", "ingestion/site_contract/**", ".github/workflows/site.yml"]
   push:
     branches: [main]
-    paths: ["site/**", "scripts/check_public_docs.py", ".github/workflows/site.yml"]
+    paths: ["site/**", "scripts/check_public_docs.py", "ingestion/public_scan.py", "ingestion/site_export.py", "ingestion/site_contract/**", ".github/workflows/site.yml"]
 
 permissions:
   contents: read

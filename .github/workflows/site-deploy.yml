@@ -1,0 +1,79 @@
+# Deploy the Bank Health site (site/) to the Cloudflare Pages project "bankhealth".
+# Runs after the Site workflow passes on main (or by hand), and waits for Martins' approval
+# (GitHub environment "production"). The live data is NOT part of this deploy: it comes from the
+# private R2 bucket through the router Worker, so the build ships without the preview data.
+# Secrets (environment "production"): CLOUDFLARE_API_TOKEN (Pages + Workers on Martins' account
+# only) and CLOUDFLARE_ACCOUNT_ID; both created and pasted by Martins, never printed.
+name: Site deploy
+
+on:
+  workflow_run:
+    workflows: ["Site"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
+env:
+  WRANGLER: "wrangler@4.151.3"   # pinned (released 20 Oct 2026)
+  PROJECT: bankhealth
+
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: production
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
+    defaults:
+      run:
+        working-directory: site
+    env:
+      ASTRO_TELEMETRY_DISABLED: "1"
+      HOME: /root
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Toolchain matches the pinned Node and npm
+        run: |
+          test "$(node -v)" = "v$(cat .nvmrc)"
+          test "$(npm -v)" = "$(node -p 'require("./package.json").packageManager.split("@")[1]')"
+
+      - name: Install, check the design copy, build
+        run: |
+          npm ci
+          node src/design/check-design.mjs
+          npx astro build
+
+      - name: Ship without the preview data (the live data comes from R2)
+        run: rm -rf dist/data && test ! -e dist/data
+
+      - name: No identifiers or secrets in the built site
+        run: python3 ../scripts/check_public_docs.py $(find dist -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' -o -name '*.xml' -o -name '*.txt' -o -name '_headers' \))
+
+      - name: Create the Pages project the first time
+        run: |
+          if npx --yes "$WRANGLER" pages project list 2>/dev/null | grep -qw "$PROJECT"; then
+            echo "Pages project $PROJECT exists"
+          else
+            npx --yes "$WRANGLER" pages project create "$PROJECT" --production-branch main
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        run: npx --yes "$WRANGLER" pages deploy dist --project-name "$PROJECT" --branch main --commit-hash "${{ github.event.workflow_run.head_sha || github.sha }}" --commit-dirty=true
+
+      - name: Record the project's address
+        run: |
+          echo "### Deployed ${PROJECT}" >> "$GITHUB_STEP_SUMMARY"
+          npx --yes "$WRANGLER" pages project list 2>/dev/null | grep -w "$PROJECT" | sed 's/^/    /' >> "$GITHUB_STEP_SUMMARY" || true

@@ -13,3 +13,5 @@ pytest-cov>=7.1.0
 # match Databricks serverless environment 2; see .github/dependabot.yml.
 pyspark==3.5.9
 PyYAML>=6.0.3
+# site publish: schema checks (same version as the Airflow image)
+jsonschema==4.26.0

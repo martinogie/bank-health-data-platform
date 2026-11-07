@@ -46,3 +46,21 @@ def test_placeholders_and_short_values_are_ignored(monkeypatch):
     monkeypatch.setenv("SNOWFLAKE_ACCOUNT", "placeholder")
     monkeypatch.setenv("SNOWFLAKE_USER", "ab")
     assert cpd.env_values() == {}
+
+
+def test_placeholders_ignore_the_r2_endpoint_when_unset(monkeypatch):
+    for name in [*cpd.ENV_NAMES, "R2_ENDPOINT"]:
+        monkeypatch.delenv(name, raising=False)
+    assert cpd.env_values() == {}
+
+
+def test_the_r2_endpoint_and_its_account_id_are_caught_and_never_shown():
+    from ingestion.public_scan import env_values, scan, scan_files
+
+    secrets = env_values({"R2_ENDPOINT": "https://0123456789abcdef.r2.cloudflarestorage.com"})
+    assert set(secrets) == {"R2_ENDPOINT", "R2 account ID"}
+    hits = scan("account 0123456789ABCDEF in a file", secrets)
+    assert hits == ["value of R2 account ID (1x)"]
+    assert any(h.startswith("R2 endpoint") for h in scan("x.r2.cloudflarestorage.com", {}))
+    found = scan_files({"a.json": b'{"ok": 1}', "b.json": b"0123456789abcdef"}, secrets)
+    assert list(found) == ["b.json"] and "0123456789abcdef" not in str(found)

@@ -1,4 +1,4 @@
-// Validate every site data file against its JSON Schema (site/data/schemas/). Exit 1 on any error.
+// Validate every site data file against its JSON Schema (ingestion/site_contract/schemas/, shared with the publish DAG). Exit 1 on any error.
 //   node scripts/validate-data.mjs [data dir]     (default: public/data)
 import Ajv2020 from "ajv/dist/2020.js";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
@@ -7,8 +7,8 @@ import { join } from "node:path";
 const dir = process.argv[2] ?? "public/data";
 const load = (p) => JSON.parse(readFileSync(p, "utf-8"));
 const ajv = new Ajv2020({ allErrors: true, strict: false });
-ajv.addSchema(load("data/schemas/common.schema.json"));
-ajv.addSchema(load("data/schemas/files.schema.json"));
+ajv.addSchema(load("../ingestion/site_contract/schemas/common.schema.json"));
+ajv.addSchema(load("../ingestion/site_contract/schemas/files.schema.json"));
 const check = (def, file) => {
   const ok = ajv.validate(`files.schema.json#/$defs/${def}`, load(file));
   if (!ok) console.error(`${file}:`, ajv.errorsText(ajv.errors, { separator: "; " }));

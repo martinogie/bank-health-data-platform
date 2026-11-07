@@ -61,12 +61,13 @@ from pathlib import Path
 import pendulum
 from airflow.providers.databricks.operators.databricks import DatabricksRunNowOperator
 from airflow.providers.standard.operators.bash import BashOperator
-from airflow.sdk import Param, Variable, dag, task
+from airflow.sdk import Asset, Param, Variable, dag, task
 from cosmos import DbtTaskGroup, ExecutionConfig, ProfileConfig, ProjectConfig, RenderConfig
 from cosmos.constants import LoadMode, SourceRenderingBehavior, TestBehavior
 
 from ingestion import environment
 from ingestion.alerts import AlreadyReported, task_failure_callback
+from ingestion.site_publish import WEEKLY_SUCCESS_ASSET
 
 # Fails the DAG import (shown in the Airflow UI) if BANK_HEALTH_ENV is missing or invalid, or if
 # .env belongs to another environment. Nothing runs with a guessed environment.
@@ -869,9 +870,14 @@ def bank_health_weekly():
     @task(
         trigger_rule="all_done",
         retries=1,
+        # Starts bank_health_publish_site (the website's data). Airflow records an asset event only when
+        # this task succeeds, and it fails whenever the run failed (RunFailed), so the website is only
+        # ever refreshed after a fully successful run. A publish failure can't affect this run.
+        outlets=[Asset(WEEKLY_SUCCESS_ASSET)],
         doc_md="Always runs last, even after failures: writes this run's OPS.PIPELINE_RUNS row (state, failed "
         "tasks, rows per layer, dbt results, credits, model, latest quarter, SLO) and sends the weekly success "
-        "message. On a machine that is not the assigned prod scheduler it writes nothing.",
+        "message. On a machine that is not the assigned prod scheduler it writes nothing. On success it "
+        "signals bank_health_publish_site.",
     )
     def record_run() -> dict:
         return _record_run()

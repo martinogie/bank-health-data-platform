@@ -18,7 +18,7 @@ yet). Five pages: Overview, Watchlist, Bank detail, Model & methods, Pipeline. P
 rest appear in search with their band and probability. Rebuild it with
 `python scripts/build_fixtures.py` from read-only extracts in `.fixture-inputs/` (git-ignored).
 There is no hand-written text about any bank: each bank's one-line summary is generated from its
-FDIC call report. Model figures (`content/model_v5.json`) are copied from the model card.
+FDIC call report. Model figures (`ingestion/site_contract/model_v5.json`) are copied from the model card.
 
 ## Toolchain
 

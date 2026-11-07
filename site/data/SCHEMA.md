@@ -2,8 +2,8 @@
 
 The line between the backend and the Bank Health site (`finance.martinsogiekpolor.com/bankhealth`).
 The site reads only these files at runtime; every number on it comes from them, never from the page
-source. JSON Schemas: [schemas/common.schema.json](schemas/common.schema.json) and
-[schemas/files.schema.json](schemas/files.schema.json), checked by `scripts/validate-data.mjs` in CI.
+source. JSON Schemas: [common.schema.json](../../ingestion/site_contract/schemas/common.schema.json) and
+[files.schema.json](../../ingestion/site_contract/schemas/files.schema.json), checked by `scripts/validate-data.mjs` in CI.
 Agreed with Martins on 6 Nov 2026 (decision 2: one file per bank, no past-due series).
 
 **Every file** carries:
@@ -98,7 +98,7 @@ again) is on the v6 list in the model card.
 `bands` (`{code, name, range, trainRatePct, trainN, testRatePct, testN}`), `calibration`
 (`{title, predictedPct, observedPct}`), `monitoring` (PSI, stable features, backtest range and alert
 line), `limitations` (`{title, text}`), `next` (`{label, title, text}`). Source: MLflow and the model
-card (`content/model_v5.json` holds the figures, each traceable to `docs/model_card.md`).
+card (`ingestion/site_contract/model_v5.json` holds the figures, each traceable to `docs/model_card.md`).
 
 ## `pipeline.json`
 
