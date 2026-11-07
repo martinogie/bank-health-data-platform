@@ -1,0 +1,14 @@
+---
+// Unknown addresses. Cloudflare Pages serves dist/404.html with status 404 for any path it can't
+// find (without this file it would answer 200 with the overview page). Not indexed.
+import Layout from "../layouts/Layout.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<Layout title="Page not found" description="This page doesn't exist on Bank Health." noindex>
+  <div class="wrap page stack" style="gap:18px;max-width:720px;padding-top:72px;padding-bottom:120px">
+    <span class="eyebrow accent">404</span>
+    <h1 class="h1" style="font-size:clamp(36px,4.8vw,64px);line-height:1.05">This page doesn't exist</h1>
+    <p class="lede">The address may be mistyped, or the page has moved. To look up a bank, search for it on the watchlist.</p>
+    <p><a href={`${base}/`}>Bank Health overview</a> · <a href={`${base}/watchlist/`}>Find a bank on the watchlist</a></p>
+  </div>
+</Layout>

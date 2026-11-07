@@ -31,16 +31,22 @@ function securityHeaders() {
 }
 const SECURITY = securityHeaders();
 
+// Like Pages: an unknown path gets dist/404.html with status 404.
+async function notFound(res) {
+  try { res.writeHead(404, { ...SECURITY, "content-type": TYPES[".html"] }).end(await readFile(join(ROOT, "404.html"))); }
+  catch { res.writeHead(404, SECURITY).end(); }
+}
+
 createServer(async (req, res) => {
   const path = decodeURIComponent(new URL(req.url, "http://x").pathname);
   if (!path.startsWith(BASE)) { res.writeHead(404).end(); return; }
   let file = normalize(join(ROOT, path.slice(BASE.length)));
   if (!file.startsWith(normalize(ROOT))) { res.writeHead(403).end(); return; }
-  try { if ((await stat(file)).isDirectory()) file = join(file, "index.html"); } catch { res.writeHead(404, SECURITY).end(); return; }
+  try { if ((await stat(file)).isDirectory()) file = join(file, "index.html"); } catch { return notFound(res); }
   try {
     let body = await readFile(file);
     const ext = extname(file), headers = { ...SECURITY, "content-type": TYPES[ext] ?? "application/octet-stream" };
     if (COMPRESS.has(ext) && /gzip/.test(req.headers["accept-encoding"] ?? "")) { body = gzipSync(body); headers["content-encoding"] = "gzip"; }
     res.writeHead(200, headers).end(body);
-  } catch { res.writeHead(404, SECURITY).end(); }
+  } catch { notFound(res); }
 }).listen(Number(process.argv[2] ?? 4321), "127.0.0.1");
