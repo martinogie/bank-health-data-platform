@@ -33,7 +33,7 @@ this DAG fails to load. Only prod publishes the watchlist and the dbt manifest.
 | `check_model` | model monitoring (`07_monitor`): PSI of the score and features vs the previous 4 quarters and vs 2001–2019, the backtest from 2020 -> `OPS.MODEL_MONITORING`; a MODEL message when alerts are on (`MODEL_MONITOR_ALERTS`). Never fails the run | replaces this run's rows |
 | `check_credentials` | Databricks token expiry (token API) and the dates in `ops/credentials.yml`: an EXPIRING message for anything due within 14 days. Never fails the run | read-only |
 | `export_watchlist` | prod only: refresh `watchlist.json` and `waterfalls/<cert>.json` in `WATCHLIST_DIR` (outside the git checkout) for the watchlist page | waterfall folder swapped in first, then the file replaced atomically |
-| `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | replaces this run's row |
+| `record_run` | always runs last (even after failures): one `OPS.PIPELINE_RUNS` row; the weekly success message | updates this run's row; a run resumed after a fix keeps its first start and lists the earlier attempts (`ROWS_DETAIL:attempts`) |
 
 **Alerts** (Slack and Discord, `ingestion/alerts.py`): any task failing after its last retry, the
 freshness and volume checks, a run not finished by Monday 12:00 CT (`bank_health_slo_check`), and
@@ -218,15 +218,22 @@ def _record_run() -> dict:
         except Exception as exc:
             print(f"dbt results not available: {type(exc).__name__}")
             dbt = {}
-        credits = (
-            run_log.credits_used(cur, warehouse, dag_run.start_date, ended) if dag_run.start_date else None
+        # A run resumed after a fix (tasks cleared) keeps its first start and its earlier attempts;
+        # without this the resume replaced the failed row (run_log.resume_info).
+        first_start, resume = run_log.resume_info(
+            run_log.prior_attempt(cur, dag_run.run_id), dag_run.start_date
         )
+        if resume:
+            print(
+                f"resumed run: first started {first_start}, {len(resume['attempts'])} earlier attempt(s) kept"
+            )
+        credits = run_log.credits_used(cur, warehouse, first_start, ended) if first_start else None
         row = run_log.build_row(
             run_id=dag_run.run_id,
             environment=ENV.name,
             host_id=host or (None if ENV.is_prod else "dev"),
             dag_id=dag_run.dag_id,
-            started_at=dag_run.start_date or ended,  # STARTED_AT is NOT NULL
+            started_at=first_start or ended,  # STARTED_AT is NOT NULL
             # SLO_MET only for scheduled runs; manual runs (tests, cutover) record NULL
             scheduled=str(getattr(dag_run.run_type, "value", dag_run.run_type)).lower() == "scheduled",
             ended_at=ended,
@@ -241,6 +248,7 @@ def _record_run() -> dict:
             backfill=ti.xcom_pull(task_ids="check_backfill"),
             contracts=ti.xcom_pull(task_ids="check_contracts"),
             databricks_minutes=metrics.get("databricks_minutes"),
+            resume=resume,
         )
         run_log.write_row(cur, row)
         backfilled = run_log.backfill_final_credits(cur, warehouse, ended)

@@ -231,6 +231,7 @@ def build_row(
     backfill: dict | None = None,
     contracts: dict | None = None,
     databricks_minutes: dict | None = None,
+    resume: dict | None = None,
 ) -> dict[str, Any]:
     """One PIPELINE_RUNS row. Times are stored in UTC. A run that ended before it started
     (e.g. `airflow dags test` with a future logical date) raises InvalidRunTimes instead of
@@ -285,8 +286,62 @@ def build_row(
         detail["databricks_minutes"] = databricks_minutes["tasks"]
     if backfill and backfill.get("mode") == "backfill":
         detail["backfill"] = {k: v for k, v in backfill.items() if k != "mode"}
+    if resume:
+        detail.update(resume)  # resumed, resumed_at, attempts (see resume_info)
     row["ROWS_DETAIL"] = detail or None
     return row
+
+
+# ------------------------------------------------------------------ resumed runs
+# Clearing a failed run's tasks in Airflow resets the DAG run's start_date to the moment of the
+# clear and runs record_run again, which used to REPLACE the failed row: the failure vanished and
+# the run looked like a 20-second success (6 Nov and 2 Nov 2026). The earlier row is still there
+# when record_run runs again, so we read it first: if it started before this attempt, the run was
+# resumed. The row then keeps the original start (true duration, SLO and credit window) and lists
+# the earlier attempts in ROWS_DETAIL:attempts; the health view shows RESUMED and ATTEMPTS.
+RESUME_GAP = timedelta(minutes=1)  # a record_run retry keeps the same start; a resume moves it
+
+
+def prior_attempt(cur, run_id: str) -> dict | None:
+    """This run's existing row (from an earlier attempt), or None."""
+    cur.execute(
+        f"select STATE, STARTED_AT, ENDED_AT, FAILED_TASKS, ROWS_DETAIL from {TABLE} where RUN_ID = %(run_id)s",
+        {"run_id": run_id},
+    )
+    found = cur.fetchone()
+    if not found:
+        return None
+    state, started, ended, failed, detail = found
+    detail = json.loads(detail) if isinstance(detail, str) else (detail or {})
+    return {
+        "state": state,
+        "started_at": started,
+        "ended_at": ended,
+        "failed_tasks": failed,
+        "detail": detail,
+    }
+
+
+def resume_info(prior: dict | None, current_start: datetime | None) -> tuple[datetime | None, dict]:
+    """(the run's first start, ROWS_DETAIL additions). No prior row, or a record_run retry within
+    the same attempt: (current_start, {}). A resumed run: the original start, plus
+    {resumed: true, resumed_at, attempts: [earlier attempts, oldest first]}."""
+    if prior is None or current_start is None or prior.get("started_at") is None:
+        return current_start, {}
+    first = _to_utc(prior["started_at"], "earlier STARTED_AT")
+    now_start = _to_utc(current_start, "STARTED_AT")
+    if first >= now_start - RESUME_GAP:
+        return current_start, {}
+    earlier = prior["detail"] or {}
+    # The earlier row's own attempt began at its resumed_at (if it was itself a resume) or at the start.
+    attempt_start = earlier.get("resumed_at") or first.isoformat()
+    attempts = list(earlier.get("attempts") or []) + [{
+        "state": prior["state"],
+        "started_at": attempt_start,
+        "ended_at": _to_utc(prior["ended_at"], "earlier ENDED_AT").isoformat() if prior.get("ended_at") else None,
+        "failed_tasks": prior["failed_tasks"],
+    }]  # fmt: skip
+    return first, {"resumed": True, "resumed_at": now_start.isoformat(), "attempts": attempts}
 
 
 def merge_sql(columns: tuple[str, ...] = COLUMNS) -> str:

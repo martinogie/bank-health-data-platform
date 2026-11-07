@@ -453,7 +453,8 @@ def test_credits_are_none_without_the_privilege():
 def row(state="success", **kw):
     return run_log.build_row(
         run_id="scheduled__2026-11-02", environment="prod", host_id="oracle-vm", dag_id="bank_health_weekly",
-        started_at=chicago(2026, 11, 2, 6), ended_at=chicago(2026, 11, 2, 6, 24), state=state,
+        started_at=kw.pop("started_at", chicago(2026, 11, 2, 6)), ended_at=kw.pop("ended_at", chicago(2026, 11, 2, 6, 24)),
+        state=state,
         failed_tasks=kw.pop("failed", []), layers=run_log.layer_rows(OUTPUTS),
         marts={"DIM_BANK": 27_835, "MART_EARLY_WARNING": 4257}, dbt={"DBT_TESTS_PASS": 94, "DBT_TESTS_WARN": 2},
         credits=0.08333, latest_quarter=date(2026, 6, 30), scheduled=kw.pop("scheduled", True), **kw,
@@ -504,6 +505,66 @@ def test_write_row_is_one_merge_that_parses_json():
     assert "parse_json(%(ROWS_DETAIL)s) as ROWS_DETAIL" in sql
     assert "parse_json(%(VOLUME_ANOMALIES)s) as VOLUME_ANOMALIES" in sql
     assert json.loads(table.rows["scheduled__2026-11-02"]["VOLUME_ANOMALIES"]) == [{"metric": "GOLD_ROWS"}]
+
+
+def utc(y, m, d, hh, mm=0):
+    return datetime(y, m, d, hh, mm, tzinfo=UTC)
+
+
+def prior_cursor(state, started, ended, failed=None, detail=None):
+    """A cursor holding this run's earlier PIPELINE_RUNS row (as prior_attempt reads it)."""
+    return FakeCursor({"select STATE, STARTED_AT, ENDED_AT, FAILED_TASKS, ROWS_DETAIL": [
+        (state, started, ended, failed, json.dumps(detail) if detail is not None else None)]})  # fmt: skip
+
+
+def test_prior_attempt_reads_this_runs_row_or_none():
+    assert run_log.prior_attempt(FakeCursor(), "manual__x") is None
+    cur = prior_cursor("failed", utc(2026, 11, 6, 9, 40), utc(2026, 11, 6, 10, 6), "export_watchlist")
+    p = run_log.prior_attempt(cur, "manual__x")
+    assert (p["state"], p["failed_tasks"], p["detail"]) == ("failed", "export_watchlist", {})
+    assert cur.queries[0][1] == {"run_id": "manual__x"}
+
+
+def test_a_first_attempt_and_a_record_run_retry_are_not_resumes():
+    start = utc(2026, 11, 6, 9, 40)
+    assert run_log.resume_info(None, start) == (start, {})
+    # record_run retried within the same attempt: the DAG run's start hasn't moved
+    same = run_log.prior_attempt(prior_cursor("success", start, utc(2026, 11, 6, 9, 58)), "r")
+    assert run_log.resume_info(same, start) == (start, {})
+
+
+def test_a_run_resumed_after_a_fix_keeps_its_first_start_and_the_failed_attempt():
+    """6 Nov 2026: started 09:40 UTC, export_watchlist failed (recorded 10:06); cleared at 10:38."""
+    prior = run_log.prior_attempt(
+        prior_cursor("failed", utc(2026, 11, 6, 9, 40), utc(2026, 11, 6, 10, 6), "export_watchlist"), "r"
+    )
+    first, resume = run_log.resume_info(prior, utc(2026, 11, 6, 10, 38))
+    assert first == utc(2026, 11, 6, 9, 40)
+    assert resume["resumed"] is True and resume["resumed_at"] == "2026-11-06T10:38:00+00:00"
+    assert resume["attempts"] == [{"state": "failed", "started_at": "2026-11-06T09:40:00+00:00",
+                                   "ended_at": "2026-11-06T10:06:00+00:00", "failed_tasks": "export_watchlist"}]  # fmt: skip
+    r = row(started_at=first, ended_at=utc(2026, 11, 6, 10, 39), resume=resume)
+    assert r["DURATION_SECONDS"] == 59 * 60  # from the first start, not the 1-minute resume
+    assert r["ROWS_DETAIL"]["resumed"] is True and r["ROWS_DETAIL"]["attempts"][0]["state"] == "failed"
+    assert r["ROWS_DETAIL"]["marts"]["MART_EARLY_WARNING"] == 4257  # the usual detail is kept
+
+
+def test_a_run_resumed_twice_lists_both_earlier_attempts():
+    first_detail = {"resumed": True, "resumed_at": "2026-11-06T10:38:00+00:00", "attempts": [
+        {"state": "failed", "started_at": "2026-11-06T09:40:00+00:00", "ended_at": "2026-11-06T10:06:00+00:00",
+         "failed_tasks": "export_watchlist"}]}  # fmt: skip
+    prior = run_log.prior_attempt(
+        prior_cursor(
+            "failed", utc(2026, 11, 6, 9, 40), utc(2026, 11, 6, 10, 45), "load_snowflake", first_detail
+        ),
+        "r",
+    )
+    first, resume = run_log.resume_info(prior, utc(2026, 11, 6, 11, 30))
+    assert first == utc(2026, 11, 6, 9, 40)
+    assert [a["failed_tasks"] for a in resume["attempts"]] == ["export_watchlist", "load_snowflake"]
+    assert (
+        resume["attempts"][1]["started_at"] == "2026-11-06T10:38:00+00:00"
+    )  # the second attempt's own start
 
 
 def test_writing_one_run_twice_leaves_one_row():
