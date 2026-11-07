@@ -45,7 +45,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <span class="eyebrow">Through the cycle</span>
       <h2 class="h2">Risk bands that move with the economy</h2>
       <p class="serif" style="font-size:19px;color:var(--ink-2)">Each band means a level of risk measured on history, not a rank. So the High band swelled in the 2009–2011 crisis and is near its lowest now.</p>
-      <p class="small muted" style="font-size:14px">Bank-quarters per year in each band. Cut-offs were set on 2003–2019 out-of-sample predictions; 2020–2024 was held back as a test.</p>
+      <p class="small muted" style="font-size:14px">Bank-quarters per year in each band. Cut-offs were set using 2003–2019 predictions, each year scored by a model that had not seen it; 2020–2024 was held back as a test.</p>
       <div role="group" aria-label="Choose a band" class="toggles" data-series-toggle>
         <button type="button" class="btn" data-series="H" aria-pressed="true">High</button>
         <button type="button" class="btn" data-series="E" aria-pressed="false">Elevated</button>
@@ -83,7 +83,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <tbody data-top><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
       </table>
     </div>
-    <p class="small muted">All twenty are in the High band. The driver is the group of measures, loan quality (credit) or earnings, with the larger push in the bank's SHAP explanation. Banks under three years old and US offices of foreign banks are not scored.</p>
+    <p class="small muted" data-chip-legend><strong>Driver chip</strong> = the larger group push (credit vs earnings) in the model's explanation of the score; <strong>main reason</strong> = the largest single measure. All twenty are in the High band. Banks under three years old and US offices of foreign banks are not scored.</p>
   </section>
 
   <section class="wrap section" style="padding-bottom:80px">
@@ -91,7 +91,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       <h2 class="serif" style="font-weight:500;font-size:34px">How to read a score</h2>
       <div class="grid-auto" style="gap:32px">
         <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">1</span><h3 style="font-size:18px">The probability</h3><p style="color:var(--ink-2)">The model's estimate that the bank enters distress within twelve months: it fails, its bad loans pass 3%, its Tier 1 leverage falls below 5%, or it loses money two quarters running.</p></div>
-        <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">2</span><h3 style="font-size:18px">The band</h3><p style="color:var(--ink-2)">A plain-language level set on history. In the High band, about half of banks entered distress; Elevated, one in four to one in two; Watch, one in ten to one in four; Low, fewer than one in ten.</p></div>
+        <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">2</span><h3 style="font-size:18px">The band</h3><p style="color:var(--ink-2)">A plain-language level set on history. Of banks in the High band, about 4 to 5 in 10 entered distress within a year; Elevated, about 1 in 5 to 1 in 4; Watch, about 1 in 15 to 1 in 10; Low, fewer than 3 in 100 (2003–2019 and 2020–2024).</p></div>
         <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">3</span><h3 style="font-size:18px">The reasons</h3><p style="color:var(--ink-2)">The three measures pushing the score up most, each beside the median of banks of the same size, so you can see how far the bank sits from normal.</p></div>
       </div>
     </div>
@@ -108,7 +108,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
     document.querySelector("[data-figures]")!.innerHTML = [
       [fmtInt(total), `banks covered in ${o.dataAsOf.quarterLabel}; ${fmtInt(o.banksScored)} ranked`, ""],
-      [fmtInt(c.H), "in the High band: about half of banks like these enter distress within a year", "color:var(--accent)"],
+      [fmtInt(c.H), "in the High band: about 4 to 5 in 10 banks like these enter distress within a year", "color:var(--accent)"],
       [fmtInt(c.D), "already in distress, so not ranked", ""],
       [fmtInt(o.keyFigures.bankQuarters), "bank-quarters of call reports, 2000 to 2026", ""],
       [fmtInt(o.keyFigures.failures), "failures and assistance transactions on the FDIC list", ""],
@@ -152,7 +152,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         <td><a class="serif" style="font-size:18px;font-weight:500" href="${bankUrl(t.cert)}">${esc(t.name)}</a><span class="muted small"> · ${esc(t.state)}</span></td>
         <td><div style="display:flex;align-items:center;gap:10px"><div class="bar-track"><div class="bar-fill" style="width:${Math.round(t.probability * 100)}%;background:${t.driver === "earnings" ? "var(--earnings)" : "var(--credit)"}"></div></div><span class="num" style="font-weight:600;width:40px;text-align:right">${pct0(t.probability)}</span></div></td>
         <td style="color:var(--ink-2)">${esc(t.reason ?? "")}</td>
-        <td>${driverChip(t.driver)}</td></tr>`).join("");
+        <td><span title="${t.driver ? "The larger group push in the model's explanation: credit (loan quality) or earnings" : ""}">${driverChip(t.driver)}</span></td></tr>`).join("");
       document.querySelectorAll<HTMLButtonElement>("[data-f]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === f)));
     };
     document.querySelectorAll<HTMLButtonElement>("[data-f]").forEach((b) => b.addEventListener("click", () => drawTop(b.dataset.f!)));

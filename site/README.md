@@ -17,8 +17,8 @@ yet). Five pages: Overview, Watchlist, Bank detail, Model & methods, Pipeline. P
 `"fixture": true` so the site shows a "Preview data" label. 26 banks have a full page; the
 rest appear in search with their band and probability. Rebuild it with
 `python scripts/build_fixtures.py` from read-only extracts in `.fixture-inputs/` (git-ignored).
-Curated notes (`content/bank_notes.json`) and model figures (`content/model_v5.json`) each cite
-the model card section they come from.
+There is no hand-written text about any bank: each bank's one-line summary is generated from its
+FDIC call report. Model figures (`content/model_v5.json`) are copied from the model card.
 
 ## Run it (Docker; no Node needed on the PC)
 
@@ -45,9 +45,9 @@ variable names are ever printed).
 | Check | What it proves | Latest result (6 Nov 2026, preview data) |
 |---|---|---|
 | Schemas (`scripts/validate-data.mjs`) | Every data file matches its JSON Schema | 30 files, 0 invalid |
-| Identifier scan (`scripts/check_public_docs.py`) | No account identifiers, hostnames, addresses, keys or emails in any data file or built page | 37 files clean |
-| Playwright (`tests/site.spec.ts`) | Each page at 1440 and 375 px: no console errors, no outside requests, no sideways scroll, no cookies, no serious axe issues; the toggles, filters, watchlist, share link, CSV, blocked storage, the rating line and complaint caveat; no wording that claims a review by AI | 18 passed |
-| Lighthouse (`scripts/lighthouse.sh`) | Performance ≥ 90 and Accessibility ≥ 95 on every page (mobile, median of 3, served compressed as on Cloudflare) | Performance 96–99, Accessibility 100 on all 5 pages |
+| Identifier scan (`scripts/check_public_docs.py`) | No account identifiers, hostnames, addresses, keys or emails in any data file or built page | all data files and built pages clean |
+| Playwright (`tests/site.spec.ts`) | Each page at 1440 and 375 px: no console errors, no outside requests, no sideways scroll, no cookies, no serious axe issues; the toggles, filters, watchlist, share link, CSV, blocked storage, the rating line and complaint caveat; no wording that claims a review by AI; the bank chart draws bars from zero with the distress line on the same scale; pushes that pull a score down draw left of centre; phone quarter labels do not overlap; pipeline durations and dbt counts | 22 passed |
+| Lighthouse (`scripts/lighthouse.sh`) | Performance ≥ 90 and Accessibility ≥ 95 on every page (mobile, median of 3, served compressed as on Cloudflare) | Performance 97–100, Accessibility 100 on all 5 pages |
 
 CI: [.github/workflows/site.yml](../.github/workflows/site.yml) runs all four on every change to
 `site/`. Screenshots: [docs/images/site/](../docs/images/site/).

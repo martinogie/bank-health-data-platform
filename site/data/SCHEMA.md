@@ -80,7 +80,7 @@ again) is on the v6 list in the model card.
 | `band` | Band code |
 | `rank`, `scoredBanks` | Rank among scored banks (1 = highest) and how many were scored |
 | `peerPercentile` | Share of same-tier banks with a lower probability, 0–100 |
-| `reasons` | Up to 3 `{text}`: SHAP reasons in plain words, compared with the median of similar-size banks |
+| `reasons` | Up to 3 `{text}`: SHAP reasons in plain words, compared with the median of similar-size banks; dollar amounts use the site's one rounding rule (below) |
 | `pushes` | `{credit, earnings}` in percentage points, or `null` (bands `D`, `N`, `F`) |
 | `driver` | `credit` \| `earnings` \| `null` |
 | `waterfall` | `{b, i, o}`: base probability, up to 8 items `{f, l, v, m, pp}` (feature, label, value, tier median, push), and "all other measures" |
@@ -89,7 +89,7 @@ again) is on the v6 list in the model card.
 | `quarters` | The 8 quarter labels (`2024 Q3` …) |
 | `complaints` | Matched banks only: `{quarter, count, per1bDeposits}` |
 | `flags` | Any of `cblr`, `newBank`, `foreignOffice`, `recentMerger` (drives "Read with care") |
-| `note` | Optional curated `{text, source}`; the source is a section of the model card |
+| `note` | `{text, source}`: a one-line summary **generated from the bank's call report** (net income or loss in the quarter, % of assets, total assets). Never hand-written. `null` if not reported |
 
 ## `model.json`
 
@@ -105,7 +105,14 @@ card (`content/model_v5.json` holds the figures, each traceable to `docs/model_c
 `datasets` (`{key, label, bronze, silver, gold}` rows added per layer in the latest successful run),
 `marts`, `complaintMatchPct`, `runs` (the last 12 from `OPS.HEALTH_RUNS_LAST_12`: `date, state,
 durationSeconds, databricksMinutes, credits, banksScored`), `latest` (`dbtModelsOk, dbtTestsPass,
-dbtTestsFail, databricksMinutes, durationSeconds`).
+dbtTestsWarn, dbtTestsFail, databricksMinutes, durationSeconds`; tests total = pass + warn + fail). A run without a
+recorded duration has `durationSeconds: null` and shows "not recorded".
+
+## Dollar amounts: one rounding rule
+
+`$X.Xbn` from $1bn, whole millions from $10m, `$X.Xm` from $1m, whole thousands below; halves round
+up. Implemented once for the pages (`money()` in `src/lib/site.ts`) and once for generated text
+(`money_m()` in the data builder), so a bank's assets read the same everywhere ($6.5m, not $6m/$7m).
 
 ## Safety checks on every file
 

@@ -115,6 +115,73 @@ test("bank page: from a cert, tabs switch, rating line present", async ({ page }
   await expect(page.getByText(/about a third of complaints match a bank/)).toBeVisible();
 });
 
+// Reads the bank chart's geometry: the zero line, the distress line and each bar (value, top, bottom).
+async function chartGeometry(page: Page) {
+  return page.locator("[data-chart]").evaluate((svg) => {
+    const num = (e: Element | null, a: string) => (e ? parseFloat(e.getAttribute(a)!) : NaN);
+    const line = svg.querySelector("[data-line-y]");
+    return {
+      zeroY: num(svg.querySelector("[data-zero-y]"), "data-zero-y"),
+      lineY: num(line, "data-line-y"), lineV: num(line, "data-line-v"),
+      bars: [...svg.querySelectorAll("rect[data-v]")].map((r) => ({ v: num(r, "data-v"), top: num(r, "y"), bottom: num(r, "y") + num(r, "height") })),
+    };
+  });
+}
+
+test("bank chart: bars start at zero and the distress line sits at its value on the same scale", async ({ page }) => {
+  await page.goto(`${B}/bank/?cert=24045`);
+  await settle(page);
+  for (const tab of ["Non-current loans", "Tier 1 leverage"]) {
+    await page.getByRole("button", { name: tab }).click();
+    const g = await chartGeometry(page);
+    expect(g.lineV, `${tab}: distress line drawn`).toBeGreaterThan(0);
+    expect(g.lineY, `${tab}: distress line above the zero line`).toBeLessThan(g.zeroY - 1);
+    const perUnit = (g.zeroY - g.lineY) / g.lineV; // px per percentage point, from the line
+    for (const b of g.bars.filter((x) => x.v > 0)) {
+      expect(Math.abs(b.bottom - g.zeroY), `${tab}: bar ${b.v} starts at zero`).toBeLessThan(0.5);
+      expect(Math.abs((g.zeroY - b.top) - b.v * perUnit), `${tab}: bar ${b.v} on the line's scale`).toBeLessThan(1);
+      if (b.v < g.lineV) expect(b.top, `${tab}: bar ${b.v} below the ${g.lineV}% line`).toBeGreaterThan(g.lineY);
+    }
+  }
+});
+
+test("bank page: pushes that pull the score down draw left of the centre line", async ({ page }) => {
+  await page.goto(`${B}/bank/?cert=24045`);
+  await settle(page);
+  const rows = await page.locator(".wf-track[data-pp]").evaluateAll((els) => els.map((el) => {
+    const mid = el.querySelector(".wf-mid")!.getBoundingClientRect(), bar = el.querySelector(".wf-bar")!.getBoundingClientRect();
+    return { pp: parseFloat(el.getAttribute("data-pp")!), mid: mid.left, left: bar.left, right: bar.right };
+  }));
+  expect(rows.some((r) => r.pp < 0), "the sample bank has a negative push").toBe(true);
+  for (const r of rows) {
+    if (r.pp < 0) expect(r.right, `push ${r.pp} ends at the centre`).toBeLessThanOrEqual(r.mid + 1.5);
+    else expect(r.left, `push ${r.pp} starts at the centre`).toBeGreaterThanOrEqual(r.mid - 1.5);
+  }
+});
+
+test("bank chart on a phone: quarter labels don't overlap", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.goto(`${B}/bank/?cert=24045`);
+  await settle(page);
+  const boxes = await page.locator("[data-chart-q] span").evaluateAll((els) =>
+    els.map((e) => { const r = document.createRange(); r.selectNodeContents(e); const b = r.getBoundingClientRect(); return { t: e.textContent, l: b.left, r: b.right }; }).filter((b) => b.t));
+  expect(boxes.length).toBeGreaterThanOrEqual(4);
+  for (let i = 1; i < boxes.length; i++) expect(boxes[i].l, `"${boxes[i - 1].t}" and "${boxes[i].t}"`).toBeGreaterThan(boxes[i - 1].r + 2);
+});
+
+test("pipeline: durations from the run log, and the dbt test counts", async ({ page }) => {
+  await page.goto(`${B}/pipeline/`);
+  await settle(page);
+  const cells = await page.locator("[data-runs] td:nth-child(3)").allTextContents();
+  expect(cells.length).toBeGreaterThan(0);
+  for (const c of cells) expect(c).toMatch(/^(\d+ (min|s)|not recorded)$/);
+  // The big number (total) and its label are separate elements; total = passed + warned + failed.
+  const label = page.getByText(/^dbt tests on the warehouse tables in the latest run: \d+ passed, \d+ warned, \d+ failed$/);
+  await expect(label).toBeVisible();
+  const [pass, warn, fail] = ((await label.textContent())!.match(/\d+/g) ?? []).map(Number);
+  await expect(label.locator("xpath=preceding-sibling::span[1]")).toHaveText(String(pass + warn + fail));
+});
+
 test("bank page: a bank outside the preview, and no cert at all", async ({ page }) => {
   await page.goto(`${B}/bank/?cert=628`);
   await settle(page);

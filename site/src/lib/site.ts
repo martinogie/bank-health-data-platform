@@ -48,11 +48,17 @@ export const fmtInt = (n: number | null | undefined) => (n == null ? "–" : n.t
 export const pct0 = (p: number | null | undefined) => (p == null ? "–" : `${Math.round(p * 100)}%`);
 export const fixed = (v: number | null | undefined, d = 2) => (v == null ? "–" : v.toFixed(d));
 
+// One rounding rule for dollar amounts in $ millions, everywhere on the site (and in
+// scripts/build_fixtures.py money_m): $X.Xbn from $1bn, whole millions from $10m, $X.Xm from $1m,
+// whole thousands below. Rounds halves up.
+const halfUp = (x: number, d: number) => (Math.round(x * 10 ** d + 1e-9) / 10 ** d).toFixed(d);
 export function money(m: number | null | undefined): string {
   if (m == null) return "–";
-  if (m >= 1000) return `$${(m / 1000).toFixed(1)}bn`;
-  if (m >= 1) return `$${Math.round(m)}m`;
-  return `$${(m * 1000).toFixed(0)}k`;
+  const a = Math.abs(m);
+  if (a >= 1000) return `$${halfUp(a / 1000, 1)}bn`;
+  if (a >= 10) return `$${halfUp(a, 0)}m`;
+  if (a >= 1) return `$${halfUp(a, 1)}m`;
+  return `$${halfUp(a * 1000, 0)}k`;
 }
 
 export function quarterText(o: { dataAsOf: { quarterLabel: string; updated: string } }): string {

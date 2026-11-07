@@ -77,7 +77,8 @@ import Layout from "../../design/Layout.astro";
 
 <script>
   import { loadJson, esc, fmtInt } from "../../lib/site";
-  const mins = (s: number | null) => (s == null ? "–" : `${Math.round(s / 60)} min`);
+  // Durations from the run log; under a minute in seconds; "not recorded" when the log has none.
+  const mins = (s: number | null) => (s == null ? "not recorded" : s < 60 ? `${Math.round(s)} s` : `${Math.round(s / 60)} min`);
   const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   loadJson("pipeline.json").then((p) => {
     const q = (s: string) => document.querySelector<HTMLElement>(s)!;
@@ -102,9 +103,9 @@ import Layout from "../../design/Layout.astro";
     draw(p.datasets[0].key);
     const style = (s: string) => s === "success" ? "border:1px solid var(--band-L);color:var(--band-L)" : "border:1px solid var(--accent);color:var(--accent)";
     q("[data-runs]").innerHTML = p.runs.map((r: any) => `<tr><td>${day(r.date)}</td><td><span style="display:inline-block;padding:2px 10px;font-size:12px;font-weight:600;${style(r.state)}">${r.state === "success" ? "Succeeded" : "Failed"}</span></td>
-      <td style="color:var(--ink-2)">${mins(r.durationSeconds)}</td><td style="color:var(--ink-2)">${r.databricksMinutes == null ? "–" : `${r.databricksMinutes} min`}</td></tr>`).join("");
+      <td style="color:var(--ink-2)">${mins(r.durationSeconds)}</td><td style="color:var(--ink-2)">${r.databricksMinutes == null ? "not recorded" : `${r.databricksMinutes} min`}</td></tr>`).join("");
     q("[data-figs]").innerHTML = [
-      [fmtInt(p.latest.dbtTestsPass), `data tests passed on the warehouse tables in the latest run (${p.latest.dbtTestsFail} failed)`],
+      [fmtInt(p.latest.dbtTestsPass + p.latest.dbtTestsWarn + p.latest.dbtTestsFail), `dbt tests on the warehouse tables in the latest run: ${fmtInt(p.latest.dbtTestsPass)} passed, ${fmtInt(p.latest.dbtTestsWarn)} warned, ${fmtInt(p.latest.dbtTestsFail)} failed`],
       [fmtInt(p.latest.dbtModelsOk), "dbt models built and published"],
       [`${p.latest.databricksMinutes} min`, "of Databricks compute in the latest run"],
       ["0", "secrets in the public repository (scanned on every change)"],
@@ -119,7 +120,10 @@ import Layout from "../../design/Layout.astro";
   .facts div.b { padding-left: 16px; border-left: 1px solid var(--rule); }
   .facts strong { font-size: 22px; font-weight: 500; }
   .tile-l { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
-  .stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 14px; }
+  /* 7 steps: one row on wide screens, 4 + 3 on medium, one column on phones. */
+  .stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 700px) { .stages { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (min-width: 1200px) { .stages { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
   .stages li { background: var(--card); border: 1px solid var(--rule); border-top: 4px solid var(--ink); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
   .step { font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.06em; }
   .stages strong { font-size: 20px; font-weight: 500; line-height: 1.2; }

@@ -44,7 +44,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
         </div>
         <figure class="card chart-card">
           <figcaption class="cap"><strong data-chart-title></strong><span class="small muted" data-chart-note></span></figcaption>
-          <svg class="hist" data-chart role="img" viewBox="0 0 800 300" preserveAspectRatio="none" width="100%" height="300"></svg>
+          <svg class="hist" data-chart role="img" viewBox="0 0 800 300" width="100%" height="300"></svg>
           <div class="qrow" data-chart-q aria-hidden="true"></div>
         </figure>
       </section>
@@ -57,7 +57,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
           <div data-distress></div>
         </div>
         <figure class="stack" style="margin:0;gap:14px" data-push-figure>
-          <figcaption style="font-size:14px;color:var(--ink-2)">How much each group of measures pushes this bank's probability, in percentage points, from the bank's SHAP explanation (its largest eight factors)</figcaption>
+          <figcaption style="font-size:14px;color:var(--ink-2)">How much each group of measures pushes this bank's probability up, in percentage points, from the model's explanation of this score (its eight largest factors)</figcaption>
           <div data-pushes class="stack" style="gap:14px"></div>
           <p class="small muted" data-push-note></p>
         </figure>
@@ -91,12 +91,15 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   const q = (s: string) => document.querySelector<HTMLElement>(s)!;
   const cert = parseInt(new URLSearchParams(location.search).get("cert") ?? "", 10);
 
-  const METRICS: Record<string, { title: string; note: string; color: string }> = {
-    ncl: { title: "Non-current loans, % of loans", note: "Higher is worse. Distress line: 3%", color: "#8E1B2E" },
-    t1: { title: "Tier 1 leverage ratio, %", note: "Lower is worse. Distress line: 5%", color: "#3E5C73" },
+  // line = the distress line for that measure, drawn on the same scale as the bars.
+  const METRICS: Record<string, { title: string; note: string; color: string; line?: number }> = {
+    ncl: { title: "Non-current loans, % of loans", note: "Higher is worse. Dashed line: the 3% distress line", color: "#8E1B2E", line: 3 },
+    t1: { title: "Tier 1 leverage ratio, %", note: "Lower is worse. Dashed line: the 5% distress line", color: "#3E5C73", line: 5 },
     roa: { title: "Return on assets, % (year to date, annualised)", note: "Below zero means a loss", color: "#1A1612" },
     ni: { title: "Net income in the quarter, % of assets", note: "Below zero means a loss in that quarter", color: "#B14A14" },
   };
+  // "2024 Q3" -> "Q3 '24" on narrow screens
+  const shortQ = (s: string) => { const [y, qq] = s.split(" "); return `${qq} '${y.slice(2)}`; };
 
   function drawChart(b: any, key: string) {
     const m = METRICS[key], vals: (number | null)[] = b.history[key] ?? [], qs: string[] = b.quarters;
@@ -104,23 +107,34 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     q("[data-chart-title]").textContent = m.title;
     q("[data-chart-note]").textContent = m.note;
     const svg = q("[data-chart]");
-    if (!nums.length) { svg.innerHTML = `<text x="400" y="150" text-anchor="middle" fill="#5B5246" font-size="16">Not reported for this bank</text>`; svg.setAttribute("aria-label", `${m.title}: not reported`); return; }
-    const hi = Math.max(0, ...nums), lo = Math.min(0, ...nums), span = hi - lo || 1;
-    const H = 240, top = 30, colW = 800 / vals.length;
+    // Draw at the real width so text is never stretched or squashed.
+    const W = Math.max(280, Math.round(svg.getBoundingClientRect().width || 800)), narrow = W < 520;
+    svg.setAttribute("viewBox", `0 0 ${W} 300`);
+    document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.setAttribute("aria-pressed", String(t.dataset.m === key)));
+    q("[data-chart-q]").innerHTML = qs.map((x, i) => `<span>${narrow ? (i % 2 === qs.length % 2 ? "" : esc(shortQ(x))) : esc(x)}</span>`).join("");
+    if (!nums.length) { svg.innerHTML = `<text x="${W / 2}" y="150" text-anchor="middle" fill="#5B5246" font-size="16">Not reported for this bank</text>`; svg.setAttribute("aria-label", `${m.title}: not reported`); return; }
+    // Bars start at zero; the axis always includes zero and the distress line.
+    const refs = m.line != null ? [m.line] : [];
+    const hiRaw = Math.max(0, ...nums, ...refs), loRaw = Math.min(0, ...nums, ...refs);
+    const pad = (hiRaw - loRaw || 1) * 0.08, hi = hiRaw > 0 ? hiRaw + pad : 0, lo = loRaw < 0 ? loRaw - pad : 0, span = hi - lo || 1;
+    const H = 250, top = 26, colW = W / vals.length;
     const y = (v: number) => top + ((hi - v) / span) * H;
     const zy = y(0);
-    let out = `<line x1="0" x2="800" y1="${zy}" y2="${zy}" stroke="#8A7F6E" stroke-dasharray="4 4" />`;
+    let out = `<line x1="0" x2="${W}" y1="${zy}" y2="${zy}" stroke="#1A1612" stroke-width="1" data-zero-y="${zy.toFixed(2)}" />`;
     vals.forEach((v, i) => {
       const x = i * colW + colW * 0.18, w = colW * 0.64, last = i === vals.length - 1;
       if (v == null) { out += `<text x="${i * colW + colW / 2}" y="${zy - 8}" text-anchor="middle" font-size="12" fill="#5B5246">n/a</text>`; return; }
-      const y1 = Math.min(y(v), zy), h = Math.max(2, Math.abs(y(v) - zy)), neg = v < 0;
-      out += `<rect x="${x}" y="${y1}" width="${w}" height="${h}" fill="${neg ? "#8E1B2E" : m.color}" opacity="${last ? 1 : 0.72}" />`;
-      out += `<text x="${i * colW + colW / 2}" y="${neg ? y1 + h + 16 : y1 - 6}" text-anchor="middle" font-size="13" font-weight="${last ? 700 : 500}" fill="#1A1612">${v.toFixed(2)}</text>`;
+      const y1 = Math.min(y(v), zy), h = Math.max(1, Math.abs(y(v) - zy)), neg = v < 0;
+      out += `<rect x="${x}" y="${y1}" width="${w}" height="${h}" fill="${neg ? "#8E1B2E" : m.color}" opacity="${last ? 1 : 0.72}" data-v="${v}" />`;
+      out += `<text x="${i * colW + colW / 2}" y="${neg ? y1 + h + 16 : y1 - 6}" text-anchor="middle" font-size="${narrow ? 11 : 13}" font-weight="${last ? 700 : 500}" fill="#1A1612">${v.toFixed(2)}</text>`;
     });
+    if (m.line != null) {
+      const ly = y(m.line);
+      out += `<line x1="0" x2="${W}" y1="${ly}" y2="${ly}" stroke="#5B5246" stroke-width="1.5" stroke-dasharray="6 5" data-line-y="${ly.toFixed(2)}" data-line-v="${m.line}" />`;
+      out += `<text x="${W - 4}" y="${ly - 6}" text-anchor="end" font-size="12" fill="#5B5246">Distress line ${m.line}%</text>`;
+    }
     svg.innerHTML = out;
-    svg.setAttribute("aria-label", `${m.title} by quarter: ` + vals.map((v, i) => `${qs[i]} ${v == null ? "not reported" : v.toFixed(2)}`).join(", "));
-    q("[data-chart-q]").innerHTML = qs.map((x) => `<span>${esc(x)}</span>`).join("");
-    document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.setAttribute("aria-pressed", String(t.dataset.m === key)));
+    svg.setAttribute("aria-label", `${m.title} by quarter: ` + vals.map((v, i) => `${qs[i]} ${v == null ? "not reported" : v.toFixed(2)}`).join(", ") + (m.line != null ? `. Distress line: ${m.line}%` : ""));
   }
 
   function renderBank(b: any) {
@@ -153,25 +167,37 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       q("[data-push-figure]").hidden = true;
     }
 
-    // waterfall
+    // waterfall: diverging bars from a centre line (up pushes go right, down pushes go left)
     if (b.waterfall) {
       const w = b.waterfall, items: any[] = w.i;
-      const max = Math.max(w.b, ...items.map((i) => Math.abs(i.pp)), Math.abs(w.o), b.probability * 100);
-      const bar = (v: number, color: string) => `<div class="wf-track"><div style="width:${(Math.abs(v) / max * 100).toFixed(1)}%;background:${color};height:100%"></div></div>`;
-      q("[data-wf-intro]").textContent = `Start from the average starting point (${w.b.toFixed(1)}%), add each factor's push, and you reach this bank's ${(b.probability * 100).toFixed(1)}%. Values in percentage points.`;
+      const max = Math.max(...items.map((i) => Math.abs(i.pp)), Math.abs(w.o)) || 1;
+      const bar = (v: number) => {
+        const pct = (Math.abs(v) / max * 50).toFixed(1), side = v >= 0 ? `left:50%` : `right:50%`;
+        return `<div class="wf-track" data-pp="${v}"><span class="wf-mid"></span><span class="wf-bar ${v >= 0 ? "up" : "down"}" style="${side};width:${pct}%"></span></div>`;
+      };
+      const pp = (v: number) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`;
+      // Size is stored as the log of total assets ($); show it in dollars.
+      const val = (i: any) => i.f === "log_total_assets"
+        ? `${money(Math.exp(i.v) / 1e6)}${i.m != null ? `; median ${money(Math.exp(i.m) / 1e6)}` : ""}`
+        : `${fixed(i.v)}${i.m != null ? `; median ${fixed(i.m)}` : ""}`;
+      q("[data-wf-intro]").textContent = `Start from the average starting point (${w.b.toFixed(1)}%), add each factor's push, and you reach this bank's ${(b.probability * 100).toFixed(1)}%. Bars to the right push the probability up, bars to the left pull it down; values in percentage points.`;
       q("[data-waterfall]").innerHTML =
-        `<div class="wf-row"><span>Average starting point</span>${bar(w.b, "#8A7F6E")}<strong class="num">${w.b.toFixed(1)}%</strong></div>` +
-        items.map((i) => `<div class="wf-row"><span>${esc(i.l)}${i.v != null ? ` <span class="muted small">(${fixed(i.v)}${i.m != null ? `; median ${fixed(i.m)}` : ""})</span>` : i.nr ? ` <span class="muted small">(${esc(i.nr)})</span>` : ""}</span>${bar(i.pp, i.pp >= 0 ? "var(--accent)" : "var(--earnings)")}<strong class="num">${i.pp >= 0 ? "+" : "−"}${Math.abs(i.pp).toFixed(1)}</strong></div>`).join("") +
-        `<div class="wf-row"><span>All other measures</span>${bar(w.o, w.o >= 0 ? "var(--accent)" : "var(--earnings)")}<strong class="num">${w.o >= 0 ? "+" : "−"}${Math.abs(w.o).toFixed(1)}</strong></div>` +
-        `<div class="wf-row total"><span>This bank's probability</span>${bar(b.probability * 100, "var(--ink)")}<strong class="num">${(b.probability * 100).toFixed(1)}%</strong></div>`;
+        `<div class="wf-row"><span>Average starting point</span><span class="wf-axis small muted"><span>pulls down</span><span>pushes up</span></span><strong class="num">${w.b.toFixed(1)}%</strong></div>` +
+        items.map((i) => `<div class="wf-row"><span>${esc(i.l)}${i.v != null ? ` <span class="muted small">(${val(i)})</span>` : i.nr ? ` <span class="muted small">(${esc(i.nr)})</span>` : ""}</span>${bar(i.pp)}<strong class="num">${pp(i.pp)}</strong></div>`).join("") +
+        `<div class="wf-row"><span>All other measures</span>${bar(w.o)}<strong class="num">${pp(w.o)}</strong></div>` +
+        `<div class="wf-row total"><span>This bank's probability</span><span></span><strong class="num">${(b.probability * 100).toFixed(1)}%</strong></div>`;
     } else {
       q("[data-waterfall-section]").hidden = true;
     }
 
-    // history
+    // history (redrawn at the new width when the window is resized)
     if (b.history && b.quarters?.length) {
-      document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.addEventListener("click", () => drawChart(b, t.dataset.m!)));
-      drawChart(b, "ncl");
+      let current = "ncl", lastW = 0;
+      const draw = (k: string) => { current = k; drawChart(b, k); };
+      document.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((t) => t.addEventListener("click", () => draw(t.dataset.m!)));
+      q("[data-bank]").hidden = false; // visible first, so the chart can measure its width
+      draw("ncl");
+      new ResizeObserver(() => { const w = q("[data-chart]").getBoundingClientRect().width; if (Math.abs(w - lastW) > 1) { lastW = w; drawChart(b, current); } }).observe(q("[data-chart]"));
     } else q("[data-history-section]").hidden = true;
 
     // read with care: flags and notes
@@ -179,8 +205,6 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
       ? ["US offices of foreign banks are not scored", "Their capital sits with a parent abroad, so the call report shows no capital ratios. The bank is listed but not scored."]
       : b.flags?.includes("newBank")
       ? ["Banks under three years old are not scored", "Start-up losses are expected, but the label would count two losses in a row as distress."]
-      : b.note?.source?.includes("securities")
-      ? ["The model cannot tell a securities sale from a weakening business", "Banks sometimes sell low-yielding bonds at a loss on purpose. The call report shows the realised loss but not the reason, and the current model treats it like an operating loss. A planned version 6 separates securities gains and losses from operating earnings."]
       : null;
     if (care) { q("[data-care]").hidden = false; q("[data-care-title]").textContent = care[0]; q("[data-care-text]").textContent = care[1]; }
 
@@ -244,10 +268,16 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, "");
   .wf-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) 70px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 14px; }
   .wf-row strong { text-align: right; }
   .wf-row.total { font-weight: 600; border-bottom: 2px solid var(--ink); }
-  .wf-track { height: 12px; background: var(--track); }
+  .wf-track { position: relative; height: 12px; background: var(--track); }
+  .wf-mid { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; background: var(--ink); }
+  .wf-bar { position: absolute; top: 0; height: 100%; }
+  .wf-bar.up { background: var(--accent); }
+  .wf-bar.down { background: var(--earnings); }
+  .wf-axis { display: flex; justify-content: space-between; font-size: 12px; }
   .care { border: 1px solid var(--ink); padding: 28px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 28px; background: var(--card); }
   @media (max-width: 640px) {
-    .chart-card { padding: 14px; } .qrow span { font-size: 9px; }
+    .chart-card { padding: 14px; } .qrow span { font-size: 11px; }
+    .wf-axis { grid-column: 1 / -1; grid-row: 2; }
     .tile, .tile.mid, .tile.end { padding: 14px 8px 0; } .tile:first-child { padding-left: 0; }
     .wf-row { grid-template-columns: minmax(0, 1fr) 60px; } .wf-track { grid-column: 1 / -1; grid-row: 2; }
   }
