@@ -57,9 +57,10 @@ and only ever writes under `dev/` in the bucket, which the site never serves.
 
 ## Rotate the Cloudflare deploy token
 
-1. Cloudflare → My Profile → API Tokens → Create Custom token: Account — Cloudflare Pages: Edit,
-   Workers Scripts: Edit, Workers R2 Storage: Read, Account Settings: Read; Zone
-   (`martinsogiekpolor.com`) — Workers Routes: Edit.
+1. Cloudflare → My Profile → API Tokens → Create Custom token `github-deploy-sites` (no expiry;
+   rotated yearly): Account (Martins' account only) — Cloudflare Pages: Edit, Workers Scripts: Edit;
+   Zone (`martinsogiekpolor.com` only) — Workers Routes: Edit. Nothing else: add a permission only if
+   a deploy fails with an authentication error that names it.
 2. Replace `CLOUDFLARE_API_TOKEN` in GitHub: `bank-health-data-platform` → Environments →
    production, and `portfolio-site` → repository secrets.
 3. Run each deploy workflow once; when both succeed, delete the old token.
