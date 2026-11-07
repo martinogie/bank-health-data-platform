@@ -191,6 +191,18 @@ test("pipeline: durations from the run log, and the dbt test counts", async ({ p
   await expect(label.locator("xpath=preceding-sibling::span[1]")).toHaveText(String(pass + warn + fail));
 });
 
+test("pipeline: a latest run with no Databricks minutes recorded shows a dash, never 'null'", async ({ page }) => {
+  await page.route("**/data/pipeline.json", async (route) => {
+    const body = await (await route.fetch()).json();
+    body.latest.databricksMinutes = null;
+    await route.fulfill({ json: body });
+  });
+  await page.goto(`${B}/pipeline/`);
+  await settle(page);
+  await expect(page.getByText("Databricks compute not recorded for the latest run")).toBeVisible();
+  await expect(page.locator("main")).not.toContainText("null");
+});
+
 test("bank page: a bank outside the preview, and no cert at all", async ({ page }) => {
   await page.goto(`${B}/bank/?cert=628`);
   await settle(page);

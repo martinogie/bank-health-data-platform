@@ -124,7 +124,9 @@ import Layout from "../../layouts/Layout.astro";
     q("[data-figs]").innerHTML = [
       [fmtInt(p.latest.dbtTestsPass + p.latest.dbtTestsWarn + p.latest.dbtTestsFail), `dbt tests on the warehouse tables in the latest run: ${fmtInt(p.latest.dbtTestsPass)} passed, ${fmtInt(p.latest.dbtTestsWarn)} warned, ${fmtInt(p.latest.dbtTestsFail)} failed`],
       [fmtInt(p.latest.dbtModelsOk), "dbt models built and published"],
-      [`${p.latest.databricksMinutes} min`, "of Databricks compute in the latest run"],
+      p.latest.databricksMinutes == null
+        ? ["–", "Databricks compute not recorded for the latest run"]
+        : [`${p.latest.databricksMinutes} min`, "of Databricks compute in the latest run"],
       ["0", "secrets in the public repository (scanned on every change)"],
     ].map(([n, t]) => `<div class="stack" style="gap:6px"><span class="serif" style="font-size:40px;line-height:1">${n}</span><span style="font-size:14px;color:var(--ink-2)">${esc(t)}</span></div>`).join("");
   });
