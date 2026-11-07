@@ -1,0 +1,160 @@
+---
+import Layout from "../../layouts/Layout.astro";
+---
+<Layout title="Pipeline" description="How the Bank Health data flows from the FDIC and CFPB to this site, with the checks before anything is published." current="pipeline">
+  <div class="wrap page stack" style="gap:64px">
+    <section class="grid-auto" style="gap:48px;align-items:end">
+      <div class="stack" style="gap:14px">
+        <span class="eyebrow accent">Pipeline and data</span>
+        <h1 class="h1" style="font-size:clamp(36px,4.8vw,64px);line-height:1.05">Every number on this site, traced to its source</h1>
+        <p class="lede">A weekly pipeline pulls the FDIC and CFPB data, cleans it in layers, scores every bank and checks the result before anything is published.</p>
+      </div>
+      <div class="facts">
+        <div><span class="tile-l">Schedule</span><strong class="serif">Mondays, 06:00 CT</strong></div>
+        <div class="b"><span class="tile-l">Last successful run</span><strong class="serif" data-last-run>–</strong></div>
+        <div><span class="tile-l">Freshness target</span><strong class="serif">Ready by Monday 12:00 CT</strong></div>
+        <div class="b"><span class="tile-l">Latest run took</span><strong class="serif" data-duration>–</strong></div>
+      </div>
+    </section>
+
+    <section class="stack" style="gap:20px">
+      <h2 class="h2 rule-top" style="font-size:32px">How the data flows</h2>
+      <ol aria-label="Pipeline stages" class="stages">
+        <li><span class="step">01</span><strong class="serif">Sources</strong><span>FDIC call reports, institutions and failures; CFPB complaints</span><em>Public APIs</em></li>
+        <li><span class="step">02</span><strong class="serif">Ingest</strong><span>Fetch only new quarters and dates, check each file against its data contract, upload</span><em>Apache Airflow</em></li>
+        <li><span class="step">03</span><strong class="serif">Bronze</strong><span>Raw data exactly as delivered, with lineage on every row</span><em>Databricks · Delta</em></li>
+        <li><span class="step">04</span><strong class="serif">Silver</strong><span>Typed, de-duplicated, complaints matched to banks</span><em>Databricks · PySpark</em></li>
+        <li><span class="step">05</span><strong class="serif">Gold and model</strong><span>One row per bank per quarter; score, explain and monitor</span><em>Databricks · MLflow</em></li>
+        <li><span class="step">06</span><strong class="serif">Warehouse</strong><span>Loaded and modelled into tested marts, published only after the audit</span><em>Snowflake · dbt</em></li>
+        <li><span class="step">07</span><strong class="serif">Publish</strong><span>Top-20 release check, then the site's data and the reports refresh</span><em>Website · Power BI</em></li>
+      </ol>
+    </section>
+
+    <section class="stack" style="gap:20px">
+      <div class="head-row rule-top">
+        <div class="stack" style="gap:6px;max-width:720px">
+          <h2 class="h2" style="font-size:32px">Row counts through every layer</h2>
+          <p style="color:var(--ink-2)">Bronze keeps data exactly as delivered, re-deliveries included. Silver removes duplicates. Gold keeps one analysis-ready row per bank per quarter. Counts from the latest successful run.</p>
+        </div>
+        <div role="group" aria-label="Choose a dataset" class="toggles" data-datasets></div>
+      </div>
+      <div class="layers" data-layers></div>
+      <p class="serif" style="font-style:italic;font-size:18px;color:var(--ink-2)" data-explain></p>
+    </section>
+
+    <section class="grid-auto" style="gap:40px">
+      <div class="stack" style="gap:14px">
+        <h2 class="h2 rule-top" style="font-size:32px">Checks before anything is published</h2>
+        <div class="stack">
+          {[
+            ["Data contracts", "A renamed, missing or mistyped source field stops the run with a clear message, before anything is loaded."],
+            ["Freshness and volumes", "The newest quarter must be recent, and each source must add a sensible number of rows."],
+            ["Warehouse tests", "Keys, ranges, accepted values and relationships on every mart; no capital ratio may read 0 where it was not reported."],
+            ["Write, audit, publish", "The marts are built and tested out of sight, and swapped in only when every critical test passes."],
+            ["Top-20 release check", "Fails the run if a new bank, a foreign-bank office or a 0% capital ratio reaches the top 20."],
+            ["Champion rule", "A new model goes live only if it matches the current one on the same test rows, with a person approving."],
+          ].map(([name, text]) => (
+            <div class="check">
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="none" stroke="#3E5C73" stroke-width="1.6"/><path d="M6 10.5l2.6 2.6L14 7.6" fill="none" stroke="#3E5C73" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div class="stack"><strong>{name}</strong><span style="font-size:14px;color:var(--ink-2)">{text}</span></div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div class="stack" style="gap:14px">
+        <h2 class="h2 rule-top" style="font-size:32px">Recent runs</h2>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Recent runs (scrolls sideways on small screens)"><table style="min-width:460px;font-size:14px">
+          <thead><tr><th scope="col">Run</th><th scope="col">Result</th><th scope="col">Duration</th><th scope="col">Databricks</th></tr></thead>
+          <tbody data-runs></tbody></table></div>
+        <p class="small muted">From the pipeline's run log (the last runs on the production server). A run that failed and was resumed after a fix shows as one run, timed from its first start, with the failed attempt underneath.</p>
+      </div>
+    </section>
+
+    <section class="figs" data-figs></section>
+    <p class="small muted">Sources: FDIC BankFind Suite (public domain) and the CFPB Consumer Complaint Database (CC0). <a href="https://github.com/martinogie/bank-health-data-platform">Code, tests and decision records on GitHub</a>.</p>
+  </div>
+</Layout>
+
+<script>
+  import { loadJson, esc, fmtInt } from "../../lib/site";
+  // Durations from the run log; under a minute in seconds; "not recorded" when the log has none.
+  const mins = (s: number | null) => {
+    if (s == null) return "not recorded";
+    if (s < 60) return `${Math.round(s)} s`;
+    const m = Math.round(s / 60);
+    return m < 90 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+  };
+  const day = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  loadJson("pipeline.json").then((p) => {
+    const q = (s: string) => document.querySelector<HTMLElement>(s)!;
+    const ok = p.runs.find((r: any) => r.state === "success");
+    q("[data-last-run]").textContent = ok ? day(ok.date) : "–";
+    q("[data-duration]").textContent = mins(p.latest.durationSeconds);
+    const explain: Record<string, string> = {
+      fdic_financials: "Each delivery of a quarter lands in bronze; silver keeps one row per bank per quarter, and gold one analysis-ready row with every ratio.",
+      fdic_institutions: "Bronze holds every delivery of the institutions file; silver keeps one current record per bank.",
+      fdic_failures: "Repeated deliveries of the failures list collapse to one row per failure or assistance transaction in silver.",
+      cfpb_complaints: `Re-deliveries are removed in silver; the three credit bureaus are excluded at ingestion. About ${Math.round(p.complaintMatchPct)}% of complaints are matched to a bank.`,
+    };
+    const draw = (key: string) => {
+      const d = p.datasets.find((x: any) => x.key === key);
+      const layers: [string, string, number | null][] = [["Bronze", "Databricks", d.bronze], ["Silver", "Databricks", d.silver], ["Gold", "Databricks", d.gold]];
+      q("[data-layers]").innerHTML = layers.map(([l, w, n]) => `<div class="layer"><span class="tile-l">${l}</span><span class="serif num" style="font-size:34px;line-height:1">${n == null ? "–" : fmtInt(n)}</span><span class="small muted">${w}</span></div>`).join("");
+      q("[data-explain]").textContent = explain[key];
+      document.querySelectorAll<HTMLButtonElement>("[data-ds]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.ds === key)));
+    };
+    q("[data-datasets]").innerHTML = p.datasets.map((d: any) => `<button type="button" class="btn" data-ds="${d.key}" aria-pressed="false">${esc(d.label)}</button>`).join("");
+    document.querySelectorAll<HTMLButtonElement>("[data-ds]").forEach((b) => b.addEventListener("click", () => draw(b.dataset.ds!)));
+    draw(p.datasets[0].key);
+    const style = (s: string) => s === "success" ? "border:1px solid var(--band-L);color:var(--band-L)" : "border:1px solid var(--accent);color:var(--accent)";
+    // A run resumed after a fix is one run: its result and total time from the first start, with
+    // each earlier (failed) attempt listed underneath. Failures stay visible.
+    const chip = (s: string) => `<span class="run-chip" style="${style(s)}">${s === "success" ? "Succeeded" : "Failed"}</span>`;
+    q("[data-runs]").innerHTML = p.runs.map((r: any) => {
+      const main = `<tr class="${r.resumed ? "run-group" : ""}"><td>${day(r.date)}</td>
+        <td>${chip(r.state)}${r.resumed ? `<span class="small muted run-note">resumed after a fix</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${mins(r.durationSeconds)}${r.resumed ? `<span class="small muted run-note">from first start</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${r.databricksMinutes == null ? "not recorded" : `${r.databricksMinutes} min`}${r.resumed && r.databricksMinutes != null ? `<span class="small muted run-note">whole run</span>` : ""}</td></tr>`;
+      const earlier = (r.earlierAttempts ?? []).map((a: any, i: number) => `<tr class="run-attempt">
+        <td><span class="muted">↳ Attempt ${i + 1}</span></td>
+        <td>${chip(a.state)}${a.failedTasks ? `<span class="small muted run-note">${esc(a.failedTasks)}</span>` : ""}</td>
+        <td style="color:var(--ink-2)">${mins(a.durationSeconds)}</td><td></td></tr>`).join("");
+      return main + earlier;
+    }).join("");
+    q("[data-figs]").innerHTML = [
+      [fmtInt(p.latest.dbtTestsPass + p.latest.dbtTestsWarn + p.latest.dbtTestsFail), `dbt tests on the warehouse tables in the latest run: ${fmtInt(p.latest.dbtTestsPass)} passed, ${fmtInt(p.latest.dbtTestsWarn)} warned, ${fmtInt(p.latest.dbtTestsFail)} failed`],
+      [fmtInt(p.latest.dbtModelsOk), "dbt models built and published"],
+      [`${p.latest.databricksMinutes} min`, "of Databricks compute in the latest run"],
+      ["0", "secrets in the public repository (scanned on every change)"],
+    ].map(([n, t]) => `<div class="stack" style="gap:6px"><span class="serif" style="font-size:40px;line-height:1">${n}</span><span style="font-size:14px;color:var(--ink-2)">${esc(t)}</span></div>`).join("");
+  });
+</script>
+
+<style is:global>
+  .page { padding-top: 56px; padding-bottom: 88px; }
+  .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 2px solid var(--ink); }
+  .facts div { padding: 16px 16px 16px 0; border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; }
+  .facts div.b { padding-left: 16px; border-left: 1px solid var(--rule); }
+  .facts strong { font-size: 22px; font-weight: 500; }
+  .tile-l { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
+  /* 7 steps: one row on wide screens, 4 + 3 on medium, one column on phones. */
+  .stages { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 14px; }
+  @media (min-width: 700px) { .stages { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (min-width: 1200px) { .stages { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+  .stages li { background: var(--card); border: 1px solid var(--rule); border-top: 4px solid var(--ink); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .step { font-size: 12px; color: var(--accent); font-weight: 600; letter-spacing: 0.06em; }
+  .stages strong { font-size: 20px; font-weight: 500; line-height: 1.2; }
+  .stages span { font-size: 13px; color: var(--ink-2); }
+  .stages em { margin-top: auto; padding-top: 8px; font-size: 12px; color: var(--ink-3); font-style: normal; }
+  .head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); }
+  .layer { padding: 20px 16px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; }
+  .check { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--rule); align-items: flex-start; }
+  .check svg { flex: none; margin-top: 3px; }
+  @media (max-width: 520px) { .facts { grid-template-columns: 1fr; } .facts div.b { padding-left: 0; border-left: none; } }
+  .run-chip { display: inline-block; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .run-note { display: block; margin-top: 4px; font-size: 12px; }
+  tr.run-group td { border-bottom: none; }
+  tr.run-attempt td { padding-top: 4px; font-size: 13px; background: var(--card); }
+  .figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 20px; border-top: 2px solid var(--ink); padding-top: 24px; }
+</style>

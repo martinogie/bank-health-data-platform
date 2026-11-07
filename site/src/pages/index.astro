@@ -1,0 +1,191 @@
+---
+import Layout from "../layouts/Layout.astro";
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+---
+<Layout title="Overview" description="Every FDIC-insured bank scored on its chance of distress in the next twelve months, from public call reports." current="overview">
+  <section class="wrap hero">
+    <div class="stack" style="gap:22px">
+      <span class="eyebrow accent" data-hero-eyebrow>&nbsp;</span>
+      <h1 class="h1" style="font-size:clamp(36px,5.2vw,72px)">Which of the banks you depend on should you worry about this quarter, and why?</h1>
+      <p class="lede" style="max-width:640px">Regulators rate every US bank in confidence. Fintechs with a sponsor bank, treasurers with uninsured deposits and banks with counterparty exposure have only the public filings. Bank Health reads 26 years of them and scores every FDIC-insured bank on its chance of distress in the next twelve months.</p>
+      <div class="toggles" style="margin-top:8px;gap:12px">
+        <a class="btn big solid" href={`${base}/watchlist/`}>Open the watchlist</a>
+        <a class="btn big" href={`${base}/methods/`}>How the score works</a>
+      </div>
+    </div>
+    <aside class="who stack" style="gap:14px">
+      <span class="eyebrow">Who this is for</span>
+      <p class="who-item"><strong>A fintech</strong> whose customer accounts sit at one small sponsor bank.</p>
+      <p class="who-item"><strong>A company treasurer</strong> holding deposits above the $250,000 FDIC limit.</p>
+      <p><strong>A bank</strong> with loan participations or correspondent accounts at other banks.</p>
+      <p class="serif muted" style="font-style:italic;margin-top:6px">When Silicon Valley Bank failed in 2023 and Synapse froze fintech customers' funds in 2024, these were the people caught out.</p>
+    </aside>
+  </section>
+
+  <section aria-label="Key figures" class="figures">
+    <div class="wrap figures-grid" data-figures>
+      <div class="fig"><span class="fig-n">–</span><span class="fig-l loading">Loading…</span></div>
+    </div>
+  </section>
+
+  <section class="wrap section stack" style="gap:22px">
+    <div class="head-row">
+      <div class="stack" style="gap:8px;max-width:720px">
+        <span class="eyebrow">The system today</span>
+        <h2 class="h2">Most banks are low risk. A thin edge carries most of the danger.</h2>
+      </div>
+      <span class="small muted" data-mix-caption></span>
+    </div>
+    <div role="img" class="mix" data-mix aria-label="Share of banks by risk band"></div>
+    <div class="legend" data-legend></div>
+  </section>
+
+  <section class="wrap section grid-auto" style="gap:48px">
+    <div class="stack" style="gap:14px">
+      <span class="eyebrow">Through the cycle</span>
+      <h2 class="h2">Risk bands that move with the economy</h2>
+      <p class="serif" style="font-size:19px;color:var(--ink-2)">Each band means a level of risk measured on history, not a rank. So the High band swelled in the 2009–2011 crisis and is near its lowest now.</p>
+      <p class="small muted" style="font-size:14px">Bank-quarters per year in each band. Cut-offs were set using 2003–2019 predictions, each year scored by a model that had not seen it; 2020–2024 was held back as a test.</p>
+      <div role="group" aria-label="Choose a band" class="toggles" data-series-toggle>
+        <button type="button" class="btn" data-series="H" aria-pressed="true">High</button>
+        <button type="button" class="btn" data-series="E" aria-pressed="false">Elevated</button>
+        <button type="button" class="btn" data-series="W" aria-pressed="false">Watch</button>
+      </div>
+    </div>
+    <figure class="stack" style="margin:0;gap:10px">
+      <figcaption class="small muted" data-series-caption></figcaption>
+      <div role="img" class="bars" data-bars></div>
+      <div class="bar-years" data-bar-years aria-hidden="true"></div>
+      <span class="small muted">2001–2002 have no out-of-sample predictions.</span>
+    </figure>
+  </section>
+
+  <section class="wrap section stack" style="gap:20px">
+    <div class="head-row">
+      <div class="stack" style="gap:8px;max-width:760px">
+        <span class="eyebrow" data-top-eyebrow>Top of the list</span>
+        <h2 class="h2">The twenty highest scores, and what drives them</h2>
+        <p style="font-size:15px;color:var(--ink-2)" data-top-summary></p>
+      </div>
+      <div role="group" aria-label="Filter by driver" class="toggles" data-filter>
+        <button type="button" class="btn" data-f="all" aria-pressed="true">All twenty</button>
+        <button type="button" class="btn" data-f="credit" aria-pressed="false">Credit signals</button>
+        <button type="button" class="btn" data-f="earnings" aria-pressed="false">Earnings signals</button>
+      </div>
+    </div>
+    <div class="table-scroll" tabindex="0" role="region" aria-label="The twenty highest scores (scrolls sideways on small screens)" style="border-top:2px solid var(--ink)">
+      <table style="min-width:760px;font-size:14px">
+        <thead><tr>
+          <th scope="col" style="width:40px">#</th><th scope="col">Bank</th>
+          <th scope="col" style="width:220px">Probability of distress</th><th scope="col">Main reason</th>
+          <th scope="col" style="width:110px">Driver</th>
+        </tr></thead>
+        <tbody data-top><tr><td colspan="5" class="loading">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="small muted" data-chip-legend><strong>Driver chip</strong> = the larger group push (credit vs earnings) in the model's explanation of the score; <strong>main reason</strong> = the largest single measure. All twenty are in the High band. Banks under three years old and US offices of foreign banks are not scored.</p>
+  </section>
+
+  <section class="wrap section" style="padding-bottom:80px">
+    <div class="stack" style="border-top:3px solid var(--ink);padding-top:18px;gap:28px">
+      <h2 class="serif" style="font-weight:500;font-size:34px">How to read a score</h2>
+      <div class="grid-auto" style="gap:32px">
+        <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">1</span><h3 style="font-size:18px">The probability</h3><p style="color:var(--ink-2)">The model's estimate that the bank enters distress within twelve months: it fails, its bad loans pass 3%, its Tier 1 leverage falls below 5%, or it loses money two quarters running.</p></div>
+        <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">2</span><h3 style="font-size:18px">The band</h3><p style="color:var(--ink-2)">A plain-language level set on history. Of banks in the High band, about 4 to 5 in 10 entered distress within a year; Elevated, about 1 in 5 to 1 in 4; Watch, about 1 in 15 to 1 in 10; Low, fewer than 3 in 100 (2003–2019 and 2020–2024).</p></div>
+        <div class="stack" style="gap:10px"><span class="serif" style="font-size:52px;line-height:1;color:var(--accent)">3</span><h3 style="font-size:18px">The reasons</h3><p style="color:var(--ink-2)">The three measures pushing the score up most, each beside the median of banks of the same size, so you can see how far the bank sits from normal.</p></div>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<script>
+  import { loadJson, fmtInt, pct0, esc, bankUrl, BAND_COLOR, driverChip } from "../lib/site";
+
+  loadJson("overview.json").then((o) => {
+    const total = Object.values(o.bandCounts as Record<string, number>).reduce((a, b) => a + b, 0);
+    const c = o.bandCounts;
+    document.querySelector("[data-hero-eyebrow]")!.textContent = `${o.dataAsOf.quarterLabel} · ${fmtInt(total)} banks`;
+
+    document.querySelector("[data-figures]")!.innerHTML = [
+      [fmtInt(total), `banks covered in ${o.dataAsOf.quarterLabel}; ${fmtInt(o.banksScored)} ranked`, ""],
+      [fmtInt(c.H), "in the High band: about 4 to 5 in 10 banks like these enter distress within a year", "color:var(--accent)"],
+      [fmtInt(c.D), "already in distress, so not ranked", ""],
+      [fmtInt(o.keyFigures.bankQuarters), "bank-quarters of call reports, 2000 to 2026", ""],
+      [fmtInt(o.keyFigures.failures), "failures and assistance transactions on the FDIC list", ""],
+    ].map(([n, l, s]) => `<div class="fig"><span class="fig-n num" style="${s}">${n}</span><span class="fig-l">${esc(l)}</span></div>`).join("");
+
+    const order = ["L", "W", "E", "H", "D"];
+    const notScored = c.N + c.F;
+    document.querySelector("[data-mix-caption]")!.textContent = `All ${fmtInt(total)} banks, ${o.dataAsOf.quarterLabel}`;
+    const mix = document.querySelector<HTMLElement>("[data-mix]")!;
+    mix.innerHTML = order.map((k) => `<div style="width:${(100 * c[k] / total).toFixed(2)}%;background:${BAND_COLOR[k]}"></div>`).join("")
+      + `<div style="width:${(100 * notScored / total).toFixed(2)}%;background:var(--band-N)"></div>`;
+    mix.setAttribute("aria-label", `Banks by risk band in ${o.dataAsOf.quarterLabel}: Low ${fmtInt(c.L)}, Watch ${fmtInt(c.W)}, Elevated ${fmtInt(c.E)}, High ${fmtInt(c.H)}, already in distress ${fmtInt(c.D)}, new banks not scored ${c.N}, foreign offices not scored ${c.F}`);
+    const names: Record<string, string> = { L: "Low", W: "Watch", E: "Elevated", H: "High", D: "Already in distress" };
+    document.querySelector("[data-legend]")!.innerHTML = order.map((k) =>
+      `<div class="leg"><span class="sw" style="background:${BAND_COLOR[k]}"></span><div class="stack"><strong>${names[k]} · ${fmtInt(c[k])}</strong><span class="small muted">${esc(o.bandMeaning[k].meaning)}</span></div></div>`).join("")
+      + `<div class="leg"><span class="sw" style="background:var(--band-N);border:1px solid #8A7F6E"></span><div class="stack"><strong>Not scored · ${notScored}</strong><span class="small muted">${c.N} new banks, ${c.F} foreign-bank offices</span></div></div>`;
+
+    // Bands through the cycle
+    const years: any[] = o.bandsByYear;
+    const label: Record<string, string> = { H: "High", E: "Elevated", W: "Watch" };
+    const drawSeries = (s: string) => {
+      const max = Math.max(...years.map((r) => r[s]));
+      const bars = document.querySelector<HTMLElement>("[data-bars]")!;
+      bars.innerHTML = years.map((r) => `<div class="bar-col"><span class="bar-v num">${fmtInt(r[s])}</span><div style="height:${Math.max(4, Math.round(r[s] / max * 220))}px;background:${BAND_COLOR[s]}" class="bar-b"></div></div>`).join("");
+      bars.setAttribute("aria-label", `${label[s]} band bank-quarters by year: ` + years.map((r) => `${r.year} ${r[s]}`).join(", "));
+      document.querySelector("[data-bar-years]")!.innerHTML = years.map((r) => `<span>${String(r.year).slice(2)}</span>`).join("");
+      document.querySelector("[data-series-caption]")!.textContent = `${label[s]} band: bank-quarters per year, 2003–2024`;
+      document.querySelectorAll<HTMLButtonElement>("[data-series]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.series === s)));
+    };
+    document.querySelectorAll<HTMLButtonElement>("[data-series]").forEach((b) => b.addEventListener("click", () => drawSeries(b.dataset.series!)));
+    drawSeries("H");
+
+    // Top 20
+    const top: any[] = o.top20;
+    const credit = top.filter((t) => t.driver === "credit").length, earnings = top.filter((t) => t.driver === "earnings").length;
+    document.querySelector("[data-top-eyebrow]")!.textContent = `Top of the list · ${o.dataAsOf.quarterLabel}`;
+    document.querySelector("[data-top-summary]")!.textContent = `${credit} are here mainly for credit signals: bad loans, past-due loans or loan concentration. ${earnings} are here mainly for weak earnings. Filter to see each group.`;
+    const drawTop = (f: string) => {
+      document.querySelector("[data-top]")!.innerHTML = top.filter((t) => f === "all" || t.driver === f).map((t) => `<tr>
+        <td class="muted num">${t.rank}</td>
+        <td><a class="serif" style="font-size:18px;font-weight:500" href="${bankUrl(t.cert)}">${esc(t.name)}</a><span class="muted small"> · ${esc(t.state)}</span></td>
+        <td><div style="display:flex;align-items:center;gap:10px"><div class="bar-track"><div class="bar-fill" style="width:${Math.round(t.probability * 100)}%;background:${t.driver === "earnings" ? "var(--earnings)" : "var(--credit)"}"></div></div><span class="num" style="font-weight:600;width:40px;text-align:right">${pct0(t.probability)}</span></div></td>
+        <td style="color:var(--ink-2)">${esc(t.reason ?? "")}</td>
+        <td><span title="${t.driver ? "The larger group push in the model's explanation: credit (loan quality) or earnings" : ""}">${driverChip(t.driver)}</span></td></tr>`).join("");
+      document.querySelectorAll<HTMLButtonElement>("[data-f]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.f === f)));
+    };
+    document.querySelectorAll<HTMLButtonElement>("[data-f]").forEach((b) => b.addEventListener("click", () => drawTop(b.dataset.f!)));
+    drawTop("all");
+  });
+</script>
+
+<style is:global>
+  .hero { padding-top: 72px; padding-bottom: 56px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 56px; align-items: end; }
+  .who { border-top: 3px solid var(--ink); padding-top: 18px; font-size: 15px; }
+  .who-item { padding-bottom: 14px; border-bottom: 1px solid var(--rule); }
+  .figures { border-top: 1px solid var(--ink); border-bottom: 1px solid var(--ink); background: var(--card); }
+  .figures-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .fig { padding: 28px 20px; border-right: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; }
+  .fig:last-child { border-right: none; }
+  .fig-n { font-family: var(--serif); font-size: 44px; line-height: 1; font-weight: 500; }
+  .fig-l { font-size: 13px; color: var(--ink-3); }
+  .section { padding-top: 72px; padding-bottom: 24px; }
+  .head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 16px; }
+  .mix { display: flex; height: 56px; width: 100%; border: 1px solid var(--ink); }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px 24px; font-size: 14px; }
+  .leg { display: flex; gap: 10px; align-items: flex-start; }
+  .sw { display: inline-block; width: 14px; height: 14px; margin-top: 4px; flex: none; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 280px; border-bottom: 1px solid var(--ink); padding-top: 24px; }
+  .bar-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
+  .bar-v { font-size: 9px; color: var(--ink-3); writing-mode: vertical-rl; transform: rotate(180deg); }
+  .bar-b { width: 100%; max-width: 40px; }
+  .bar-years { display: flex; gap: 4px; }
+  .bar-years span { flex: 1 1 0; min-width: 0; text-align: center; font-size: 11px; color: var(--ink-2); }
+  @media (max-width: 640px) {
+    .hero { padding-top: 40px; }
+    .fig { border-right: none; border-bottom: 1px solid var(--rule); padding: 20px 0; }
+    .section { padding-top: 48px; }
+    .bar-v { display: none; }
+  }
+</style>

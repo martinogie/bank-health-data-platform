@@ -52,3 +52,11 @@ site_build/
 
 # Databricks Asset Bundle local cache (databricks bundle ...); state lives in the workspace
 .databricks/
+
+# Website: inputs for the Stage A preview fixtures (real public data pulled from prod; not committed)
+site/.fixture-inputs/
+site/node_modules/
+site/dist/
+site/.astro/
+site/test-results/
+site/playwright-report/

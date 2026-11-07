@@ -1,2 +1,4 @@
 # Shell scripts run inside Linux containers: keep Unix line endings even on Windows.
 *.sh text eol=lf
+# The pinned design copy is checked by SHA-256 (check-design.mjs): its bytes must not change on checkout.
+site/src/design/** text eol=lf

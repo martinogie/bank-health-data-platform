@@ -384,6 +384,7 @@ compared with v5 on the same 2020–2024 test rows. The order of work is in
 | 6.4 | Report credit risk and failure risk as separate outputs | The v5 top 20 mixes credit warnings (NCL near 3%) with earnings warnings; 32 of the top 50 have NCL of 2–3% | An asset-quality warning score and a failure-risk score (from 6.6), both on the watchlist and bank pages |
 | 6.5 | Calibrate the classifier's probabilities | In the riskiest 10%, v5 predicts 34.5% against 29.0% observed | Isotonic or Platt calibration fitted on time-ordered out-of-sample predictions from 2001–2019 only |
 | 6.6 | Time-to-distress hazard model | v5 gives one 4-quarter probability; it can't say when distress is likely or rank by failure risk on its own | Discrete-time hazard model (below) |
+| 6.7 | A "what if" re-score per bank | The website's credit / earnings pushes come from the SHAP explanation (sums of each group's positive contributions); they show what pushed the score up, not what the probability would be if a group were normal | In `05_score`, set each group (credit, earnings) to the median of the bank's asset tier and score again: 2 extra predictions per bank, stored with the scores; the driver chip then comes from whichever reset lowers the probability more |
 
 **6.6 hazard model in more detail.**
 - Discrete-time hazard on one row per bank per quarter at risk.

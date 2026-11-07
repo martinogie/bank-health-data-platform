@@ -1,0 +1,106 @@
+---
+// Bank Health's page layout: header with navigation, the "data as of" strip, footer. Styles come
+// from the portfolio design system, pinned in ../design (design-v1.0.1, Finance accent; never edit
+// there: CI runs design/check-design.mjs), plus Bank Health's own ../styles/bankhealth.css.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/newsreader";
+import "../design/tokens.css";
+import "../design/sectors/finance.css";
+import "../design/base.css";
+import "../design/chrome.css";
+import "../styles/bankhealth.css";
+
+interface Props {
+  title: string;
+  description: string;
+  current: "overview" | "watchlist" | "bank" | "methods" | "pipeline";
+}
+const { title, description, current } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+const nav = [
+  ["overview", "Overview", `${base}/`],
+  ["watchlist", "Watchlist", `${base}/watchlist/`],
+  ["bank", "Bank detail", `${base}/bank/`],
+  ["methods", "Model & methods", `${base}/methods/`],
+  ["pipeline", "Pipeline", `${base}/pipeline/`],
+] as const;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Bank Health</title>
+    <meta name="description" content={description} />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+  </head>
+  <body data-base={base}>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <div class="wrap header-row">
+        <a class="brand" href={`${base}/`}>
+          <span class="brand-name">Bank Health</span>
+          <span class="brand-tag">US bank early warning</span>
+        </a>
+        <nav aria-label="Main" class="nav">
+          {nav.map(([key, label, href]) => (
+            <a href={href} aria-current={current === key ? "page" : undefined}>{label}</a>
+          ))}
+        </nav>
+      </div>
+      <div class="strip">
+        <div class="wrap strip-row small">
+          <!-- Placeholders as long as the real text, so nothing moves when the data arrives. -->
+          <span data-asof aria-busy="true">Data as of ––––––– · updated ––– ––, ––––</span>
+          <span data-model>Model v–</span>
+          <span>Refreshed weekly from FDIC call reports</span>
+          <span data-preview class="preview" style="visibility:hidden" aria-hidden="true">Preview data</span>
+        </div>
+      </div>
+    </header>
+    <main id="main">
+      <slot />
+    </main>
+    <footer class="site-footer">
+      <div class="wrap footer-grid">
+        <div class="stack" style="gap:10px">
+          <span class="serif" style="font-size:24px;color:var(--bg)">Bank Health</span>
+          <p style="color:var(--footer-text-2)">A screening tool built on public data. A model estimate from public FDIC data, not a supervisory rating; it should not be used to judge any bank on its own.</p>
+        </div>
+        <div class="stack" style="gap:8px">
+          <span class="foot-label">Sources</span>
+          <span>FDIC BankFind Suite (call reports, institutions, failures)</span>
+          <span>CFPB Consumer Complaint Database</span>
+        </div>
+        <div class="stack" style="gap:8px">
+          <span class="foot-label">Built by</span>
+          <span>Martins Ogiekpolor</span>
+          <a href="https://github.com/martinogie/bank-health-data-platform">Code on GitHub</a>
+          <a href={`${base}/pipeline/`}>How the pipeline works</a>
+          <span style="color:var(--footer-text-2)">Built with AI-assisted coding; the design, analysis and review are my own.</span>
+        </div>
+      </div>
+      <div class="wrap small" style="padding-bottom:28px;color:var(--muted-dark)">No tracking, no cookies.</div>
+    </footer>
+    <script>
+      import { loadJson, quarterText } from "../lib/site";
+      // Fill the "data as of" strip from the overview file (every page).
+      loadJson("overview.json")
+        .then((o) => {
+          const asof = document.querySelector("[data-asof]");
+          if (asof) { asof.textContent = quarterText(o); asof.removeAttribute("aria-busy"); }
+          const model = document.querySelector("[data-model]");
+          if (model) model.textContent = `Model v${o.modelVersion}`;
+          const preview = document.querySelector<HTMLElement>("[data-preview]");
+          if (preview && o.fixture) { preview.style.visibility = "visible"; preview.removeAttribute("aria-hidden"); }
+          else preview?.remove();
+        })
+        .catch(() => {
+          const asof = document.querySelector("[data-asof]");
+          if (asof) { asof.textContent = "Data unavailable"; asof.removeAttribute("aria-busy"); }
+        });
+    </script>
+  </body>
+</html>
+

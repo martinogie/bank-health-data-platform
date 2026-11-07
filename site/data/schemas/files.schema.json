@@ -1,0 +1,73 @@
+{
+  "$id": "files.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "The five Bank Health site data files (site/data/SCHEMA.md)",
+  "$defs": {
+    "overview": {
+      "allOf": [{"$ref": "common.schema.json"}],
+      "type": "object",
+      "required": ["modelVersion", "banksScored", "bandCounts", "bandMeaning", "keyFigures", "bandsByYear", "top20"],
+      "properties": {
+        "modelVersion": {"type": "integer", "minimum": 1},
+        "banksScored": {"type": "integer", "minimum": 1},
+        "bandCounts": {"type": "object", "required": ["H", "E", "W", "L", "D", "N", "F"], "additionalProperties": {"type": "integer", "minimum": 0}},
+        "keyFigures": {"type": "object", "required": ["bankQuarters", "failures"]},
+        "bandsByYear": {"type": "array", "minItems": 1, "items": {"type": "object", "required": ["year", "H", "E", "W", "L"]}},
+        "top20": {"type": "array", "maxItems": 20, "items": {
+          "type": "object", "required": ["rank", "cert", "name", "probability", "band", "driver"],
+          "properties": {"cert": {"type": "integer"}, "probability": {"$ref": "common.schema.json#/$defs/prob"},
+                         "band": {"$ref": "common.schema.json#/$defs/band"}, "driver": {"$ref": "common.schema.json#/$defs/driver"}}
+        }}
+      }
+    },
+    "banksIndex": {
+      "allOf": [{"$ref": "common.schema.json"}],
+      "type": "object",
+      "required": ["banks"],
+      "properties": {
+        "preview": {"type": "array", "items": {"type": "integer"}},
+        "banks": {"type": "array", "minItems": 1, "items": {
+          "type": "object", "required": ["c", "n", "b", "p"], "additionalProperties": false,
+          "properties": {"c": {"type": "integer"}, "n": {"type": "string"}, "ci": {"type": ["string", "null"]},
+                         "st": {"type": ["string", "null"]}, "a": {"type": ["number", "null"]},
+                         "b": {"$ref": "common.schema.json#/$defs/band"}, "p": {"$ref": "common.schema.json#/$defs/prob"},
+                         "r": {"type": ["string", "null"]}}
+        }}
+      }
+    },
+    "bank": {
+      "allOf": [{"$ref": "common.schema.json"}],
+      "type": "object",
+      "required": ["profile", "probability", "band", "reasons", "pushes", "driver", "history", "quarters", "flags"],
+      "properties": {
+        "profile": {"type": "object", "required": ["name", "cert"]},
+        "probability": {"$ref": "common.schema.json#/$defs/prob"},
+        "band": {"$ref": "common.schema.json#/$defs/band"},
+        "rank": {"type": ["integer", "null"]},
+        "reasons": {"type": "array", "maxItems": 3, "items": {"type": "object", "required": ["text"]}},
+        "pushes": {"type": ["object", "null"], "required": ["credit", "earnings"]},
+        "driver": {"$ref": "common.schema.json#/$defs/driver"},
+        "waterfall": {"type": ["object", "null"], "required": ["b", "i", "o"], "properties": {"i": {"type": "array", "maxItems": 8}}},
+        "history": {"type": "object", "required": ["ncl", "t1", "roa", "ni"]},
+        "quarters": {"type": "array", "minItems": 8, "maxItems": 8},
+        "flags": {"type": "array", "items": {"enum": ["cblr", "newBank", "foreignOffice", "recentMerger"]}},
+        "note": {"type": ["object", "null"], "required": ["text", "source"], "description": "Generated from the call report, never hand-written", "properties": {"source": {"type": "string", "pattern": "^FDIC call report, [0-9]{4} Q[1-4]$"}}}
+      }
+    },
+    "model": {
+      "allOf": [{"$ref": "common.schema.json"}],
+      "type": "object",
+      "required": ["version", "models", "bands", "calibration", "limitations"]
+    },
+    "pipeline": {
+      "allOf": [{"$ref": "common.schema.json"}],
+      "type": "object",
+      "required": ["datasets", "runs", "latest"],
+      "properties": {
+        "latest": {"type": "object", "required": ["dbtModelsOk", "dbtTestsPass", "dbtTestsWarn", "dbtTestsFail", "durationSeconds"]},
+        "runs": {"type": "array", "items": {"type": "object", "required": ["date", "state", "durationSeconds", "resumed", "earlierAttempts"],
+          "properties": {"resumed": {"type": "boolean"}, "earlierAttempts": {"type": "array", "items": {"type": "object", "required": ["state", "failedTasks", "durationSeconds"]}}}}}
+      }
+    }
+  }
+}
