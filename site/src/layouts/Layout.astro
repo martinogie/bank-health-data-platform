@@ -101,10 +101,10 @@ const nav = [
           <a href={HOME}>Martins Ogiekpolor</a>
           <a href="https://github.com/martinogie/bank-health-data-platform">Code on GitHub</a>
           <a href={`${base}/pipeline/`}>How the pipeline works</a>
-          <span style="color:var(--footer-text-2)">Built with AI-assisted coding; the design, analysis and review are my own.</span>
         </div>
       </div>
-      <div class="wrap small" style="padding-bottom:28px;color:var(--muted-dark)">No tracking, no cookies.</div>
+      <!-- Standard footer line on every page (Martins' rule): the copyright notice, nothing else. -->
+      <div class="wrap small" style="padding-bottom:28px;color:var(--muted-dark)" data-copyright>© {new Date().getFullYear()} Martins Ogiekpolor. All rights reserved.</div>
     </footer>
     <script>
       import { loadJson, quarterText } from "../lib/site";

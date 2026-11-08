@@ -232,7 +232,6 @@ test("watchlist page carries the rating line and the complaint caveat", async ({
   await settle(page);
   await expect(page.getByText("A model estimate from public FDIC data, not a supervisory rating.")).toBeVisible();
   await expect(page.getByText(/not model inputs/)).toBeVisible();
-  await expect(page.getByText("Built with AI-assisted coding; the design, analysis and review are my own.")).toBeVisible();
 });
 
 test("security headers on every response; the CSP allows no third-party source; no inline scripts", async ({ request }) => {
@@ -283,6 +282,18 @@ test("every page has a Home link back to the portfolio home, and the footer name
     await expect(home).toHaveAttribute("href", "https://martinsogiekpolor.com/");
     await expect(home).toContainText("Home");
     await expect(page.locator("footer").getByRole("link", { name: "Martins Ogiekpolor" })).toHaveAttribute("href", "https://martinsogiekpolor.com/");
+  }
+});
+
+test("built site: every page's footer has the copyright line and no AI-assisted or no-tracking line (new pages too)", () => {
+  const walk = (d: string): string[] => readdirSync(d).flatMap((f) => (statSync(join(d, f)).isDirectory() ? walk(join(d, f)) : [join(d, f)]));
+  const pages = walk("dist").filter((f) => f.endsWith(".html"));
+  expect(pages.length).toBeGreaterThan(5);
+  const year = new Date().getFullYear();
+  for (const f of pages) {
+    const footer = readFileSync(f, "utf-8").match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? "";
+    expect(footer, `${f}: footer`).toContain(`© ${year} Martins Ogiekpolor. All rights reserved.`);
+    expect(footer, f).not.toMatch(/AI-assisted|No tracking/);
   }
 });
 
