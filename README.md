@@ -472,3 +472,8 @@ docs/         workflow PDF, end-to-end run report, screenshots, runbooks/, adr/,
 Built by **Martins Ogiekpolor** · [github.com/martinogie](https://github.com/martinogie) · Built with
 AI-assisted coding ([Claude Code](https://claude.com/claude-code), listed as a contributor); the design,
 analysis and review are my own. MIT licence.
+
+Third-party parts keep their own licences: `airflow/docker-compose.yaml` is adapted from Apache
+Airflow's official file (Apache License 2.0, header kept); the site's fonts, Inter and Newsreader, are
+under the SIL Open Font License 1.1 ([site/public/licenses/fonts.txt](site/public/licenses/fonts.txt));
+FDIC data is a US government work and CFPB complaint data is CC0.
