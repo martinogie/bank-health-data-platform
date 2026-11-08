@@ -1,6 +1,9 @@
 # Deploy the Bank Health site (site/) to the Cloudflare Pages project "bankhealth".
-# Runs after the Site workflow passes on main (or by hand), and waits for Martins' approval
-# (GitHub environment "production"). The live data is NOT part of this deploy: it comes from the
+# Runs after CI passes on main, but only when the merge changed website files (the "changes" job
+# below; no approval is asked otherwise), or by hand. Waits for Martins' approval (GitHub
+# environment "production"). It follows CI, not the path-filtered Site workflow, because GitHub
+# sometimes never starts a path-filtered push run (seen on #62, #63 and #65), which left this
+# deploy "skipped". The Site workflow still tests every website change on its pull request. The live data is NOT part of this deploy: it comes from the
 # private R2 bucket through the router Worker, so the build ships without the preview data.
 # Secrets (environment "production"): CLOUDFLARE_API_TOKEN (Pages + Workers on Martins' account
 # only) and CLOUDFLARE_ACCOUNT_ID; both created and pasted by Martins, never printed.
@@ -8,7 +11,7 @@ name: Site deploy
 
 on:
   workflow_run:
-    workflows: ["Site"]
+    workflows: ["CI"]
     types: [completed]
     branches: [main]
   workflow_dispatch:
@@ -25,8 +28,32 @@ env:
   PROJECT: bankhealth
 
 jobs:
+  # Did this merge change the website? Compares the merged commit with the previous main (its first
+  # parent), using the same paths as the Site workflow. No secrets, no approval.
+  changes:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      site: ${{ steps.diff.outputs.site }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+      - id: diff
+        run: |
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(site/|scripts/check_public_docs\.py$|ingestion/public_scan\.py$|ingestion/site_export\.py$|ingestion/site_contract/|\.github/workflows/site-deploy\.yml$)'; then
+            echo "site=true" >> "$GITHUB_OUTPUT"; echo "Website files changed: deploy (waits for approval)."
+          else
+            echo "site=false" >> "$GITHUB_OUTPUT"; echo "No website files changed: no deploy."
+          fi
+
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    needs: changes
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.site == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: production

@@ -55,6 +55,17 @@ bucket; the site shows it within a minute (the Worker's cache). To undo, roll fo
 Dev keeps its own copy in the dev `.env` (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`)
 and only ever writes under `dev/` in the bucket, which the site never serves.
 
+## Deploying the website code (pages, not data)
+
+After a merge to `main`, the **Site deploy** workflow starts once **CI** passes. Its first job checks
+whether the merge changed website files (`site/`, the identifier scanner, the site exporter or the
+data contract). If yes, the deploy waits for Martins' approval (environment `production`), then
+builds and publishes to the Pages project `bankhealth`. If no, nothing is deployed and no approval is
+asked. To deploy by hand: Actions → Site deploy → Run workflow (still needs approval).
+
+It follows CI, not the Site workflow, because GitHub sometimes never started the path-filtered
+Site run after a merge (#62, #63, #65), which left the deploy skipped.
+
 ## Rotate the Cloudflare deploy token
 
 1. Cloudflare → My Profile → API Tokens → Create Custom token `github-deploy-sites` (no expiry;
