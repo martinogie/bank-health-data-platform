@@ -15,8 +15,17 @@ for p in "" watchlist/ "bank/?cert=24045" methods/ pipeline/; do
   curl -sf "$url" >/dev/null
   scores=""
   for run in 1 2 3; do
-    npx --yes lighthouse@12.8.2 "$url" --quiet --only-categories=performance,accessibility \
-      --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=/tmp/lh.json >/dev/null 2>&1
+    # A Lighthouse run sometimes crashes (Chrome under load) before writing its report: retry it up
+    # to 3 times, and show its error if it never succeeds. The budget itself does not change.
+    ok=0
+    for try in 1 2 3; do
+      rm -f /tmp/lh.json
+      if npx --yes lighthouse@12.8.2 "$url" --quiet --only-categories=performance,accessibility \
+        --chrome-flags="--headless=new --no-sandbox" --output=json --output-path=/tmp/lh.json >/tmp/lh.log 2>&1 \
+        && [ -s /tmp/lh.json ]; then ok=1; break; fi
+      echo "lighthouse crashed on $url (try $try); retrying"
+    done
+    if [ "$ok" -ne 1 ]; then echo "lighthouse failed 3 times on $url:"; tail -20 /tmp/lh.log; exit 1; fi
     scores="$scores $(node -e 'const r=require("/tmp/lh.json");console.log(Math.round(r.categories.performance.score*100)+":"+Math.round(r.categories.accessibility.score*100))')"
   done
   perf=$(echo $scores | tr ' ' '\n' | cut -d: -f1 | sort -n | sed -n 2p)
