@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Databricks CLI 1.22.1 (pinned by commit)
-        uses: databricks/setup-cli@8de769ec2543ee05e456ee2121350efc7efc4bda   # v1.22.1
+        uses: databricks/setup-cli@9625fdde9ba2607df0087e0d3ec7449198bf2180   # v1.23.0
       - name: Validate
         run: databricks bundle validate -t prod
       - name: Plan (what the deploy will change), and refuse to create or delete a job
