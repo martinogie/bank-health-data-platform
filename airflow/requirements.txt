@@ -5,7 +5,7 @@ apache-airflow-providers-snowflake
 # Plain connector: its [pandas] extra demands pandas<3, which clashes with Airflow's
 # pinned pandas 3.x. write_pandas only needs pandas + pyarrow, both listed here.
 snowflake-connector-python
-astronomer-cosmos==1.15.1
+astronomer-cosmos==1.16.0
 pandas
 pyarrow
 requests
