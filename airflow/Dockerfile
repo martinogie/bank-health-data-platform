@@ -1,5 +1,5 @@
 # Custom Airflow image for the Bank Health pipeline.
-FROM apache/airflow:3.3.2-python3.12
+FROM apache/airflow:3.4.0-python3.12
 
 ARG AIRFLOW_VERSION=3.3.2
 ARG PYTHON_VERSION=3.12
